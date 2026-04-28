@@ -1,27 +1,37 @@
 {% extends "base.html" %}
-{% block title %}{{ story.title }} | AI Signal Graph{% endblock %}
+{% block title %}{{ story.title }} | AISIGNALGRAPH{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='premium.css') }}">
+{% endblock %}
+
 {% block content %}
-  <section class="band band--tight">
+  <section class="detail-shell">
     <div class="page">
-      <div class="section-heading">
+      <div class="detail-hero glass-panel">
         <div>
-          <p class="eyebrow">{{ story.kind }}</p>
-          <h1>{{ story.title }}</h1>
+          <p class="eyebrow neon-cyan">{{ story.kind|upper }}</p>
+          <h1 class="protocol-heading">{{ story.title }}</h1>
+          <p class="detail-hero__copy">{{ story.summary }}</p>
         </div>
-        <div class="subtle-count">{{ story.status }} | {{ story.event_date }}</div>
+        <div class="detail-hero__meta mono">
+          <span>{{ story.status|upper }}</span>
+          <span>{{ story.event_date }}</span>
+          <span>{{ story.entities|length }} LINKS</span>
+        </div>
       </div>
 
-      <div class="detail-layout">
-        <aside class="detail-sidebar">
+      <div class="detail-layout detail-layout--premium">
+        <aside class="detail-sidebar glass-panel">
           <div class="sidebar-block">
             <h2>Summary</h2>
             <p>{{ story.summary }}</p>
           </div>
           <div class="sidebar-block">
             <h2>Tags</h2>
-            <div class="chip-row">
+            <div class="archive-chip-row">
               {% for tag in story.tags %}
-                <span class="chip">{{ tag }}</span>
+                <span class="archive-chip mono">#{{ tag|upper }}</span>
               {% endfor %}
             </div>
           </div>
@@ -29,23 +39,29 @@
             <h2>Entities</h2>
             <ul class="link-list">
               {% for entity in story.entities %}
-                <li><a href="{{ url_for('entity_detail', entity_id=entity.id) }}">{{ entity.name }}</a> <span class="inline-meta">{{ entity.type }}</span></li>
+                <li>
+                  <a href="{{ url_for('entity_detail', entity_id=entity.id) }}">{{ entity.name }}</a>
+                  <span class="inline-meta">{{ entity.type }}</span>
+                </li>
               {% endfor %}
             </ul>
           </div>
           {% if story.related_stories %}
             <div class="sidebar-block">
-              <h2>Related stories</h2>
+              <h2>Related Stories</h2>
               <ul class="link-list">
                 {% for item in story.related_stories %}
-                  <li><a href="{{ url_for('story_detail', story_id=item.id) }}">{{ item.title }}</a> <span class="inline-meta">{{ item.weight }} shared links</span></li>
+                  <li>
+                    <a href="{{ url_for('story_detail', story_id=item.id) }}">{{ item.title }}</a>
+                    <span class="inline-meta">{{ item.weight }} shared links</span>
+                  </li>
                 {% endfor %}
               </ul>
             </div>
           {% endif %}
         </aside>
 
-        <article class="detail-content">
+        <article class="detail-content glass-panel">
           <div class="markdown-body">{{ story.details_html | safe }}</div>
         </article>
       </div>

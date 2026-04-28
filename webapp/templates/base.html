@@ -5,28 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}AI Signal Graph{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='premium.css') }}">
     {% block extra_head %}{% endblock %}
   </head>
-  <body>
-    <div class="app-shell">
-      <header class="topbar">
-        <div class="topbar__inner">
-          <div class="brand-block">
-            <a class="brand" href="{{ url_for('dashboard') }}">AI Signal Graph</a>
-            <p class="brand-copy">Local graph database for AI stories, labs, models, drama, and exploit culture.</p>
+  <body class="{{ body_class|default('') }}">
+    <div id="terminal-loader" style="position: fixed; inset: 0; background: var(--color-bg); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; color: var(--color-cyan); pointer-events: none; transition: opacity 0.5s ease;">
+        <div id="loader-text">INITIALIZING AISIGNALGRAPH PROTOCOL...</div>
+    </div>
+    <div class="app-shell{% if fullscreen_shell %} app-shell--fullscreen{% endif %}">
+      {% if not fullscreen_shell %}
+        <header class="topbar glass-panel" style="border: none; border-bottom: var(--border-subtle); border-radius: 0;">
+          <div class="topbar__inner">
+            <div class="brand-block">
+              <a class="brand protocol-heading" href="{{ url_for('home') }}" style="font-size: 1.5rem; color: var(--color-cyan);">AISIGNALGRAPH</a>
+            </div>
+            <nav class="nav mono">
+              <a href="{{ url_for('home') }}">Home</a>
+              <a href="{{ url_for('dashboard') }}">Graph</a>
+              <a href="{{ url_for('stories') }}">Stories</a>
+              <a href="{{ url_for('entities') }}">Entities</a>
+            </nav>
           </div>
-          <nav class="nav">
-            <a href="{{ url_for('dashboard') }}">Graph</a>
-            <a href="{{ url_for('stories') }}">Stories</a>
-            <a href="{{ url_for('entities') }}">Entities</a>
-          </nav>
-        </div>
-      </header>
+        </header>
+      {% endif %}
 
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-          <section class="flash-band">
-            <div class="page">
+          <section class="flash-band{% if fullscreen_shell %} flash-band--floating{% endif %}">
+            <div class="{% if fullscreen_shell %}flash-band__stack{% else %}page{% endif %}">
               {% for category, message in messages %}
                 <div class="flash flash--{{ category }}">{{ message }}</div>
               {% endfor %}
@@ -35,11 +41,36 @@
         {% endif %}
       {% endwith %}
 
-      <main>
+      <main{% if fullscreen_shell %} class="app-main--fullscreen"{% endif %}>
         {% block content %}{% endblock %}
       </main>
     </div>
     {% block extra_scripts %}{% endblock %}
-    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+    <script>
+        // Terminal Loader Animation
+        window.addEventListener('load', () => {
+            const loader = document.getElementById('terminal-loader');
+            const text = document.getElementById('loader-text');
+            const phrases = [
+                "ESTABLISHING SECURE CONNECTION...",
+                "DECRYPTING NEURAL VECTORS...",
+                "LOADING GRAPH TOPOLOGY...",
+                "PROTOCOL READY."
+            ];
+            let p = 0;
+            const interval = setInterval(() => {
+                if (p < phrases.length) {
+                    text.textContent = phrases[p++];
+                } else {
+                    clearInterval(interval);
+                    loader.style.opacity = '0';
+                    setTimeout(() => loader.remove(), 500);
+                }
+            }, 300);
+        });
+    </script>
+    {% if not fullscreen_shell %}
+      <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+    {% endif %}
   </body>
 </html>

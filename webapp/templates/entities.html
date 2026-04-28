@@ -1,42 +1,78 @@
 {% extends "base.html" %}
-{% block title %}Entities | AI Signal Graph{% endblock %}
+{% block title %}Neural Entities | AISIGNALGRAPH{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='premium.css') }}">
+{% endblock %}
+
 {% block content %}
-  <section class="band band--tight">
-    <div class="page">
+  <section class="archive-hero archive-hero--purple">
+    <div class="page archive-hero__inner">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Entities</p>
-          <h1>Labs, models, risks, and products</h1>
+          <p class="eyebrow neon-purple">Entity surveillance</p>
+          <h1 class="protocol-heading">ACTOR DIRECTORY</h1>
+          <p class="brand-copy">Interactive dossiers for labs, model families, people, infrastructure brokers, and strategic risk actors.</p>
         </div>
-        <div class="subtle-count">{{ entities|length }} results</div>
+        <div class="subtle-count mono">{{ entities|length }} NODES IDENTIFIED</div>
       </div>
-      <form class="filter-bar filter-bar--compact" method="get">
-        <input type="search" name="q" value="{{ active.q }}" placeholder="Search entities">
-        <select name="type">
-          <option value="">All types</option>
+
+      <form class="archive-toolbar glass-panel" method="get">
+        <input class="mono" type="search" name="q" value="{{ active.q }}" placeholder="SEARCH ACTOR">
+        <select name="type" class="mono">
+          <option value="">ALL CLASSIFICATIONS</option>
           {% for item in filters.types %}
-            <option value="{{ item }}" {% if active.type == item %}selected{% endif %}>{{ item }}</option>
+            <option value="{{ item }}" {% if active.type == item %}selected{% endif %}>{{ item|upper }}</option>
           {% endfor %}
         </select>
-        <button type="submit">Apply</button>
+        <button type="submit" class="btn-premium">EXECUTE QUERY</button>
       </form>
     </div>
   </section>
 
-  <section class="band">
-    <div class="page collection-grid">
+  <section class="archive-shell">
+    <div class="page dossier-grid">
       {% for entity in entities %}
-        <a class="collection-card" href="{{ url_for('entity_detail', entity_id=entity.id) }}">
-          <div class="result-meta">
-            <span>{{ entity.entity_type }}</span>
-            <span>{{ entity.story_count }} stories</span>
+        <a class="dossier-card glass-panel" href="{{ url_for('entity_detail', entity_id=entity.id) }}" data-animate>
+          <div class="dossier-card__header">
+            <span class="mono dossier-stamp">FILE {{ "%03d"|format(loop.index) }}</span>
+            <span class="mono redacted">{{ entity.id|upper }}</span>
+          </div>
+          <div class="archive-card__meta mono">
+            <span>{{ entity.entity_type|upper }}</span>
+            <span>{{ entity.story_count }} REFERENCES</span>
           </div>
           <h2>{{ entity.name }}</h2>
           <p>{{ entity.excerpt }}</p>
+          <div class="dossier-card__footer mono">
+            <span>{{ entity.group_name|upper }}</span>
+            <span>OPEN DOSSIER</span>
+          </div>
         </a>
       {% else %}
-        <p class="empty-state">No entities matched the current filter set.</p>
+        <article class="dossier-card glass-panel">
+          <div class="dossier-card__header">
+            <span class="mono dossier-stamp">FILE 000</span>
+            <span class="mono">EMPTY</span>
+          </div>
+          <h2>No actor matched the query vector.</h2>
+          <p>Broaden the classification or search string to reopen the dossier field.</p>
+        </article>
       {% endfor %}
     </div>
   </section>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script>
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('[data-animate]').forEach((element) => observer.observe(element));
+  </script>
 {% endblock %}

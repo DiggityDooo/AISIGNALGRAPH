@@ -8,10 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import bleach
 import markdown
 
 
-MASTER_DOCUMENT_PATH = Path("/home/seanb/Documents/New Folder/AI_Master_Document_2020_2026.md")
+LEGACY_MASTER_DOCUMENT_PATH = Path("/home/seanb/Documents/New Folder/AI_Master_Document_2020_2026.md")
 DATASET_VERSION = "master-doc-v2"
 MONTHS = {
     "jan": "01",
@@ -169,6 +170,19 @@ ENTITY_DEFINITIONS = [
     {"id": "yann-lecun", "name": "Yann LeCun", "type": "person", "group": "People", "description": "Meta chief scientist and major critic of near-term AI doom narratives.", "importance": 2, "aliases": ["yann lecun", "yann le cun"]},
     {"id": "mark-zuckerberg", "name": "Mark Zuckerberg", "type": "person", "group": "People", "description": "Meta chief executive behind the largest open-weight AI bet from a hyperscaler.", "importance": 2, "aliases": ["mark zuckerberg", "zuckerberg"]},
 ]
+ALLOWED_MARKDOWN_TAGS = set(bleach.sanitizer.ALLOWED_TAGS).union(
+    {"p", "br", "hr", "pre", "code", "h1", "h2", "h3", "h4", "h5", "h6", "table", "thead", "tbody", "tr", "th", "td"}
+)
+ALLOWED_MARKDOWN_ATTRIBUTES = {
+    **bleach.sanitizer.ALLOWED_ATTRIBUTES,
+    "a": ["href", "title", "rel"],
+    "th": ["colspan", "rowspan"],
+    "td": ["colspan", "rowspan"],
+}
+
+
+class GraphStoreError(RuntimeError):
+    pass
 
 
 def slugify(value: str) -> str:
@@ -205,6 +219,17 @@ def short_excerpt(text: str, limit: int = 180) -> str:
     return cleaned[: limit - 1].rstrip() + "..."
 
 
+def render_markdown_safe(text: str) -> str:
+    rendered = markdown.markdown(text, extensions=["fenced_code", "tables", "sane_lists", "nl2br"])
+    return bleach.clean(
+        rendered,
+        tags=ALLOWED_MARKDOWN_TAGS,
+        attributes=ALLOWED_MARKDOWN_ATTRIBUTES,
+        protocols={"http", "https", "mailto"},
+        strip=True,
+    )
+
+
 def timeline_month_key(date_text: str | None) -> str | None:
     if not date_text or date_text == "reference":
         return None
@@ -238,6 +263,35 @@ def month_range(start_month: str, end_month: str) -> list[str]:
             cursor_month = 1
             cursor_year += 1
     return months
+
+
+def graph_node_type(node_type: str, group_name: str) -> str:
+    normalized_group = slugify(group_name)
+    if node_type == "story":
+        return "story"
+    if node_type == "model":
+        return "model"
+    if node_type == "person":
+        return "person"
+    if node_type == "year":
+        return "year"
+    if node_type == "risk" or normalized_group in {"risk", "policy", "impact"}:
+        return "risk"
+    if node_type in {"keyword", "topic"}:
+        return "topic"
+    if normalized_group in {"consumer", "media", "platforms", "products"}:
+        return "product"
+    return "lab"
+
+
+def graph_edge_type(source_type: str, target_type: str, relation: str) -> str:
+    if source_type == "story":
+        return f"story_to_{target_type}"
+    if source_type == "year" and target_type == "story":
+        return "year_to_story"
+    if relation == "context":
+        return "story_context"
+    return f"{source_type}_to_{target_type}"
 
 
 @dataclass
@@ -279,12 +333,12 @@ class StoryRecord:
 
 
 class GraphStore:
-    def __init__(self, root_path: Path):
+    def __init__(self, root_path: Path, source_path: Path | None = None):
         self.root_path = Path(root_path)
         self.data_dir = self.root_path / "data"
         self.db_path = self.data_dir / "ai_graph.db"
         self.seed_path = self.data_dir / "ai_graph_seed.json"
-        self.source_path = MASTER_DOCUMENT_PATH
+        self.source_path = Path(source_path) if source_path is not None else self.data_dir / "ai_master.md"
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self._signature: int | None = None
         self._entities: dict[str, EntityRecord] = {}
@@ -308,89 +362,119 @@ class GraphStore:
             return f"{DATASET_VERSION}:{int(self.source_path.stat().st_mtime_ns)}"
         return f"{DATASET_VERSION}:fallback"
 
+    def _validate_payload(self, payload: dict[str, Any]) -> None:
+        required_top_level = {"entities", "stories", "story_entities", "story_tags", "entity_links"}
+        missing = sorted(required_top_level.difference(payload))
+        if missing:
+            raise GraphStoreError(f"Dataset payload is missing required keys: {', '.join(missing)}")
+        for key in required_top_level:
+            if not isinstance(payload[key], list):
+                raise GraphStoreError(f"Dataset payload field '{key}' must be a list.")
+
     def ensure_initialized(self) -> None:
-        with self._connect() as conn:
-            conn.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS meta (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS entities (
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    entity_type TEXT NOT NULL,
-                    group_name TEXT NOT NULL,
-                    description TEXT NOT NULL,
-                    importance INTEGER NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS stories (
-                    id TEXT PRIMARY KEY,
-                    title TEXT NOT NULL,
-                    kind TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    event_date TEXT NOT NULL,
-                    summary TEXT NOT NULL,
-                    details TEXT NOT NULL,
-                    importance INTEGER NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS story_entities (
-                    story_id TEXT NOT NULL,
-                    entity_id TEXT NOT NULL,
-                    PRIMARY KEY (story_id, entity_id)
-                );
-                CREATE TABLE IF NOT EXISTS story_tags (
-                    story_id TEXT NOT NULL,
-                    tag TEXT NOT NULL,
-                    PRIMARY KEY (story_id, tag)
-                );
-                CREATE TABLE IF NOT EXISTS entity_links (
-                    source_id TEXT NOT NULL,
-                    target_id TEXT NOT NULL,
-                    relation TEXT NOT NULL,
-                    weight INTEGER NOT NULL DEFAULT 1,
-                    PRIMARY KEY (source_id, target_id, relation)
-                );
-                """
-            )
-            row = conn.execute("SELECT value FROM meta WHERE key = 'source_signature'").fetchone()
-            count = conn.execute("SELECT COUNT(*) FROM stories").fetchone()[0]
+        try:
+            with self._connect() as conn:
+                conn.executescript(
+                    """
+                    CREATE TABLE IF NOT EXISTS meta (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
+                    );
+                    CREATE TABLE IF NOT EXISTS entities (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        entity_type TEXT NOT NULL,
+                        group_name TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        importance INTEGER NOT NULL
+                    );
+                    CREATE TABLE IF NOT EXISTS stories (
+                        id TEXT PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        kind TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        event_date TEXT NOT NULL,
+                        summary TEXT NOT NULL,
+                        details TEXT NOT NULL,
+                        importance INTEGER NOT NULL
+                    );
+                    CREATE TABLE IF NOT EXISTS story_entities (
+                        story_id TEXT NOT NULL,
+                        entity_id TEXT NOT NULL,
+                        PRIMARY KEY (story_id, entity_id)
+                    );
+                    CREATE TABLE IF NOT EXISTS story_tags (
+                        story_id TEXT NOT NULL,
+                        tag TEXT NOT NULL,
+                        PRIMARY KEY (story_id, tag)
+                    );
+                    CREATE TABLE IF NOT EXISTS entity_links (
+                        source_id TEXT NOT NULL,
+                        target_id TEXT NOT NULL,
+                        relation TEXT NOT NULL,
+                        weight INTEGER NOT NULL DEFAULT 1,
+                        PRIMARY KEY (source_id, target_id, relation)
+                    );
+                    """
+                )
+                row = conn.execute("SELECT value FROM meta WHERE key = 'source_signature'").fetchone()
+                count = conn.execute("SELECT COUNT(*) FROM stories").fetchone()[0]
+        except sqlite3.DatabaseError as exc:
+            raise GraphStoreError("Failed to initialize the AI graph database.") from exc
         if count == 0 or not row or row[0] != self._source_signature():
             self.seed_database(reset=True)
 
     def seed_database(self, reset: bool = False) -> None:
-        payload = self._build_payload_from_master_document() if self.source_path.exists() else json.loads(self.seed_path.read_text(encoding="utf-8"))
-        with self._connect() as conn:
-            if reset:
-                conn.executescript(
-                    """
-                    DELETE FROM meta;
-                    DELETE FROM entity_links;
-                    DELETE FROM story_tags;
-                    DELETE FROM story_entities;
-                    DELETE FROM stories;
-                    DELETE FROM entities;
-                    """
+        try:
+            if self.source_path.exists():
+                payload = self._build_payload_from_master_document()
+            elif self.seed_path.exists():
+                payload = json.loads(self.seed_path.read_text(encoding="utf-8"))
+            else:
+                raise GraphStoreError(
+                    f"No dataset source was found. Set AI_MASTER_DOC_PATH or add a seed file at {self.seed_path}."
                 )
+            self._validate_payload(payload)
+        except GraphStoreError:
+            raise
+        except (OSError, json.JSONDecodeError, KeyError, ValueError) as exc:
+            raise GraphStoreError("Failed to load or parse the AI graph source data.") from exc
 
-            conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("dataset_name", payload.get("name", "AI Signal Graph")))
-            conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("source_signature", self._source_signature()))
-            conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("source_path", str(self.source_path)))
+        try:
+            with self._connect() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                if reset:
+                    conn.executescript(
+                        """
+                        DELETE FROM meta;
+                        DELETE FROM entity_links;
+                        DELETE FROM story_tags;
+                        DELETE FROM story_entities;
+                        DELETE FROM stories;
+                        DELETE FROM entities;
+                        """
+                    )
 
-            conn.executemany(
-                "INSERT INTO entities (id, name, entity_type, group_name, description, importance) VALUES (:id, :name, :type, :group, :description, :importance)",
-                payload["entities"],
-            )
-            conn.executemany(
-                "INSERT INTO stories (id, title, kind, status, event_date, summary, details, importance) VALUES (:id, :title, :kind, :status, :date, :summary, :details, :importance)",
-                payload["stories"],
-            )
-            conn.executemany("INSERT INTO story_entities (story_id, entity_id) VALUES (?, ?)", payload["story_entities"])
-            conn.executemany("INSERT INTO story_tags (story_id, tag) VALUES (?, ?)", payload["story_tags"])
-            conn.executemany(
-                "INSERT INTO entity_links (source_id, target_id, relation, weight) VALUES (:source, :target, :relation, :weight)",
-                payload["entity_links"],
-            )
+                conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("dataset_name", payload.get("name", "AI Signal Graph")))
+                conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("source_signature", self._source_signature()))
+                conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("source_path", str(self.source_path)))
+
+                conn.executemany(
+                    "INSERT INTO entities (id, name, entity_type, group_name, description, importance) VALUES (:id, :name, :type, :group, :description, :importance)",
+                    payload["entities"],
+                )
+                conn.executemany(
+                    "INSERT INTO stories (id, title, kind, status, event_date, summary, details, importance) VALUES (:id, :title, :kind, :status, :date, :summary, :details, :importance)",
+                    payload["stories"],
+                )
+                conn.executemany("INSERT INTO story_entities (story_id, entity_id) VALUES (?, ?)", payload["story_entities"])
+                conn.executemany("INSERT INTO story_tags (story_id, tag) VALUES (?, ?)", payload["story_tags"])
+                conn.executemany(
+                    "INSERT INTO entity_links (source_id, target_id, relation, weight) VALUES (:source, :target, :relation, :weight)",
+                    payload["entity_links"],
+                )
+        except sqlite3.DatabaseError as exc:
+            raise GraphStoreError("Failed to rebuild the AI graph database.") from exc
 
         self._signature = None
         self._refresh()
@@ -799,13 +883,16 @@ class GraphStore:
         if signature == self._signature:
             return
 
-        with self._connect() as conn:
-            conn.row_factory = sqlite3.Row
-            entity_rows = conn.execute("SELECT * FROM entities").fetchall()
-            story_rows = conn.execute("SELECT * FROM stories").fetchall()
-            story_entities = conn.execute("SELECT story_id, entity_id FROM story_entities").fetchall()
-            story_tags = conn.execute("SELECT story_id, tag FROM story_tags").fetchall()
-            entity_links = conn.execute("SELECT source_id, target_id, relation, weight FROM entity_links").fetchall()
+        try:
+            with self._connect() as conn:
+                conn.row_factory = sqlite3.Row
+                entity_rows = conn.execute("SELECT * FROM entities").fetchall()
+                story_rows = conn.execute("SELECT * FROM stories").fetchall()
+                story_entities = conn.execute("SELECT story_id, entity_id FROM story_entities").fetchall()
+                story_tags = conn.execute("SELECT story_id, tag FROM story_tags").fetchall()
+                entity_links = conn.execute("SELECT source_id, target_id, relation, weight FROM entity_links").fetchall()
+        except sqlite3.DatabaseError as exc:
+            raise GraphStoreError("Failed to read the AI graph database. Rebuild the dataset and try again.") from exc
 
         story_to_entities: dict[str, list[str]] = defaultdict(list)
         entity_to_stories: dict[str, list[str]] = defaultdict(list)
@@ -855,7 +942,7 @@ class GraphStore:
                 event_date=row["event_date"],
                 summary=row["summary"],
                 details_markdown=details_markdown,
-                details_html=markdown.markdown(details_markdown, extensions=["fenced_code", "tables", "sane_lists", "nl2br"]),
+                details_html=render_markdown_safe(details_markdown),
                 importance=row["importance"],
                 tags=sorted(set(story_to_tags[row["id"]])),
                 entities=entity_refs,
@@ -1009,11 +1096,13 @@ class GraphStore:
 
         for entity in self._entities.values():
             is_model = entity.entity_type == "model"
+            frontend_type = graph_node_type(entity.entity_type, entity.group_name)
             nodes.append(
                 {
                     "id": f"entity:{entity.id}",
                     "label": entity.name,
                     "node_type": "entity",
+                    "type": frontend_type,
                     "group": entity.entity_type,
                     "color_group": slugify(entity.group_name),
                     "radius": 7 + entity.importance * (2.2 if is_model else 1.7) + min(entity.story_count, 10) * (1.0 if is_model else 0.85) + (2.2 if is_model else 0),
@@ -1035,6 +1124,7 @@ class GraphStore:
                     "id": f"story:{story.id}",
                     "label": story.title,
                     "node_type": "story",
+                    "type": "story",
                     "group": story.kind,
                     "color_group": slugify(story.kind),
                     "radius": 7 + story.importance * 1.9 + min(len(story.entities), 8) * 0.6,
@@ -1045,31 +1135,39 @@ class GraphStore:
                     "heat": min(1.0, len(story.entities) / 10),
                     "importance": story.importance,
                     "event_date": story.event_date,
+                    "year": story.event_date[:4] if story.event_date else "",
                     "timeline_month": story_month,
                 }
             )
             for entity in story.entities:
+                target = self._entities.get(entity["id"])
+                target_type = graph_node_type(target.entity_type, target.group_name) if target is not None else "topic"
                 edges.append(
                     {
                         "source": f"story:{story.id}",
                         "target": f"entity:{entity['id']}",
                         "weight": 1,
                         "kind": "mentions",
+                        "type": graph_edge_type("story", target_type, "mentions"),
                         "timeline_month": story_month,
                     }
                 )
 
         for entity in self._entities.values():
+            source_type = graph_node_type(entity.entity_type, entity.group_name)
             for link in entity.links:
                 if link["weight"] >= 2 and entity.id < link["target_id"]:
                     source_month = entity_first_seen.get(entity.id, first_story_month)
                     target_month = entity_first_seen.get(link["target_id"], first_story_month)
+                    target_entity = self._entities.get(link["target_id"])
+                    target_type = graph_node_type(target_entity.entity_type, target_entity.group_name) if target_entity is not None else "topic"
                     edges.append(
                         {
                             "source": f"entity:{entity.id}",
                             "target": f"entity:{link['target_id']}",
                             "weight": max(1, link["weight"]),
                             "kind": link["relation"],
+                            "type": graph_edge_type(source_type, target_type, link["relation"]),
                             "timeline_month": max(source_month, target_month),
                         }
                     )
@@ -1094,6 +1192,7 @@ class GraphStore:
                     "target": f"story:{target_id}",
                     "weight": weight,
                     "kind": "context",
+                    "type": "story_context",
                     "timeline_month": max(source_month, target_month),
                 }
             )

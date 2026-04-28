@@ -2,6 +2,19 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function lerp(start, end, amount) {
+  return start + (end - start) * amount;
+}
+
+function hashString(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 function hexToRgb(hex) {
   const value = hex.replace("#", "");
   const normalized = value.length === 3 ? value.split("").map((part) => part + part).join("") : value;
@@ -100,6 +113,17 @@ function colorForNode(node) {
   return mixColor(theme.base, theme.accent, heat * 0.52);
 }
 
+function visualRadiusForNode(node) {
+  const sizeFactor = node.peripheral ? 0.38 : node.emphasis === "model" ? 1.18 : node.node_type === "story" ? 0.62 : 0.7;
+  return Math.max(1.4, node.radius * sizeFactor);
+}
+
+function hitRadiusForNode(node) {
+  const base = visualRadiusForNode(node);
+  const padding = node.emphasis === "model" ? 7 : node.node_type === "story" ? 4 : 5;
+  return base + padding;
+}
+
 function compareTimelineMonth(left, right) {
   if (!left && !right) {
     return 0;
@@ -120,6 +144,19 @@ function formatTimelineMonth(monthKey) {
   const [year, month] = monthKey.split("-");
   const monthIndex = Number.parseInt(month, 10) - 1;
   return `${MONTH_LABELS[monthIndex] || month} ${year}`;
+}
+
+function timelineScore(monthKey) {
+  if (!monthKey) {
+    return 0;
+  }
+  const [yearText, monthText] = monthKey.split("-");
+  const year = Number.parseInt(yearText, 10);
+  const month = Number.parseInt(monthText, 10);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    return 0;
+  }
+  return year * 12 + month;
 }
 
 async function refreshOverview() {
@@ -155,6 +192,8 @@ function bootGraph() {
   const ctx = canvas.getContext("2d");
   const graph3dHost = document.getElementById("graph-3d");
   const searchInput = document.getElementById("graph-search");
+  const lensInput = document.getElementById("graph-lens");
+  const sortInput = document.getElementById("graph-sort");
   const filterInput = document.getElementById("graph-filter");
   const connectionStrengthInput = document.getElementById("connection-strength");
   const connectionStrengthValue = document.getElementById("connection-strength-value");
@@ -206,7 +245,9 @@ function bootGraph() {
     showImages: true,
     pinnedIds: new Set(),
     focusNodeId: null,
-    graph3d: null,
+    graph3dRuntime: null,
+    lens: "global",
+    sortMode: "signal",
     activeGroupFilters: new Set(DEFAULT_GROUP_FILTERS),
     activeEdgeKinds: new Set(DEFAULT_EDGE_FILTERS),
     pinnedOnly: false,
@@ -226,6 +267,12 @@ function bootGraph() {
     activePaintStroke: null,
     suppressClick: false,
     dragMoved: false,
+    dragPinnedBeforeMove: false,
+    simulation: {
+      lastInteractionAt: window.performance.now(),
+      settleDurationMs: 16000,
+      minEnergy: 0.06,
+    },
   };
   const nodeImageCache = new Map();
 
@@ -373,19 +420,23 @@ function bootGraph() {
     canvas.style.cursor = state.interactionMode === "paint" ? "crosshair" : "default";
   }
 
+  function markSimulationActive() {
+    state.simulation.lastInteractionAt = window.performance.now();
+  }
+
+  function currentSimulationEnergy(now = window.performance.now()) {
+    const elapsed = Math.max(0, now - state.simulation.lastInteractionAt);
+    const progress = clamp(elapsed / state.simulation.settleDurationMs, 0, 1);
+    const eased = 1 - (1 - progress) * (1 - progress);
+    return lerp(1, state.simulation.minEnergy, eased);
+  }
+
   function pinNodePosition(node) {
     state.pinnedIds.add(node.id);
     node.pinned = true;
     node.vx = 0;
     node.vy = 0;
-    if (state.graph3d) {
-      const graphNode = state.graph3d.graphData().nodes.find((item) => item.id === node.id);
-      if (graphNode) {
-        graphNode.fx = node.x;
-        graphNode.fy = node.y;
-        graphNode.fz = graphNode.z || 0;
-      }
-    }
+    markSimulationActive();
   }
 
   function releaseAllPins() {
@@ -393,13 +444,7 @@ function bootGraph() {
     for (const node of state.nodes) {
       node.pinned = false;
     }
-    if (state.graph3d) {
-      state.graph3d.graphData().nodes.forEach((node) => {
-        node.fx = undefined;
-        node.fy = undefined;
-        node.fz = undefined;
-      });
-    }
+    markSimulationActive();
     updateSelectionActions();
     if (state.pinnedOnly) {
       applyFilters();
@@ -452,6 +497,7 @@ function bootGraph() {
     state.activePaintStroke = null;
     state.paintStrokeActive = false;
     state.brushPoint = null;
+    markSimulationActive();
   }
 
   function appendPaintPoint(point) {
@@ -464,6 +510,7 @@ function bootGraph() {
     if (!previous || Math.hypot(point.x - previous.x, point.y - previous.y) >= Math.max(10, state.brushRadius * 0.14)) {
       points.push({ x: point.x, y: point.y });
       state.activePaintStroke.width = state.brushRadius;
+      markSimulationActive();
     }
   }
 
@@ -476,6 +523,7 @@ function bootGraph() {
     state.paintStrokes.push(state.activePaintStroke);
     state.dragMoved = false;
     appendPaintPoint(point);
+    markSimulationActive();
   }
 
   function endPaintStroke() {
@@ -487,6 +535,7 @@ function bootGraph() {
     state.activePaintStroke = null;
     state.brushPoint = null;
     state.dragMoved = false;
+    markSimulationActive();
   }
 
   function closestPointOnSegment(point, start, end) {
@@ -552,6 +601,7 @@ function bootGraph() {
       state.timeline.lastStepAt = 0;
     }
     applyFilters();
+    markSimulationActive();
   }
 
   function stepTimelineForward() {
@@ -567,6 +617,7 @@ function bootGraph() {
     }
     state.timeline.currentIndex += 1;
     applyFilters();
+    markSimulationActive();
     if (state.timeline.currentIndex >= lastIndex) {
       state.timeline.playing = false;
       state.timeline.lastStepAt = 0;
@@ -638,6 +689,26 @@ function bootGraph() {
     return false;
   }
 
+  function nodeSortScore(node) {
+    return (node.degree || 0) * 2 + (node.importance || 0) * 3 + (node.heat || 0) * 10 + (node.story_count || 0) * 0.3;
+  }
+
+  function compareNodes(left, right, sortMode = state.sortMode) {
+    if (sortMode === "alphabetical") {
+      return (left.label || "").localeCompare(right.label || "");
+    }
+    if (sortMode === "newest") {
+      return timelineScore(right.timeline_month) - timelineScore(left.timeline_month) || nodeSortScore(right) - nodeSortScore(left);
+    }
+    if (sortMode === "oldest") {
+      return timelineScore(left.timeline_month) - timelineScore(right.timeline_month) || nodeSortScore(right) - nodeSortScore(left);
+    }
+    if (sortMode === "connected") {
+      return (right.degree || 0) - (left.degree || 0) || nodeSortScore(right) - nodeSortScore(left);
+    }
+    return nodeSortScore(right) - nodeSortScore(left) || (right.degree || 0) - (left.degree || 0);
+  }
+
   function updateDetailPanel(detail) {
     if (!detailTitle) {
       return;
@@ -680,11 +751,14 @@ function bootGraph() {
   }
 
   function resize3DGraph() {
-    if (!state.graph3d || !graph3dHost) {
+    const runtime = state.graph3dRuntime;
+    if (!runtime || !graph3dHost) {
       return;
     }
     const rect = graph3dHost.getBoundingClientRect();
-    state.graph3d.width(rect.width).height(rect.height);
+    runtime.camera.aspect = rect.width / Math.max(1, rect.height);
+    runtime.camera.updateProjectionMatrix();
+    runtime.renderer.setSize(rect.width, rect.height, false);
   }
 
   function rebuildNodeMap() {
@@ -711,9 +785,19 @@ function bootGraph() {
   }
 
   function applyFilters() {
+    markSimulationActive();
     const query = (searchInput?.value || "").trim().toLowerCase();
+    const previousLens = state.lens;
+    const lens = lensInput?.value || state.lens || "global";
+    const sortMode = sortInput?.value || state.sortMode || "signal";
     const filter = filterInput?.value || "all";
     const timelineMonth = getCurrentTimelineMonth();
+    state.lens = lens;
+    state.sortMode = sortMode;
+
+    if (previousLens === "local" && lens !== "local") {
+      state.clusterOnly = false;
+    }
 
     let baseNodes = state.allNodes
       .filter((node) => nodeMatchesSection(node))
@@ -728,6 +812,24 @@ function bootGraph() {
 
     if (state.pinnedOnly) {
       baseNodes = baseNodes.filter((node) => state.pinnedIds.has(node.id));
+    }
+
+    if (lens === "signal") {
+      baseNodes = baseNodes.filter((node) => (node.degree || 0) >= 2 || (node.heat || 0) >= 0.2 || node.emphasis === "model");
+    } else if (lens === "local") {
+      state.clusterOnly = Boolean(state.selectedId);
+    } else if (lens === "orphans") {
+      baseNodes = baseNodes.filter((node) => (node.degree || 0) <= 1 || node.peripheral || (node.story_count || 0) <= 1);
+    } else if (lens === "clusters") {
+      baseNodes = baseNodes.filter((node) => (node.degree || 0) >= 2 && node.group !== "year");
+    } else if (lens === "writing") {
+      baseNodes = baseNodes.filter((node) => {
+        if (node.node_type === "story") {
+          return true;
+        }
+        const group = node.group || "";
+        return group === "model" || group === "company" || PINK_GROUPS.has(group) || group === "keyword" || group === "people";
+      });
     }
 
     const allowed = new Map(baseNodes.map((node) => [node.id, node]));
@@ -781,7 +883,20 @@ function bootGraph() {
       node.degree = degree.get(node.id) || 0;
       node.mass = 1 + node.radius * 0.09;
       node.peripheral = (node.degree || 0) <= 1;
+      node.hitRadius = hitRadiusForNode(node);
     }
+
+    if (lens === "signal") {
+      state.nodes = state.nodes.filter((node) => (node.degree || 0) >= 2 || (node.heat || 0) >= 0.2 || node.emphasis === "model");
+      const visibleIdsAfterSignal = new Set(state.nodes.map((node) => node.id));
+      state.edges = state.edges.filter((edge) => visibleIdsAfterSignal.has(edge.source) && visibleIdsAfterSignal.has(edge.target));
+    } else if (lens === "orphans") {
+      state.nodes = state.nodes.filter((node) => (node.degree || 0) <= 1 || node.peripheral);
+      const orphanIds = new Set(state.nodes.map((node) => node.id));
+      state.edges = state.edges.filter((edge) => orphanIds.has(edge.source) && orphanIds.has(edge.target));
+    }
+
+    state.nodes.sort((left, right) => compareNodes(left, right, sortMode));
 
     applyPinnedState();
     rebuildNodeMap();
@@ -819,6 +934,8 @@ function bootGraph() {
       const angle = index * 0.37;
       const hubCount = Math.max(18, Math.floor(sorted.length * 0.07));
       const isHub = index < hubCount;
+      const depthSeed = hashString(node.id || `${node.label}:${index}`) / 4294967295;
+      const depthSpan = isPeripheral ? 560 : isHub ? 180 : node.emphasis === "model" ? 260 : 340;
       let x = 0;
       let y = 0;
 
@@ -842,6 +959,7 @@ function bootGraph() {
         ...node,
         x,
         y,
+        z: (depthSeed - 0.5) * depthSpan,
         vx: 0,
         vy: 0,
         pinned: state.pinnedIds.has(node.id),
@@ -856,6 +974,7 @@ function bootGraph() {
     applyFilters();
     updateDetailPanel(null);
     updateTimelineUI();
+    markSimulationActive();
   }
 
   function worldFromScreen(x, y) {
@@ -912,25 +1031,17 @@ function bootGraph() {
   }
 
   function focusCameraOnNode3d(nodeId) {
-    if (!state.graph3d) {
+    const runtime = state.graph3dRuntime;
+    if (!runtime) {
       return;
     }
-    const node = state.graph3d.graphData().nodes.find((item) => item.id === nodeId);
+    const node = state.nodeMap.get(nodeId);
     if (!node) {
       return;
     }
-    const distance = 140;
-    const norm = Math.hypot(node.x || 0, node.y || 0, node.z || 0) || 1;
-    const ratio = 1 + distance / norm;
-    state.graph3d.cameraPosition(
-      {
-        x: (node.x || 0) * ratio,
-        y: (node.y || 0) * ratio,
-        z: (node.z || 0) * ratio,
-      },
-      node,
-      1100
-    );
+    runtime.orbit.target.set(node.x || 0, node.y || 0, node.z || 0);
+    runtime.orbit.distance = clamp(node.emphasis === "model" ? 260 : 360, 220, 2200);
+    runtime.orbit.lastInteractionAt = window.performance.now();
   }
 
   function selectNode(node) {
@@ -939,93 +1050,266 @@ function bootGraph() {
     refresh3DGraph();
   }
 
-  function build3dData() {
-    return {
-      nodes: state.nodes.map((node) => {
-        const copy = { ...node };
-        if (state.pinnedIds.has(node.id)) {
-          copy.fx = node.x;
-          copy.fy = node.y;
-          copy.fz = copy.z || 0;
-        }
-        return copy;
-      }),
-      links: state.edges.map((edge) => ({ ...edge })),
-    };
+  function create3DNodeMaterial(node, focused) {
+    const color = colorForNode(node);
+    const opacity = focused ? 0.96 : 0.18;
+    return new window.THREE.MeshStandardMaterial({
+      color,
+      emissive: new window.THREE.Color(color).multiplyScalar(node.emphasis === "model" ? 0.28 : 0.12),
+      transparent: true,
+      opacity,
+      roughness: 0.44,
+      metalness: 0.08,
+    });
   }
 
-  function apply3dStyles() {
-    if (!state.graph3d) {
+  function disposeThreeObject(object) {
+    if (!object) {
+      return;
+    }
+    if (object.geometry && typeof object.geometry.dispose === "function") {
+      object.geometry.dispose();
+    }
+    if (Array.isArray(object.material)) {
+      object.material.forEach((material) => material?.dispose?.());
+    } else if (object.material && typeof object.material.dispose === "function") {
+      object.material.dispose();
+    }
+  }
+
+  function clear3DScene(runtime) {
+    if (!runtime) {
+      return;
+    }
+    while (runtime.graphRoot.children.length) {
+      const child = runtime.graphRoot.children[runtime.graphRoot.children.length - 1];
+      runtime.graphRoot.remove(child);
+      disposeThreeObject(child);
+    }
+    runtime.nodeMeshes.clear();
+    runtime.pickables = [];
+    runtime.edgeLine = null;
+  }
+
+  function edgeColorFor3D(edge, focused) {
+    if (!focused) {
+      return new window.THREE.Color("#464e5c");
+    }
+    return new window.THREE.Color(edge.kind === "context" ? "#9567ff" : "#d85167");
+  }
+
+  function render3DPick(event) {
+    const runtime = state.graph3dRuntime;
+    if (!runtime || !runtime.pickables.length) {
+      return null;
+    }
+    const rect = runtime.renderer.domElement.getBoundingClientRect();
+    runtime.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    runtime.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    runtime.raycaster.setFromCamera(runtime.pointer, runtime.camera);
+    const [hit] = runtime.raycaster.intersectObjects(runtime.pickables, false);
+    if (!hit?.object?.userData?.nodeId) {
+      return null;
+    }
+    return state.nodeMap.get(hit.object.userData.nodeId) || null;
+  }
+
+  function rebuild3DGraph() {
+    const runtime = state.graph3dRuntime;
+    if (!runtime || !window.THREE) {
       return;
     }
 
+    clear3DScene(runtime);
     const focusSet = getFocusSet();
-    const strength = state.connectionStrength;
-    state.graph3d
-      .backgroundColor("#05080c")
-      .nodeRelSize(3.4)
-      .nodeVal((node) => Math.max(1.4, node.radius * (node.emphasis === "model" ? 0.56 : 0.32)))
-      .nodeLabel((node) => node.label)
-      .nodeColor((node) => {
-        if (focusSet && !focusSet.has(node.id) && node.id !== state.selectedId) {
-          return "rgba(78, 88, 105, 0.18)";
-        }
-        return colorForNode(node);
-      })
-      .linkWidth((link) => {
-        const focused = !focusSet || focusSet.has(link.source.id || link.source) || focusSet.has(link.target.id || link.target);
-        const base = link.kind === "context" ? 0.38 : link.kind === "mentions" ? 0.7 : 0.54;
-        return focused ? base * strength * Math.max(0.8, link.weight || 1) : 0.08;
-      })
-      .linkColor((link) => {
-        const sourceId = link.source.id || link.source;
-        const targetId = link.target.id || link.target;
-        if (focusSet && !(focusSet.has(sourceId) || focusSet.has(targetId))) {
-          return "rgba(70, 78, 92, 0.14)";
-        }
-        if (link.kind === "context") {
-          return "rgba(149, 103, 255, 0.32)";
-        }
-        return "rgba(216, 81, 103, 0.54)";
-      })
-      .linkOpacity(0.9)
-      .linkDirectionalParticles((link) => {
-        const sourceId = link.source.id || link.source;
-        const targetId = link.target.id || link.target;
-        return state.selectedId && (sourceId === state.selectedId || targetId === state.selectedId) ? 2 : 0;
-      })
-      .linkDirectionalParticleWidth((link) => (link.kind === "context" ? 1.1 : 1.6));
+    const edgePositions = [];
+    const edgeColors = [];
 
-    const linkForce = state.graph3d.d3Force("link");
-    if (linkForce && typeof linkForce.strength === "function") {
-      linkForce.strength((link) => {
-        const base = link.kind === "context" ? 0.08 : link.kind === "mentions" ? 0.18 : 0.12;
-        return base * strength * Math.max(0.8, link.weight || 1);
-      });
+    for (const edge of state.edges) {
+      const source = state.nodeMap.get(edge.source);
+      const target = state.nodeMap.get(edge.target);
+      if (!source || !target) {
+        continue;
+      }
+      const focused = !focusSet || focusSet.has(source.id) || focusSet.has(target.id);
+      const color = edgeColorFor3D(edge, focused);
+      edgePositions.push(source.x, source.y, source.z || 0, target.x, target.y, target.z || 0);
+      edgeColors.push(color.r, color.g, color.b, color.r, color.g, color.b);
     }
+
+    if (edgePositions.length) {
+      const geometry = new window.THREE.BufferGeometry();
+      geometry.setAttribute("position", new window.THREE.Float32BufferAttribute(edgePositions, 3));
+      geometry.setAttribute("color", new window.THREE.Float32BufferAttribute(edgeColors, 3));
+      const material = new window.THREE.LineBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: clamp(0.24 + state.connectionStrength * 0.22, 0.18, 0.7),
+      });
+      runtime.edgeLine = new window.THREE.LineSegments(geometry, material);
+      runtime.graphRoot.add(runtime.edgeLine);
+    }
+
+    for (const node of state.nodes) {
+      const focused = !focusSet || focusSet.has(node.id) || node.id === state.selectedId;
+      const radius = Math.max(1.8, node.radius * (node.emphasis === "model" ? 0.52 : 0.3));
+      const geometry = new window.THREE.SphereGeometry(radius, 18, 18);
+      const mesh = new window.THREE.Mesh(geometry, create3DNodeMaterial(node, focused));
+      mesh.position.set(node.x, node.y, node.z || 0);
+      mesh.userData.nodeId = node.id;
+      runtime.graphRoot.add(mesh);
+      const entry = { mesh, radius, halo: null };
+      runtime.nodeMeshes.set(node.id, entry);
+      runtime.pickables.push(mesh);
+
+      if (node.emphasis === "model") {
+        const haloGeometry = new window.THREE.SphereGeometry(radius * 1.6, 18, 18);
+        const haloMaterial = new window.THREE.MeshBasicMaterial({
+          color: themeForNode(node).accent,
+          transparent: true,
+          opacity: node.id === state.selectedId ? 0.18 : 0.09,
+        });
+        const halo = new window.THREE.Mesh(haloGeometry, haloMaterial);
+        halo.position.copy(mesh.position);
+        runtime.graphRoot.add(halo);
+        entry.halo = halo;
+      }
+    }
+  }
+
+  function ensure3DGraph() {
+    if (state.graph3dRuntime || !graph3dHost || !window.THREE) {
+      return state.graph3dRuntime;
+    }
+
+    let renderer;
+    try {
+      renderer = new window.THREE.WebGLRenderer({
+        antialias: true,
+        alpha: false,
+        powerPreference: "high-performance",
+      });
+    } catch (error) {
+      graph3dHost.textContent = "3D view could not initialize WebGL on this device.";
+      return null;
+    }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    renderer.setClearColor(0x05080c, 1);
+    graph3dHost.replaceChildren(renderer.domElement);
+
+    const scene = new window.THREE.Scene();
+    scene.fog = new window.THREE.FogExp2(0x05080c, 0.00085);
+    const camera = new window.THREE.PerspectiveCamera(55, 1, 1, 6000);
+    const graphRoot = new window.THREE.Group();
+    scene.add(graphRoot);
+    scene.add(new window.THREE.AmbientLight(0xf4f7fb, 1.15));
+    const keyLight = new window.THREE.DirectionalLight(0x9fb9ff, 1.4);
+    keyLight.position.set(420, -280, 560);
+    scene.add(keyLight);
+    const fillLight = new window.THREE.DirectionalLight(0xff8bb9, 0.85);
+    fillLight.position.set(-300, 220, 320);
+    scene.add(fillLight);
+
+    state.graph3dRuntime = {
+      renderer,
+      scene,
+      camera,
+      graphRoot,
+      edgeLine: null,
+      nodeMeshes: new Map(),
+      pickables: [],
+      raycaster: new window.THREE.Raycaster(),
+      pointer: new window.THREE.Vector2(),
+      orbit: {
+        yaw: 0.24,
+        pitch: -0.18,
+        distance: 980,
+        target: new window.THREE.Vector3(0, 0, 0),
+        dragging: false,
+        moved: false,
+        lastX: 0,
+        lastY: 0,
+        lastInteractionAt: window.performance.now(),
+      },
+      lastFrameAt: window.performance.now(),
+    };
+
+    renderer.domElement.addEventListener("mousedown", (event) => {
+      const runtime = state.graph3dRuntime;
+      if (!runtime) {
+        return;
+      }
+      runtime.orbit.dragging = true;
+      runtime.orbit.moved = false;
+      runtime.orbit.lastX = event.clientX;
+      runtime.orbit.lastY = event.clientY;
+      runtime.orbit.lastInteractionAt = window.performance.now();
+    });
+
+    renderer.domElement.addEventListener("mousemove", (event) => {
+      const runtime = state.graph3dRuntime;
+      if (!runtime || !runtime.orbit.dragging) {
+        return;
+      }
+      const dx = event.clientX - runtime.orbit.lastX;
+      const dy = event.clientY - runtime.orbit.lastY;
+      runtime.orbit.lastX = event.clientX;
+      runtime.orbit.lastY = event.clientY;
+      runtime.orbit.moved = runtime.orbit.moved || Math.abs(dx) > 1 || Math.abs(dy) > 1;
+      runtime.orbit.yaw -= dx * 0.0055;
+      runtime.orbit.pitch = clamp(runtime.orbit.pitch - dy * 0.0042, -1.25, 1.25);
+      runtime.orbit.lastInteractionAt = window.performance.now();
+    });
+
+    const endOrbitDrag = (event) => {
+      const runtime = state.graph3dRuntime;
+      if (!runtime) {
+        return;
+      }
+      const clickNode = !runtime.orbit.moved ? render3DPick(event) : null;
+      runtime.orbit.dragging = false;
+      runtime.orbit.lastInteractionAt = window.performance.now();
+      if (clickNode) {
+        selectNode(clickNode);
+        focusCameraOnNode3d(clickNode.id);
+      }
+    };
+
+    renderer.domElement.addEventListener("mouseup", endOrbitDrag);
+    renderer.domElement.addEventListener("mouseleave", () => {
+      const runtime = state.graph3dRuntime;
+      if (runtime) {
+        runtime.orbit.dragging = false;
+      }
+    });
+    renderer.domElement.addEventListener(
+      "wheel",
+      (event) => {
+        const runtime = state.graph3dRuntime;
+        if (!runtime) {
+          return;
+        }
+        event.preventDefault();
+        const nextDistance = runtime.orbit.distance * (event.deltaY < 0 ? 0.92 : 1.08);
+        runtime.orbit.distance = clamp(nextDistance, 180, 2400);
+        runtime.orbit.lastInteractionAt = window.performance.now();
+      },
+      { passive: false }
+    );
+
+    resize3DGraph();
+    rebuild3DGraph();
+    return state.graph3dRuntime;
   }
 
   function refresh3DGraph() {
-    if (state.mode !== "3d" || !graph3dHost || !window.ForceGraph3D) {
+    if (!graph3dHost) {
       return;
     }
-
-    if (!state.graph3d) {
-      state.graph3d = window.ForceGraph3D()(graph3dHost)
-        .showNavInfo(false)
-        .enableNodeDrag(true)
-        .onNodeClick((node) => {
-          const resolved = state.nodeMap.get(node.id);
-          if (resolved) {
-            selectNode(resolved);
-            focusCameraOnNode3d(node.id);
-          }
-        });
-      resize3DGraph();
+    const runtime = ensure3DGraph();
+    if (runtime && state.mode === "3d") {
+      rebuild3DGraph();
     }
-
-    state.graph3d.graphData(build3dData());
-    apply3dStyles();
   }
 
   function setMode(mode) {
@@ -1077,27 +1361,14 @@ function bootGraph() {
     if (state.pinnedIds.has(selected.id)) {
       state.pinnedIds.delete(selected.id);
       selected.pinned = false;
-      if (state.graph3d) {
-        const node = state.graph3d.graphData().nodes.find((item) => item.id === selected.id);
-        if (node) {
-          node.fx = undefined;
-          node.fy = undefined;
-          node.fz = undefined;
-        }
-      }
     } else {
       state.pinnedIds.add(selected.id);
       selected.pinned = true;
-      if (state.graph3d) {
-        const node = state.graph3d.graphData().nodes.find((item) => item.id === selected.id);
-        if (node) {
-          node.fx = node.x;
-          node.fy = node.y;
-          node.fz = node.z;
-        }
-      }
+      selected.vx = 0;
+      selected.vy = 0;
     }
 
+    markSimulationActive();
     updateSelectionActions();
     refresh3DGraph();
   }
@@ -1106,8 +1377,12 @@ function bootGraph() {
     state.focusNodeId = null;
     if (state.mode === "3d") {
       refresh3DGraph();
-      if (state.graph3d) {
-        state.graph3d.cameraPosition({ x: 0, y: 0, z: 600 }, { x: 0, y: 0, z: 0 }, 1000);
+      if (state.graph3dRuntime) {
+        state.graph3dRuntime.orbit.target.set(0, 0, 0);
+        state.graph3dRuntime.orbit.distance = 980;
+        state.graph3dRuntime.orbit.yaw = 0.24;
+        state.graph3dRuntime.orbit.pitch = -0.18;
+        state.graph3dRuntime.orbit.lastInteractionAt = window.performance.now();
       }
     } else {
       centerOnNode2d(null);
@@ -1115,18 +1390,82 @@ function bootGraph() {
     updateSelectionActions();
   }
 
-  function applyFluidForces(node, time) {
+  function update3DScene(now = window.performance.now()) {
+    const runtime = state.graph3dRuntime;
+    if (!runtime || state.mode !== "3d") {
+      return;
+    }
+
+    const delta = Math.max(0, now - runtime.lastFrameAt);
+    runtime.lastFrameAt = now;
+    const idleFor = now - runtime.orbit.lastInteractionAt;
+    if (!runtime.orbit.dragging && idleFor > 1800) {
+      runtime.orbit.yaw += delta * 0.00008;
+    }
+
+    const target = runtime.orbit.target;
+    const distance = runtime.orbit.distance;
+    const cosPitch = Math.cos(runtime.orbit.pitch);
+    runtime.camera.position.set(
+      target.x + Math.cos(runtime.orbit.yaw) * cosPitch * distance,
+      target.y + Math.sin(runtime.orbit.pitch) * distance,
+      target.z + Math.sin(runtime.orbit.yaw) * cosPitch * distance
+    );
+    runtime.camera.lookAt(target);
+
+    const focusSet = getFocusSet();
+    for (const node of state.nodes) {
+      const entry = runtime.nodeMeshes.get(node.id);
+      if (!entry) {
+        continue;
+      }
+      const isSelected = node.id === state.selectedId;
+      const focused = !focusSet || focusSet.has(node.id) || isSelected;
+      entry.mesh.position.set(node.x, node.y, node.z || 0);
+      entry.mesh.scale.setScalar(isSelected ? 1.22 : 1);
+      entry.mesh.material.opacity = focused ? 0.96 : 0.18;
+      if (entry.halo) {
+        entry.halo.position.copy(entry.mesh.position);
+        entry.halo.scale.setScalar(isSelected ? 1.15 : 1);
+        entry.halo.material.opacity = isSelected ? 0.22 : 0.09;
+      }
+    }
+
+    if (runtime.edgeLine) {
+      const positions = runtime.edgeLine.geometry.attributes.position.array;
+      let cursor = 0;
+      for (const edge of state.edges) {
+        const source = state.nodeMap.get(edge.source);
+        const targetNode = state.nodeMap.get(edge.target);
+        if (!source || !targetNode) {
+          continue;
+        }
+        positions[cursor] = source.x;
+        positions[cursor + 1] = source.y;
+        positions[cursor + 2] = source.z || 0;
+        positions[cursor + 3] = targetNode.x;
+        positions[cursor + 4] = targetNode.y;
+        positions[cursor + 5] = targetNode.z || 0;
+        cursor += 6;
+      }
+      runtime.edgeLine.geometry.attributes.position.needsUpdate = true;
+    }
+
+    runtime.renderer.render(runtime.scene, runtime.camera);
+  }
+
+  function applyFluidForces(node, time, scale = 1) {
     const field = node.peripheral ? 0.0024 : 0.0034;
     const curlX = Math.sin(node.y * field + time * 0.00015) + Math.cos(node.x * field * 0.62 - time * 0.00012);
     const curlY = Math.cos(node.x * field + time * 0.00014) - Math.sin(node.y * field * 0.62 - time * 0.00011);
-    node.vx += curlX * (node.peripheral ? 0.0028 : 0.0038);
-    node.vy += curlY * (node.peripheral ? 0.0028 : 0.0038);
-    const swirl = node.peripheral ? 0.000005 : 0.000014;
+    node.vx += curlX * (node.peripheral ? 0.0028 : 0.0038) * scale;
+    node.vy += curlY * (node.peripheral ? 0.0028 : 0.0038) * scale;
+    const swirl = (node.peripheral ? 0.000005 : 0.000014) * scale;
     node.vx += -node.y * swirl;
     node.vy += node.x * swirl;
   }
 
-  function tick() {
+  function tick(now = window.performance.now()) {
     state.time += 0.14;
     const nodes = state.nodes;
     const edges = state.edges;
@@ -1134,6 +1473,12 @@ function bootGraph() {
     const interactionRadius2 = interactionRadius * interactionRadius;
     const grid = new Map();
     const linkStrengthFactor = state.connectionStrength;
+    const energy = currentSimulationEnergy(now);
+    const repelScale = lerp(0.22, 1, energy);
+    const springScale = lerp(0.24, 1, energy);
+    const fluidScale = lerp(0.02, 1, energy);
+    const centerScale = lerp(0.42, 1, energy);
+    const speedCap = lerp(0.14, 1.55, energy);
 
     for (let i = 0; i < nodes.length; i += 1) {
       const node = nodes[i];
@@ -1171,9 +1516,41 @@ function bootGraph() {
             if (dist2 > interactionRadius2) {
               continue;
             }
+            const dist = Math.sqrt(dist2);
+            const minGap = (a.hitRadius || hitRadiusForNode(a)) + (b.hitRadius || hitRadiusForNode(b));
+            if (dist < minGap) {
+              const overlap = minGap - dist;
+              const nx = dx / dist;
+              const ny = dy / dist;
+              const soften = clamp(0.18 + energy * 0.42, 0.18, 0.6);
+              const separation = overlap * 0.5 * soften;
+              const aLocked = a.pinned || state.dragNodeId === a.id;
+              const bLocked = b.pinned || state.dragNodeId === b.id;
+
+              if (!aLocked && !bLocked) {
+                a.x += nx * separation;
+                a.y += ny * separation;
+                b.x -= nx * separation;
+                b.y -= ny * separation;
+                a.vx += nx * separation * 0.05;
+                a.vy += ny * separation * 0.05;
+                b.vx -= nx * separation * 0.05;
+                b.vy -= ny * separation * 0.05;
+              } else if (!aLocked) {
+                a.x += nx * overlap * soften;
+                a.y += ny * overlap * soften;
+                a.vx += nx * overlap * 0.06;
+                a.vy += ny * overlap * 0.06;
+              } else if (!bLocked) {
+                b.x -= nx * overlap * soften;
+                b.y -= ny * overlap * soften;
+                b.vx -= nx * overlap * 0.06;
+                b.vy -= ny * overlap * 0.06;
+              }
+            }
             const repel = clamp(680 / dist2, 0, 0.22);
-            const fx = dx * repel * 0.0032;
-            const fy = dy * repel * 0.0032;
+            const fx = dx * repel * 0.0032 * repelScale;
+            const fy = dy * repel * 0.0032 * repelScale;
             a.vx += fx / a.mass;
             a.vy += fy / a.mass;
             b.vx -= fx / b.mass;
@@ -1195,7 +1572,12 @@ function bootGraph() {
       const relativeVx = target.vx - source.vx;
       const relativeVy = target.vy - source.vy;
       const along = (relativeVx * dx + relativeVy * dy) / dist;
-      const spring = stretch * (edge.kind === "context" ? 0.00022 : 0.00042) * Math.max(1, edge.weight) * linkStrengthFactor;
+      const spring =
+        stretch *
+        (edge.kind === "context" ? 0.00022 : 0.00042) *
+        Math.max(1, edge.weight) *
+        linkStrengthFactor *
+        springScale;
       const damper = along * 0.0105;
       const force = spring - damper;
       const fx = (dx / dist) * force;
@@ -1212,15 +1594,22 @@ function bootGraph() {
         node.vy = 0;
         continue;
       }
-      applyFluidForces(node, state.time);
+      applyFluidForces(node, state.time, fluidScale);
       applyBarrierForces(node);
-      const centerPull = node.peripheral ? 0.000003 : node.emphasis === "model" ? 0.00012 : 0.00008;
+      const centerPull = (node.peripheral ? 0.000003 : node.emphasis === "model" ? 0.00012 : 0.00008) * centerScale;
       node.vx += -node.x * centerPull;
       node.vy += -node.y * centerPull;
-      node.vx *= node.peripheral ? 0.984 : 0.972;
-      node.vy *= node.peripheral ? 0.984 : 0.972;
-      node.vx = clamp(node.vx, -1.55, 1.55);
-      node.vy = clamp(node.vy, -1.55, 1.55);
+      const velocityDecay = node.peripheral ? lerp(0.76, 0.984, energy) : lerp(0.7, 0.972, energy);
+      node.vx *= velocityDecay;
+      node.vy *= velocityDecay;
+      node.vx = clamp(node.vx, -speedCap, speedCap);
+      node.vy = clamp(node.vy, -speedCap, speedCap);
+      if (energy < 0.14 && Math.abs(node.vx) < 0.01) {
+        node.vx = 0;
+      }
+      if (energy < 0.14 && Math.abs(node.vy) < 0.01) {
+        node.vy = 0;
+      }
       node.x += node.vx;
       node.y += node.vy;
     }
@@ -1254,8 +1643,7 @@ function bootGraph() {
 
     for (const node of state.nodes) {
       const alwaysKeep = node.id === state.hoveredId || node.id === state.selectedId;
-      const sizeFactor = node.peripheral ? 0.38 : node.emphasis === "model" ? 1.18 : node.node_type === "story" ? 0.62 : 0.7;
-      const radius = Math.max(1.4, node.radius * sizeFactor + (alwaysKeep ? 1.3 : 0));
+      const radius = visualRadiusForNode(node) + (alwaysKeep ? 1.3 : 0);
       if (alwaysKeep || isNodeInBounds(node, bounds, radius * 3.1)) {
         visibleNodes.push({ node, radius });
         visibleNodeIds.add(node.id);
@@ -1398,9 +1786,11 @@ function bootGraph() {
 
   function loop(now = window.performance.now()) {
     advanceTimeline(now);
+    tick(now);
     if (state.mode === "2d") {
-      tick();
       draw();
+    } else {
+      update3DScene(now);
     }
     window.requestAnimationFrame(loop);
   }
@@ -1429,10 +1819,16 @@ function bootGraph() {
     if (state.dragNodeId) {
       const dragged = state.nodeMap.get(state.dragNodeId);
       if (dragged) {
+        if (state.dragPinnedBeforeMove && state.pinnedIds.has(dragged.id)) {
+          state.pinnedIds.delete(dragged.id);
+          dragged.pinned = false;
+        }
         dragged.x = point.x;
         dragged.y = point.y;
-        pinNodePosition(dragged);
+        dragged.vx = 0;
+        dragged.vy = 0;
         state.dragMoved = true;
+        markSimulationActive();
       }
       return;
     }
@@ -1440,6 +1836,7 @@ function bootGraph() {
     if (state.panOrigin) {
       state.transform.x = event.clientX - state.panOrigin.offsetX;
       state.transform.y = event.clientY - state.panOrigin.offsetY;
+      markSimulationActive();
     }
   });
 
@@ -1458,8 +1855,10 @@ function bootGraph() {
     const node = findNodeAt(event.clientX, event.clientY);
     if (node) {
       state.dragNodeId = node.id;
+      state.dragPinnedBeforeMove = state.pinnedIds.has(node.id);
       state.dragMoved = false;
       state.suppressClick = false;
+      markSimulationActive();
       selectNode(node);
       return;
     }
@@ -1476,11 +1875,19 @@ function bootGraph() {
       state.suppressClick = true;
       endPaintStroke();
     } else if (state.dragNodeId && state.dragMoved) {
+      const dragged = state.nodeMap.get(state.dragNodeId);
+      if (dragged && state.dragPinnedBeforeMove) {
+        pinNodePosition(dragged);
+      } else if (dragged) {
+        dragged.pinned = false;
+      }
       state.suppressClick = true;
     }
     state.dragNodeId = null;
+    state.dragPinnedBeforeMove = false;
     state.panOrigin = null;
     state.dragMoved = false;
+    markSimulationActive();
     updateSelectionActions();
     canvas.style.cursor = state.interactionMode === "paint" ? "crosshair" : "default";
   });
@@ -1527,9 +1934,12 @@ function bootGraph() {
     state.transform.k = clamp(state.transform.k * scale, 0.06, 10);
     state.transform.x = px - wx * state.transform.k;
     state.transform.y = py - wy * state.transform.k;
+    markSimulationActive();
   }, { passive: false });
 
   searchInput?.addEventListener("input", applyFilters);
+  lensInput?.addEventListener("change", applyFilters);
+  sortInput?.addEventListener("change", applyFilters);
   filterInput?.addEventListener("change", applyFilters);
   groupFilterButtons.forEach((button) => {
     button.addEventListener("click", () => {
@@ -1578,6 +1988,12 @@ function bootGraph() {
     if (searchInput) {
       searchInput.value = "";
     }
+    if (lensInput) {
+      lensInput.value = "global";
+    }
+    if (sortInput) {
+      sortInput.value = "signal";
+    }
     if (filterInput) {
       filterInput.value = "all";
     }
@@ -1623,6 +2039,7 @@ function bootGraph() {
   timelineSpeed?.addEventListener("change", () => {
     const nextSpeed = Number.parseFloat(timelineSpeed.value);
     state.timeline.speedMultiplier = Number.isFinite(nextSpeed) ? nextSpeed : 1;
+    markSimulationActive();
   });
 
   interactionModeButtons.forEach((button) => {
@@ -1631,6 +2048,7 @@ function bootGraph() {
       state.paintStrokeActive = false;
       state.activePaintStroke = null;
       state.brushPoint = null;
+      markSimulationActive();
       updateInteractionUI();
     });
   });
@@ -1638,6 +2056,7 @@ function bootGraph() {
   paintBrushSizeInput?.addEventListener("input", () => {
     const nextRadius = Number.parseInt(paintBrushSizeInput.value, 10);
     state.brushRadius = clamp(nextRadius, 40, 240);
+    markSimulationActive();
     updateInteractionUI();
   });
 
@@ -1655,11 +2074,13 @@ function bootGraph() {
     if (connectionStrengthValue) {
       connectionStrengthValue.textContent = `${raw}%`;
     }
+    markSimulationActive();
     refresh3DGraph();
   });
 
   imageToggleButton?.addEventListener("click", () => {
     state.showImages = !state.showImages;
+    markSimulationActive();
     updateImageToggleUI();
     refresh3DGraph();
   });

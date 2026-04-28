@@ -1,62 +1,92 @@
 {% extends "base.html" %}
-{% block title %}Stories | AI Signal Graph{% endblock %}
+{% block title %}Intelligence Archive | AISIGNALGRAPH{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='premium.css') }}">
+{% endblock %}
+
 {% block content %}
-  <section class="band band--tight">
-    <div class="page">
+  <section class="archive-hero">
+    <div class="page archive-hero__inner">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Stories</p>
-          <h1>Signal library</h1>
+          <p class="eyebrow neon-cyan">Archive protocol</p>
+          <h1 class="protocol-heading">INTELLIGENCE LIBRARY</h1>
+          <p class="brand-copy">Recovered reports on model launches, infrastructure shocks, policy turns, and emergent risk vectors.</p>
         </div>
-        <div class="subtle-count">{{ stories|length }} results</div>
+        <div class="subtle-count mono">{{ stories|length }} RECORDS RECOVERED</div>
       </div>
 
-      <form class="filter-bar" method="get">
-        <input type="search" name="q" value="{{ active.q }}" placeholder="Search stories, tags, labs, or models">
-        <select name="kind">
-          <option value="">All kinds</option>
+      <form class="archive-toolbar glass-panel" method="get">
+        <input class="mono" type="search" name="q" value="{{ active.q }}" placeholder="SEARCH RECORDS">
+        <select name="kind" class="mono">
+          <option value="">ALL CLASSIFICATIONS</option>
           {% for item in filters.kinds %}
-            <option value="{{ item }}" {% if active.kind == item %}selected{% endif %}>{{ item }}</option>
+            <option value="{{ item }}" {% if active.kind == item %}selected{% endif %}>{{ item|upper }}</option>
           {% endfor %}
         </select>
-        <select name="status">
-          <option value="">All statuses</option>
-          {% for item in filters.statuses %}
-            <option value="{{ item }}" {% if active.status == item %}selected{% endif %}>{{ item }}</option>
-          {% endfor %}
-        </select>
-        <select name="tag">
-          <option value="">All tags</option>
+        <select name="tag" class="mono">
+          <option value="">ALL TAGS</option>
           {% for item in filters.tags %}
-            <option value="{{ item }}" {% if active.tag == item %}selected{% endif %}>{{ item }}</option>
+            <option value="{{ item }}" {% if active.tag == item %}selected{% endif %}>{{ item|upper }}</option>
           {% endfor %}
         </select>
-        <button type="submit">Apply</button>
+        <select name="status" class="mono">
+          <option value="">ALL STATUSES</option>
+          {% for item in filters.statuses %}
+            <option value="{{ item }}" {% if active.status == item %}selected{% endif %}>{{ item|upper }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn-premium">EXECUTE QUERY</button>
       </form>
     </div>
   </section>
 
-  <section class="band">
+  <section class="archive-shell">
     <div class="page">
-      <div class="result-list">
+      <div class="masonry-grid">
         {% for story in stories %}
-          <article class="result-card result-card--static">
-            <div class="result-meta">
-              <span>{{ story.kind }}</span>
-              <span>{{ story.status }} | {{ story.event_date }}</span>
+          <article class="archive-card archive-card--story glass-panel" data-animate>
+            <div class="archive-card__meta mono">
+              <span>{{ story.kind|upper }}</span>
+              <span>{{ story.status|upper }}</span>
+              <span>{{ story.event_date }}</span>
             </div>
             <h2><a href="{{ url_for('story_detail', story_id=story.id) }}">{{ story.title }}</a></h2>
             <p>{{ story.excerpt }}</p>
-            <div class="chip-row">
-              {% for tag in story.tags %}
-                <span class="chip">{{ tag }}</span>
-              {% endfor %}
-            </div>
+            {% if story.tags %}
+              <div class="archive-chip-row">
+                {% for tag in story.tags[:6] %}
+                  <span class="archive-chip mono">#{{ tag|upper }}</span>
+                {% endfor %}
+              </div>
+            {% endif %}
           </article>
         {% else %}
-          <p class="empty-state">No stories matched the current filter set.</p>
+          <article class="archive-card archive-card--story glass-panel">
+            <div class="archive-card__meta mono">
+              <span>NO MATCH</span>
+              <span>VECTOR EMPTY</span>
+            </div>
+            <h2>No records matched the current query.</h2>
+            <p>Adjust the classification or search vector to widen the archive sweep.</p>
+          </article>
         {% endfor %}
       </div>
     </div>
   </section>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script>
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('[data-animate]').forEach((element) => observer.observe(element));
+  </script>
 {% endblock %}

@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}AISIGNALGRAPH | Protocol: Vectorized Intelligence{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='premium.css') }}">
+  <script type="module" src="https://unpkg.com/@splinetool/viewer@1.0.93/build/spline-viewer.js"></script>
+{% endblock %}
+
+{% block content %}
+  {% set stats = overview.stats if overview else {} %}
+  {% set featured_stories = overview.featured_stories if overview else [] %}
+  {% set hot_entities = overview.hot_entities if overview else [] %}
+  {% set lead_story = featured_stories[0] if featured_stories else None %}
+  <section class="hero hero--zero-day">
+    <canvas id="flow-canvas"></canvas>
+    <div class="hero-grid page">
+      <div class="hero-content">
+        <p class="eyebrow mono neon-cyan" data-animate>ZERO-DAY ACCESS // VECTOR STATUS: ACTIVE</p>
+        <h1 class="hero-title" data-animate>THE INTELLIGENCE HUB FOR THE AI ERA</h1>
+        <p class="hero-subtitle" data-animate>
+          Monitor labs, models, safety pressures, and strategic pivots through a live neural archive
+          calibrated for high-signal surveillance.
+        </p>
+        <div class="hero-actions" data-animate>
+          <a href="{{ url_for('dashboard') }}" class="btn-premium">ENTER NEURAL SIGNAL</a>
+          <a href="#matrix" class="btn-premium btn-premium--outline">REVIEW MATRIX</a>
+        </div>
+        <div class="hero-stats" data-animate>
+          <div class="hero-stat glass-panel glass-panel--cyan">
+            <span class="label">Indexed nodes</span>
+            <strong>{{ (stats.entities or 0) + (stats.stories or 0) }}</strong>
+          </div>
+          <div class="hero-stat glass-panel">
+            <span class="label">Edge lattice</span>
+            <strong>{{ stats.links or 0 }}</strong>
+          </div>
+          <div class="hero-stat glass-panel">
+            <span class="label">Active signals</span>
+            <strong>{{ stats.active_signals or 0 }}</strong>
+          </div>
+          <div class="hero-stat glass-panel">
+            <span class="label">Dataset</span>
+            <strong>{{ overview.dataset_name if overview else "offline" }}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-core-shell" data-animate>
+        <div class="hero-core-status glass-panel">
+          <span class="label">Visual protocol</span>
+          <strong data-spline-status>tracking signal flow</strong>
+        </div>
+        <div class="hero-core-frame glass-panel glass-panel--cyan" data-spline-shell>
+          <div class="hero-core-wave" data-spline-wave aria-hidden="true"></div>
+          <div class="hero-editorial">
+            <span class="mono hero-editorial__tag">field issue 03</span>
+            <h3>Automated Intelligence Touchpoints</h3>
+            <p>Deploy a single operating view across labs, model families, policy pressure, and risk acceleration.</p>
+          </div>
+          <article class="hero-cover-card glass-panel">
+            <div class="hero-cover-card__visual"></div>
+            <div class="hero-cover-card__body">
+              <span class="mono hero-cover-card__kicker">Protocol digest</span>
+              <h3>{{ lead_story.title if lead_story else "Live Archive Cover" }}</h3>
+              <p>{{ lead_story.excerpt if lead_story else "Background intelligence panels can now use Gemini-generated visuals directly from the local asset set." }}</p>
+              <a href="{{ url_for('story_detail', story_id=lead_story.id) if lead_story else url_for('stories') }}" class="hero-cover-card__link">OPEN BRIEF</a>
+            </div>
+          </article>
+          <spline-viewer url="https://prod.spline.design/6Wq1Q7YEBC9i3r9n/scene.splinecode"></spline-viewer>
+        </div>
+      </div>
+    </div>
+
+    <div class="ticker-shell" aria-label="Protocol stats">
+      <div class="ticker-track">
+        <span>nodes {{ (stats.entities or 0) + (stats.stories or 0) }}</span>
+        <span>edges {{ stats.links or 0 }}</span>
+        <span>stories {{ stats.stories or 0 }}</span>
+        <span>entities {{ stats.entities or 0 }}</span>
+        <span>keywords {{ stats.keywords or 0 }}</span>
+        <span>dataset {{ overview.dataset_name if overview else "offline" }}</span>
+        <span>nodes {{ (stats.entities or 0) + (stats.stories or 0) }}</span>
+        <span>edges {{ stats.links or 0 }}</span>
+        <span>stories {{ stats.stories or 0 }}</span>
+        <span>entities {{ stats.entities or 0 }}</span>
+        <span>keywords {{ stats.keywords or 0 }}</span>
+        <span>dataset {{ overview.dataset_name if overview else "offline" }}</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="matrix" class="matrix-grid matrix-grid--intelligence">
+    <article class="matrix-card glass-panel" data-animate>
+      <p class="mono neon-purple">01 // NEURAL HISTORY</p>
+      <h3>Chronological Mapping</h3>
+      <p>Traverse model releases, board crises, infrastructure shocks, and labor signals from the first breakout cycle through the present archive.</p>
+    </article>
+    <article class="matrix-card glass-panel" data-animate>
+      <p class="mono neon-cyan">02 // LAB TRACKING</p>
+      <h3>Frontier Surveillance</h3>
+      <p>Maintain live dossiers on labs, platforms, and compute brokers shaping capability concentration across the model economy.</p>
+    </article>
+    <article class="matrix-card glass-panel" data-animate>
+      <p class="mono neon-emerald">03 // ALIGNMENT RISK</p>
+      <h3>Vectorized Threats</h3>
+      <p>Track where deployment velocity, regulation pressure, and public-risk narratives converge into actionable intelligence signals.</p>
+    </article>
+  </section>
+
+  <section class="protocol-section">
+    <div class="page protocol-preview">
+      <div class="section-heading" data-animate>
+        <div>
+          <p class="eyebrow neon-cyan">Protocol preview</p>
+          <h2 class="protocol-heading">Recent Intelligence Bursts</h2>
+        </div>
+        <a href="{{ url_for('stories') }}" class="section-link mono">OPEN ARCHIVE</a>
+      </div>
+      <div class="archive-preview-grid">
+        {% for story in featured_stories[:3] %}
+          <article class="archive-preview-card glass-panel" data-animate>
+            <div class="archive-preview-meta mono">
+              <span>{{ story.kind|upper }}</span>
+              <span>{{ story.event_date }}</span>
+            </div>
+            <h3><a href="{{ url_for('story_detail', story_id=story.id) }}">{{ story.title }}</a></h3>
+            <p>{{ story.excerpt }}</p>
+          </article>
+        {% else %}
+          <article class="archive-preview-card glass-panel" data-animate>
+            <div class="archive-preview-meta mono">
+              <span>STATUS</span>
+              <span>OFFLINE</span>
+            </div>
+            <h3>Archive feed unavailable</h3>
+            <p>The landing page loaded without graph telemetry. The dashboard can still be accessed when the data services recover.</p>
+          </article>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <section class="protocol-section protocol-section--muted">
+    <div class="page authority-layout">
+      <div class="authority-copy" data-animate>
+        <p class="eyebrow neon-purple">Authority layer</p>
+        <h2 class="protocol-heading">Primary Actors in the Current Field</h2>
+        <p>
+          The archive surfaces the entities with the highest story density first, exposing which labs,
+          model families, and risk vectors currently dominate the network.
+        </p>
+        <a href="{{ url_for('entities') }}" class="btn-premium btn-premium--outline">ACCESS DOSSIERS</a>
+      </div>
+      <div class="authority-stack">
+        {% for entity in hot_entities[:5] %}
+          <a class="authority-card glass-panel" href="{{ url_for('entity_detail', entity_id=entity.id) }}" data-animate>
+            <div>
+              <span class="label">Entity {{ loop.index }}</span>
+              <h3>{{ entity.name }}</h3>
+              <p>{{ entity.excerpt }}</p>
+            </div>
+            <div class="authority-metrics mono">
+              <span>{{ entity.entity_type|upper }}</span>
+              <span>{{ entity.story_count }} refs</span>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script src="{{ url_for('static', filename='vendor/three.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='flow_field.js') }}"></script>
+  <script src="{{ url_for('static', filename='spline_handler.js') }}" defer></script>
+  <script>
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+        }
+      });
+    }, { threshold: 0.12 });
+
+    document.querySelectorAll('[data-animate]').forEach((element) => observer.observe(element));
+  </script>
+{% endblock %}

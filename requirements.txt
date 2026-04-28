@@ -1,6 +1,7 @@
 requests
 requests-cache
 beautifulsoup4
+bleach
 pymupdf
 python-docx
 markdownify

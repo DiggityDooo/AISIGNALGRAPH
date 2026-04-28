@@ -1,250 +1,143 @@
 {% extends "base.html" %}
 {% block title %}Graph | AI Signal Graph{% endblock %}
+{% block extra_head %}
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='futuristic.css') }}">
+{% endblock %}
 {% block extra_scripts %}
-  <script src="https://unpkg.com/three@0.152.2/build/three.min.js" defer></script>
-  <script src="https://unpkg.com/3d-force-graph@1.76.1/dist/3d-force-graph.min.js" defer></script>
+  <script src="{{ url_for('static', filename='vendor/d3.v7.min.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='vendor/three.min.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='vendor/3d-force-graph.min.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='shader.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='graph.js') }}" defer></script>
 {% endblock %}
 {% block content %}
-  <section class="graph-stage">
-    <div class="graph-canvas-shell graph-canvas-shell--hero">
-      <canvas id="graph-canvas" width="1600" height="1120"></canvas>
-      <div id="graph-3d" class="graph-3d-shell graph-3d-shell--hidden" aria-hidden="true"></div>
-      <div class="graph-overlay graph-overlay--top">
-        <div class="graph-headline">
-          <h1>AI Signal Graph</h1>
-          <p class="graph-headline__subtle">Labs, models, capital, policy, risks, and failures in one field.</p>
-          <div class="graph-chip-row">
-            <span class="graph-chip graph-chip--red">Labs</span>
-            <span class="graph-chip graph-chip--blue">Models</span>
-            <span class="graph-chip graph-chip--pink">Policy</span>
-            <span class="graph-chip graph-chip--purple">Agents</span>
-          </div>
-        </div>
-        <div class="graph-toolbar-shell" aria-label="Graph options">
-        <div class="graph-toolbar-shell__peek" aria-hidden="true">
-          <span>Options</span>
-        </div>
-        <div class="graph-toolbar graph-toolbar--floating">
-          <div class="graph-toolbar__row">
-            <div class="graph-toolbar__left">
-              <input id="graph-search" type="search" placeholder="Find a model, lab, risk, or story">
-              <select id="graph-filter">
-                <option value="all">All nodes</option>
-                <option value="story">Stories only</option>
-                <option value="entity">Entities only</option>
-                <option value="company">Companies</option>
-                <option value="model">Models</option>
-                <option value="keyword">Keywords</option>
-                <option value="person">People</option>
-                <option value="year">Years</option>
-                <option value="risk">Risks</option>
-              </select>
-              <div class="segmented-control" id="graph-view-mode" aria-label="Graph view mode">
-                <button type="button" class="segment-button is-active" data-mode="2d">2D</button>
-                <button type="button" class="segment-button" data-mode="3d">3D</button>
-              </div>
-            </div>
-            <div class="graph-toolbar__right">
-              <form action="{{ url_for('reseed_database') }}" method="post">
-                <button class="button-secondary button-secondary--wide" type="submit">Rebuild from master document</button>
-              </form>
-            </div>
-          </div>
-          <div class="graph-toolbar__row graph-toolbar__row--secondary">
-            <label class="graph-range-control" for="connection-strength">
-              <span>Connections</span>
-              <input id="connection-strength" type="range" min="20" max="180" value="100" step="5">
-              <strong id="connection-strength-value">100%</strong>
-            </label>
-            <div class="graph-toolbar__meta">
-              <button id="graph-image-toggle" type="button" class="toolbar-badge toolbar-badge--toggle is-active" aria-pressed="true">Images on</button>
-              <span class="toolbar-badge">2D field</span>
-              <span class="toolbar-badge toolbar-badge--muted">3D orbit</span>
-            </div>
-          </div>
-          <div class="graph-toolbar__row graph-toolbar__row--filters">
-            <div class="graph-filter-stack">
-              <div class="filter-chip-group">
-                <span class="filter-chip-group__label">Sections</span>
-                <button type="button" class="filter-chip is-active" data-group-filter="stories">Stories</button>
-                <button type="button" class="filter-chip is-active" data-group-filter="models">Models</button>
-                <button type="button" class="filter-chip is-active" data-group-filter="labs">Labs</button>
-                <button type="button" class="filter-chip is-active" data-group-filter="policy">Policy</button>
-                <button type="button" class="filter-chip is-active" data-group-filter="agents">Agents</button>
-                <button type="button" class="filter-chip is-active" data-group-filter="infra">Infra</button>
-              </div>
-              <div class="filter-chip-group">
-                <span class="filter-chip-group__label">Relations</span>
-                <button type="button" class="filter-chip is-active" data-edge-filter="mentions">Mentions</button>
-                <button type="button" class="filter-chip is-active" data-edge-filter="context">Context</button>
-                <button type="button" class="filter-chip is-active" data-edge-filter="co-mentioned">Co-mentioned</button>
-              </div>
-            </div>
-            <div class="graph-filter-stack graph-filter-stack--compact">
-              <div class="filter-chip-group">
-                <span class="filter-chip-group__label">Scope</span>
-                <button id="pinned-only-toggle" type="button" class="filter-chip filter-chip--ghost" aria-pressed="false">Pinned only</button>
-                <button id="cluster-only-toggle" type="button" class="filter-chip filter-chip--ghost" aria-pressed="false" disabled>Cluster only</button>
-                <button id="clear-graph-filters" type="button" class="filter-chip filter-chip--clear">Clear</button>
-              </div>
-            </div>
-          </div>
-          <div class="graph-toolbar__row graph-toolbar__row--timeline">
-            <div class="graph-timeline-controls">
-              <button id="timeline-play-toggle" type="button" class="button-secondary button-ghost">Play build</button>
-              <button id="timeline-full-reset" type="button" class="filter-chip filter-chip--ghost">Full graph</button>
-              <label class="graph-range-control graph-range-control--timeline" for="timeline-range">
-                <span>Timelapse</span>
-                <input id="timeline-range" type="range" min="0" max="0" value="0" step="1" disabled>
-                <strong id="timeline-current-label">Loading</strong>
-              </label>
-            </div>
-            <label class="timeline-speed-control" for="timeline-speed">
-              <span>Speed</span>
-              <select id="timeline-speed">
-                <option value="1">1x</option>
-                <option value="1.5">1.5x</option>
-                <option value="2">2x</option>
-                <option value="3">3x</option>
-              </select>
-            </label>
-          </div>
-          <div class="graph-toolbar__row graph-toolbar__row--interaction">
-            <div class="graph-interaction-controls">
-              <div class="segmented-control" id="graph-interaction-mode" aria-label="Graph interaction mode">
-                <button type="button" class="segment-button is-active" data-interaction="move">Move</button>
-                <button type="button" class="segment-button" data-interaction="paint">Paint</button>
-              </div>
-              <label class="graph-range-control graph-range-control--brush" for="paint-brush-size">
-                <span>Brush</span>
-                <input id="paint-brush-size" type="range" min="40" max="240" value="120" step="10">
-                <strong id="paint-brush-size-value">120</strong>
-              </label>
-            </div>
-            <div class="filter-chip-group">
-              <button id="clear-barriers-button" type="button" class="filter-chip filter-chip--ghost">Clear barriers</button>
-              <button id="clear-pins-button" type="button" class="filter-chip filter-chip--ghost">Unpin all</button>
-            </div>
-          </div>
-        </div>
-        </div>
-      </div>
+  <div id="app-root" data-dataset-name="{{ overview.dataset_name }}" data-source-path="{{ overview.source_path }}">
+    <canvas id="bg-shader"></canvas>
+    <svg id="graph-svg" aria-label="AI Signal Graph"></svg>
+    <canvas id="node-canvas"></canvas>
+    <canvas id="signal-canvas"></canvas>
+    <div id="3d-graph-container" style="position: absolute; inset: 0; z-index: 1; display: none;"></div>
 
-      <div class="graph-overlay graph-overlay--left" id="stats-grid">
-        <div class="micro-metric">
-          <span>Stories</span>
-          <strong data-stat="stories">{{ overview.stats.stories }}</strong>
+    <div id="ui-overlay">
+      <header id="hud-top" class="glass-panel" style="border: none; border-bottom: var(--border-subtle); border-radius: 0;">
+        <span class="hud-title protocol-heading" style="color: var(--color-primary);">AISIGNALGRAPH // PROTOCOL</span>
+        <div class="hud-divider"></div>
+        <div class="hud-stats">
+          <span class="label">Nodes <span id="stat-nodes" style="color: var(--color-ink);">{{ overview.stats.entities + overview.stats.stories }}</span></span>
+          <span class="label">Edges <span id="stat-edges" style="color: var(--color-ink);">{{ overview.stats.links }}</span></span>
+          <span class="label">Active <span id="stat-signals" style="color: var(--color-primary);">0</span></span>
+          <span class="label">Source <span id="stat-dataset" style="color: var(--color-muted);">{{ overview.dataset_name }}</span></span>
         </div>
-        <div class="micro-metric">
-          <span>Entities</span>
-          <strong data-stat="entities">{{ overview.stats.entities }}</strong>
+        <div class="hud-divider"></div>
+        <div class="hud-controls">
+          <button id="mode-3d-toggle" class="btn-hud" type="button">3D MODE</button>
+          <button id="rebuild-button" class="btn-hud" type="button">⟳ REBUILD</button>
+          <button id="simulation-toggle" class="btn-hud" type="button">⏸ PAUSE</button>
+          <button id="fit-button" class="btn-hud" type="button">⊡ FIT</button>
         </div>
-        <div class="micro-metric">
-          <span>Links</span>
-          <strong data-stat="links">{{ overview.stats.links }}</strong>
-        </div>
-        <div class="micro-metric">
-          <span>Keywords</span>
-          <strong data-stat="keywords">{{ overview.stats.keywords }}</strong>
-        </div>
-      </div>
+      </header>
 
-      <aside class="graph-detail graph-detail--floating" id="graph-detail">
-        <div class="graph-detail__header">
-          <p class="eyebrow">Selected Node</p>
-          <div class="detail-title-row">
-            <span id="detail-accent" class="detail-accent"></span>
-            <h2 id="detail-title">AI Signal Graph</h2>
+      <aside id="hud-left" class="glass-panel" style="border: none; border-right: var(--border-subtle); border-radius: 0;">
+        <div class="hud-block">
+          <div class="hud-field">
+            <span class="label">Search</span>
+            <input id="graph-search" type="search" placeholder="Find a story, lab, model, or risk">
           </div>
-          <p id="detail-subtitle" class="section-copy">Pick a node to inspect its cluster.</p>
-        </div>
-        <p id="detail-description" class="detail-copy">The graph mixes story nodes with entity nodes so you can follow how labs, models, risks, capital, labor, and policy intersect over time.</p>
-        <div class="detail-meta detail-meta--compact">
-          <div>
-            <dt>Type</dt>
-            <dd id="detail-type">graph</dd>
+
+          <div class="hud-field">
+            <span class="label">Lens</span>
+            <select id="graph-lens">
+              <option value="global">Global graph</option>
+              <option value="chronological">Chronological</option>
+              <option value="signal">High signal</option>
+              <option value="local">Local graph</option>
+              <option value="orphans">Orphans</option>
+              <option value="clusters">Clusters</option>
+            </select>
           </div>
-          <div>
-            <dt>Connections</dt>
-            <dd id="detail-connections">0</dd>
+
+          <div class="hud-field">
+            <span class="label">Sort</span>
+            <select id="graph-sort">
+              <option value="signal">Best signal</option>
+              <option value="connected">Most connected</option>
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="alphabetical">A-Z</option>
+            </select>
           </div>
-          <div>
-            <dt>Heat</dt>
-            <dd id="detail-heat">0%</dd>
+
+          <div class="hud-filter-grid">
+            <span class="label">Node types</span>
+            <div id="node-type-filters" class="hud-checklist"></div>
+          </div>
+
+          <div class="hud-filter-grid">
+            <span class="label">Relations</span>
+            <div id="edge-type-filters" class="hud-checklist"></div>
+          </div>
+
+          <div class="hud-chip-row">
+            <span class="hud-chip">Stories</span>
+            <span class="hud-chip">Labs</span>
+            <span class="hud-chip">Models</span>
+            <span class="hud-chip">Risks</span>
           </div>
         </div>
-        <a id="detail-link" class="detail-link detail-link--disabled" href="#">Open record</a>
-        <div class="detail-actions">
-          <button id="focus-node-button" type="button" class="button-secondary button-ghost" disabled>Focus</button>
-          <button id="pin-node-button" type="button" class="button-secondary button-ghost" disabled>Pin</button>
-          <button id="reset-view-button" type="button" class="button-secondary button-ghost">Reset</button>
-        </div>
-        <div class="legend-grid legend-grid--floating">
-          <div><span class="legend-swatch legend-swatch--story"></span>Story nodes</div>
-          <div><span class="legend-swatch legend-swatch--model"></span>Blue: models / timeline</div>
-          <div><span class="legend-swatch legend-swatch--company"></span>Red: labs / business</div>
-          <div><span class="legend-swatch legend-swatch--keyword"></span>Purple: keywords / agents</div>
-          <div><span class="legend-swatch legend-swatch--risk"></span>Pink: policy / risk / people</div>
-          <div><span class="legend-swatch legend-swatch--year"></span>Peripheral low-degree nodes</div>
-        </div>
-        <div class="job-pill job-pill--ghost {{ 'is-running' if job_state.active else '' }}" id="job-state-pill">{{ job_state.status }}</div>
       </aside>
 
-      <div class="graph-hint">Drag, pan, zoom, double-click.</div>
-    </div>
-  </section>
+      <aside id="hud-right" class="glass-panel" style="border: none; border-left: var(--border-subtle); border-radius: 0;" aria-live="polite">
+        <div class="hud-detail-title">
+          <span id="detail-badge" class="hud-badge">Graph</span>
+          <h2 id="detail-title" class="neon-cyan">AI Signal Graph</h2>
+          <button id="detail-close" class="btn-hud hud-right-close" type="button">✕</button>
+        </div>
+        <div id="detail-subtitle" class="label">Select a node to inspect it.</div>
+        <div id="detail-copy" class="hud-detail-copy" style="margin-top: 14px;">
+          The graph combines stories, labs, models, people, and risks into one animated field.
+        </div>
+        <div id="detail-meta" class="hud-meta-list" style="margin-top: 16px;"></div>
+        <div id="detail-tags" class="hud-story-tags" style="margin-top: 14px;"></div>
+        <div id="detail-entities" class="hud-entity-list"></div>
+        <div id="detail-related" class="hud-related-list" style="margin-top: 16px;"></div>
+        <div id="detail-actions" class="hud-actions" style="margin-top: 16px;">
+          <a id="detail-link" class="btn-hud hud-link" href="{{ url_for('stories') }}">OPEN RECORD</a>
+        </div>
+      </aside>
 
-  <section class="band band--muted">
-    <div class="page dual-stack">
-      <div>
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Featured Stories</p>
-            <h2>High-signal nodes worth scanning first</h2>
+      <footer id="hud-bottom" class="glass-panel" style="border: none; border-top: var(--border-subtle); border-radius: 0;">
+        <div class="hud-bottom-group hud-timeline">
+          <div class="hud-bottom-group--stack" style="flex: 1 1 auto;">
+            <span class="label">Year filter</span>
+            <input id="year-filter" type="range" min="2020" max="2026" value="2026" step="1">
           </div>
-          <a class="section-link" href="{{ url_for('stories') }}">All stories</a>
+          <div class="hud-year-readout">
+            <span class="label">Visible through</span>
+            <div id="year-value" class="neon-cyan">2026</div>
+          </div>
         </div>
-        <div class="result-list">
-          {% for story in overview.featured_stories %}
-            <a class="result-card" href="{{ url_for('story_detail', story_id=story.id) }}">
-              <div class="result-meta">
-                <span>{{ story.kind }}</span>
-                <span>{{ story.event_date }}</span>
-              </div>
-              <h3>{{ story.title }}</h3>
-              <p>{{ story.excerpt }}</p>
-            </a>
-          {% endfor %}
+
+        <div class="hud-divider"></div>
+
+        <div class="hud-bottom-group">
+          <div class="hud-bottom-group--stack">
+            <span class="label">Signal speed</span>
+            <input id="signal-speed" type="range" min="0.5" max="3" value="1" step="0.1">
+          </div>
+          <div class="hud-year-readout">
+            <span class="label">Rate</span>
+            <div id="signal-speed-value" class="neon-green">1.0x</div>
+          </div>
         </div>
+      </footer>
+
+      <div class="hud-mobile-dock">
+        <button class="btn-hud hud-mobile-button" id="filters-toggle" type="button" aria-controls="hud-left" aria-expanded="false">FILTERS</button>
+        <button class="btn-hud hud-mobile-button" id="inspector-toggle" type="button" aria-controls="hud-right" aria-expanded="false">DOSSIER</button>
       </div>
 
-      <div>
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Hot Clusters</p>
-            <h2>Where the graph is densest</h2>
-          </div>
-        </div>
-        <div class="stack-group">
-          <div class="mini-list">
-            {% for entity in overview.hot_entities %}
-              <a href="{{ url_for('entity_detail', entity_id=entity.id) }}">
-                <span>{{ entity.name }}</span>
-                <strong>{{ entity.story_count }}</strong>
-              </a>
-            {% endfor %}
-          </div>
-          <div class="bar-list">
-            {% for item in overview.kind_counts %}
-              <div class="bar-row">
-                <span>{{ item.name }}</span>
-                <div class="bar-track"><div class="bar-fill" style="width: {{ item.count * 12 }}%"></div></div>
-                <strong>{{ item.count }}</strong>
-              </div>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
+      <div class="hud-canvas-hint">Drag nodes, pan, zoom, inspect stories.</div>
     </div>
-  </section>
+  </div>
 {% endblock %}

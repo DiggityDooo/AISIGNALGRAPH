@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Stories | AI Signal Graph{% endblock %}
+{% block content %}
+  <section class="band band--tight">
+    <div class="page">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Stories</p>
+          <h1>Signal library</h1>
+        </div>
+        <div class="subtle-count">{{ stories|length }} results</div>
+      </div>
+
+      <form class="filter-bar" method="get">
+        <input type="search" name="q" value="{{ active.q }}" placeholder="Search stories, tags, labs, or models">
+        <select name="kind">
+          <option value="">All kinds</option>
+          {% for item in filters.kinds %}
+            <option value="{{ item }}" {% if active.kind == item %}selected{% endif %}>{{ item }}</option>
+          {% endfor %}
+        </select>
+        <select name="status">
+          <option value="">All statuses</option>
+          {% for item in filters.statuses %}
+            <option value="{{ item }}" {% if active.status == item %}selected{% endif %}>{{ item }}</option>
+          {% endfor %}
+        </select>
+        <select name="tag">
+          <option value="">All tags</option>
+          {% for item in filters.tags %}
+            <option value="{{ item }}" {% if active.tag == item %}selected{% endif %}>{{ item }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Apply</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="page">
+      <div class="result-list">
+        {% for story in stories %}
+          <article class="result-card result-card--static">
+            <div class="result-meta">
+              <span>{{ story.kind }}</span>
+              <span>{{ story.status }} | {{ story.event_date }}</span>
+            </div>
+            <h2><a href="{{ url_for('story_detail', story_id=story.id) }}">{{ story.title }}</a></h2>
+            <p>{{ story.excerpt }}</p>
+            <div class="chip-row">
+              {% for tag in story.tags %}
+                <span class="chip">{{ tag }}</span>
+              {% endfor %}
+            </div>
+          </article>
+        {% else %}
+          <p class="empty-state">No stories matched the current filter set.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+{% endblock %}

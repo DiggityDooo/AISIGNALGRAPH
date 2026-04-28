@@ -1,0 +1,16 @@
+requests
+requests-cache
+beautifulsoup4
+pymupdf
+python-docx
+markdownify
+Markdown
+python-frontmatter
+pathlib
+tqdm
+loguru
+tenacity
+ollama
+adroit
+pandas
+Flask

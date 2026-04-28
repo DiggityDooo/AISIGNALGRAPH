@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}AI Signal Graph{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+    {% block extra_head %}{% endblock %}
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="topbar__inner">
+          <div class="brand-block">
+            <a class="brand" href="{{ url_for('dashboard') }}">AI Signal Graph</a>
+            <p class="brand-copy">Local graph database for AI stories, labs, models, drama, and exploit culture.</p>
+          </div>
+          <nav class="nav">
+            <a href="{{ url_for('dashboard') }}">Graph</a>
+            <a href="{{ url_for('stories') }}">Stories</a>
+            <a href="{{ url_for('entities') }}">Entities</a>
+          </nav>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="flash-band">
+            <div class="page">
+              {% for category, message in messages %}
+                <div class="flash flash--{{ category }}">{{ message }}</div>
+              {% endfor %}
+            </div>
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <main>
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+    {% block extra_scripts %}{% endblock %}
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </body>
+</html>

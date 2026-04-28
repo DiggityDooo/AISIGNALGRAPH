@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ entity.record.name }} | AI Signal Graph{% endblock %}
+{% block content %}
+  <section class="band band--tight">
+    <div class="page">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">{{ entity.record.entity_type }}</p>
+          <h1>{{ entity.record.name }}</h1>
+        </div>
+        <div class="subtle-count">{{ entity.record.story_count }} stories</div>
+      </div>
+
+      <div class="detail-layout">
+        <aside class="detail-sidebar">
+          <div class="sidebar-block">
+            <h2>Profile</h2>
+            <p>{{ entity.record.description }}</p>
+          </div>
+          <div class="sidebar-block">
+            <h2>Group</h2>
+            <p>{{ entity.record.group_name }}</p>
+          </div>
+          {% if entity.linked_entities %}
+            <div class="sidebar-block">
+              <h2>Linked entities</h2>
+              <ul class="link-list">
+                {% for item in entity.linked_entities %}
+                  <li><a href="{{ url_for('entity_detail', entity_id=item.id) }}">{{ item.name }}</a> <span class="inline-meta">{{ item.relation }}</span></li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+        </aside>
+
+        <article class="detail-content">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Connected Stories</p>
+              <h2>Where this node shows up</h2>
+            </div>
+          </div>
+          <div class="result-list">
+            {% for story in entity.stories %}
+              <article class="result-card result-card--static">
+                <div class="result-meta">
+                  <span>{{ story.kind }}</span>
+                  <span>{{ story.status }} | {{ story.event_date }}</span>
+                </div>
+                <h2><a href="{{ url_for('story_detail', story_id=story.id) }}">{{ story.title }}</a></h2>
+                <p>{{ story.excerpt }}</p>
+              </article>
+            {% endfor %}
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+{% endblock %}

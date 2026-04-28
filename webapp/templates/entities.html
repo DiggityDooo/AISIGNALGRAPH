@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Entities | AI Signal Graph{% endblock %}
+{% block content %}
+  <section class="band band--tight">
+    <div class="page">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Entities</p>
+          <h1>Labs, models, risks, and products</h1>
+        </div>
+        <div class="subtle-count">{{ entities|length }} results</div>
+      </div>
+      <form class="filter-bar filter-bar--compact" method="get">
+        <input type="search" name="q" value="{{ active.q }}" placeholder="Search entities">
+        <select name="type">
+          <option value="">All types</option>
+          {% for item in filters.types %}
+            <option value="{{ item }}" {% if active.type == item %}selected{% endif %}>{{ item }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Apply</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="page collection-grid">
+      {% for entity in entities %}
+        <a class="collection-card" href="{{ url_for('entity_detail', entity_id=entity.id) }}">
+          <div class="result-meta">
+            <span>{{ entity.entity_type }}</span>
+            <span>{{ entity.story_count }} stories</span>
+          </div>
+          <h2>{{ entity.name }}</h2>
+          <p>{{ entity.excerpt }}</p>
+        </a>
+      {% else %}
+        <p class="empty-state">No entities matched the current filter set.</p>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

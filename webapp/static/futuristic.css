@@ -254,8 +254,34 @@ body.body-graph-shell {
   display: none;
 }
 
+/* Custom Scrollbar for HUD Panels */
+#hud-right::-webkit-scrollbar,
+#hud-left::-webkit-scrollbar {
+  width: 6px;
+}
+#hud-right::-webkit-scrollbar-track,
+#hud-left::-webkit-scrollbar-track {
+  background: rgba(12, 5, 6, 0.4);
+  border-radius: 4px;
+}
+#hud-right::-webkit-scrollbar-thumb,
+#hud-left::-webkit-scrollbar-thumb {
+  background: rgba(255, 49, 72, 0.3);
+  border-radius: 4px;
+}
+#hud-right::-webkit-scrollbar-thumb:hover,
+#hud-left::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 49, 72, 0.6);
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
 #hud-right.is-open {
   display: block;
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 #hud-bottom {
@@ -382,6 +408,13 @@ body.body-graph-shell {
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  transition: all 0.2s ease;
+}
+
+a.hud-badge[href]:hover {
+  background: rgba(255, 49, 72, 0.25);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(255, 49, 72, 0.15);
 }
 
 .hud-story-tags,
@@ -397,12 +430,29 @@ body.body-graph-shell {
   margin-top: 12px;
 }
 
-.hud-related-list a,
+.hud-related-list a {
+  display: block;
+  padding: 8px 12px;
+  background: rgba(255, 49, 72, 0.05);
+  border-left: 2px solid rgba(255, 49, 72, 0.3);
+  border-radius: 0 4px 4px 0;
+  color: var(--color-cyan);
+  text-decoration: none;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.hud-related-list a:hover {
+  background: rgba(255, 49, 72, 0.12);
+  border-left-color: var(--color-cyan);
+  transform: translateX(2px);
+  color: #fff;
+}
+
 .hud-link {
   color: var(--cyan);
 }
 
-.hud-related-list a:hover,
 .hud-link:hover {
   color: #fff;
 }

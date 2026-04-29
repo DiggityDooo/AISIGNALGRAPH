@@ -1,19 +1,26 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import sqlite3
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 import bleach
 import markdown
+import numpy as np
+from sklearn.cluster import KMeans
 
 
 LEGACY_MASTER_DOCUMENT_PATH = Path("/home/seanb/Documents/New Folder/AI_Master_Document_2020_2026.md")
 DATASET_VERSION = "master-doc-v2"
+DISPLAY_CLUSTER_REFINEMENT_THRESHOLD = 120
+DISPLAY_CLUSTER_TARGET_SIZE = 45
+DISPLAY_CLUSTER_MAX_COUNT = 10
 MONTHS = {
     "jan": "01",
     "feb": "02",
@@ -265,6 +272,36 @@ def month_range(start_month: str, end_month: str) -> list[str]:
     return months
 
 
+def month_index_from_key(month_key: str | None) -> int | None:
+    if not month_key:
+        return None
+    year, month = month_key.split("-", 1)
+    return int(year) * 12 + int(month)
+
+
+def timeline_day_sort_key(date_text: str | None) -> tuple[int, int, int]:
+    if not date_text or date_text == "reference":
+        return (0, 0, 0)
+    match = re.match(r"^(20\d{2})(?:-(\d{2}))?(?:-(\d{2}))?$", date_text)
+    if match:
+        year = int(match.group(1))
+        month = int(match.group(2) or "1")
+        day = int(match.group(3) or "1")
+        return (year, month, day)
+    month_key = timeline_month_key(date_text)
+    if month_key:
+        year, month = month_key.split("-", 1)
+        return (int(year), int(month), 1)
+    year_match = re.search(r"\b(20\d{2})\b", date_text)
+    if year_match:
+        return (int(year_match.group(1)), 1, 1)
+    return (0, 0, 0)
+
+
+def cluster_role_for_entity_type(entity_type: str) -> str:
+    return "timeline" if entity_type == "year" else "entity"
+
+
 def graph_node_type(node_type: str, group_name: str) -> str:
     normalized_group = slugify(group_name)
     if node_type == "story":
@@ -302,6 +339,8 @@ class EntityRecord:
     group_name: str
     description: str
     importance: int
+    cluster_id: int | None
+    cluster_role: str | None
     story_count: int
     mention_count: int
     stories: list[dict[str, Any]]
@@ -323,6 +362,8 @@ class StoryRecord:
     details_markdown: str
     details_html: str
     importance: int
+    cluster_id: int | None
+    cluster_role: str | None
     tags: list[str]
     entities: list[dict[str, Any]]
     related_stories: list[dict[str, Any]]
@@ -356,6 +397,452 @@ class GraphStore:
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.db_path)
+
+    def _table_columns(self, conn: sqlite3.Connection, table_name: str) -> set[str]:
+        return {row[1] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
+
+    def _ensure_cluster_columns(self, conn: sqlite3.Connection) -> None:
+        table_columns = {
+            "entities": {"cluster_id": "INTEGER", "cluster_role": "TEXT"},
+            "stories": {"cluster_id": "INTEGER", "cluster_role": "TEXT"},
+        }
+        for table_name, columns in table_columns.items():
+            existing = self._table_columns(conn, table_name)
+            for column_name, column_type in columns.items():
+                if column_name not in existing:
+                    conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+
+    def _story_months_from_records(self, stories: list[sqlite3.Row | dict[str, Any]]) -> dict[str, str | None]:
+        return {row["id"]: timeline_month_key(row["event_date"]) for row in stories}
+
+    def _entity_first_seen_map(
+        self,
+        entities: list[sqlite3.Row | dict[str, Any]],
+        entity_to_stories: dict[str, list[str]],
+        story_months: dict[str, str | None],
+        fallback_month: str,
+    ) -> dict[str, str]:
+        first_seen: dict[str, str] = {}
+        for entity in entities:
+            candidate_months = [
+                story_months.get(story_id)
+                for story_id in entity_to_stories.get(entity["id"], [])
+                if story_months.get(story_id)
+            ]
+            if entity["entity_type"] == "year":
+                candidate_months.append(f"{entity['name']}-01")
+            first_seen[entity["id"]] = min(candidate_months, key=timeline_month_sort_key) if candidate_months else fallback_month
+        return first_seen
+
+    def _build_story_context_links(
+        self,
+        stories: list[sqlite3.Row | dict[str, Any]],
+        story_to_entities: dict[str, list[str]],
+    ) -> list[dict[str, Any]]:
+        story_months = self._story_months_from_records(stories)
+        ordered_stories = sorted(
+            stories,
+            key=lambda row: (
+                timeline_month_sort_key(story_months.get(row["id"])),
+                row["id"],
+            ),
+        )
+
+        links: list[dict[str, Any]] = []
+        for index, source_story in enumerate(ordered_stories):
+            source_entity_ids = set(story_to_entities.get(source_story["id"], []))
+            candidates: list[tuple[str, int]] = []
+            for target_story in ordered_stories[index + 1 :]:
+                overlap = len(source_entity_ids.intersection(story_to_entities.get(target_story["id"], [])))
+                if overlap >= 3:
+                    candidates.append((target_story["id"], overlap))
+
+            source_month = story_months.get(source_story["id"])
+            for target_id, weight in sorted(candidates, key=lambda item: (-item[1], item[0]))[:4]:
+                target_month = story_months.get(target_id)
+                valid_months = [month for month in (source_month, target_month) if month]
+                links.append(
+                    {
+                        "source": source_story["id"],
+                        "target": target_id,
+                        "weight": weight,
+                        "source_month": source_month,
+                        "target_month": target_month,
+                        "timeline_month": max(valid_months, key=timeline_month_sort_key) if valid_months else None,
+                    }
+                )
+        return links
+
+    def _pick_cluster_count(self, nontrivial_values: np.ndarray, node_count: int) -> int:
+        nontrivial_count = int(nontrivial_values.shape[0])
+        if node_count <= 1 or nontrivial_count <= 0:
+            return 1
+
+        valid_cluster_max = min(8, node_count, nontrivial_count)
+        if valid_cluster_max < 2:
+            return 1
+
+        candidate_max = min(8, node_count - 1, nontrivial_count - 1)
+        if candidate_max < 4:
+            return max(2, valid_cluster_max)
+
+        candidate_values = list(range(4, candidate_max + 1))
+        gap_by_k = {
+            cluster_count: float(nontrivial_values[cluster_count] - nontrivial_values[cluster_count - 1])
+            for cluster_count in candidate_values
+        }
+        winning_k = max(candidate_values, key=lambda cluster_count: (gap_by_k[cluster_count], -cluster_count))
+        winning_gap = gap_by_k[winning_k]
+        previous_gap = float(nontrivial_values[winning_k - 1] - nontrivial_values[winning_k - 2]) if winning_k >= 2 else 0.0
+        if previous_gap > 0 and winning_gap < previous_gap * 1.5:
+            return min(max(5, 2), valid_cluster_max)
+        return min(winning_k, valid_cluster_max)
+
+    def _deterministic_cluster_chunks(
+        self,
+        node_ids: list[str],
+        cluster_count: int,
+        month_index_by_node: dict[str, int] | None = None,
+    ) -> dict[str, int]:
+        if cluster_count <= 1 or len(node_ids) <= 1:
+            return {node_id: 0 for node_id in node_ids}
+        ordered_ids = sorted(node_ids, key=lambda node_id: ((month_index_by_node or {}).get(node_id, 0), node_id))
+        assignments: dict[str, int] = {}
+        for index, node_id in enumerate(ordered_ids):
+            label = min(cluster_count - 1, (index * cluster_count) // len(ordered_ids))
+            assignments[node_id] = label
+        return assignments
+
+    def _fixed_k_spectral_assignments(
+        self,
+        node_ids: list[str],
+        weighted_edges: list[tuple[str, str, float]],
+        cluster_count: int,
+        month_index_by_node: dict[str, int],
+    ) -> dict[str, int]:
+        effective_cluster_count = min(max(cluster_count, 1), len(node_ids))
+        if effective_cluster_count <= 1 or len(node_ids) <= 1:
+            return {node_id: 0 for node_id in node_ids}
+
+        ordered_ids = sorted(node_ids)
+        index_by_id = {node_id: index for index, node_id in enumerate(ordered_ids)}
+        adjacency = np.zeros((len(ordered_ids), len(ordered_ids)), dtype=np.float64)
+
+        for left_id, right_id, weight in weighted_edges:
+            left_index = index_by_id.get(left_id)
+            right_index = index_by_id.get(right_id)
+            if left_index is None or right_index is None or left_index == right_index:
+                continue
+            adjacency[left_index, right_index] += max(weight, 0.0)
+            adjacency[right_index, left_index] += max(weight, 0.0)
+
+        if not np.any(adjacency):
+            return self._deterministic_cluster_chunks(ordered_ids, effective_cluster_count, month_index_by_node)
+
+        degrees = adjacency.sum(axis=1)
+        laplacian = np.diag(degrees) - adjacency
+        inv_sqrt_degrees = np.zeros_like(degrees)
+        nonzero = degrees > 0
+        inv_sqrt_degrees[nonzero] = 1.0 / np.sqrt(degrees[nonzero])
+        normalized_laplacian = np.diag(inv_sqrt_degrees) @ laplacian @ np.diag(inv_sqrt_degrees)
+
+        eigenvalues, eigenvectors = np.linalg.eigh(normalized_laplacian)
+        ordering = np.argsort(eigenvalues)
+        eigenvalues = eigenvalues[ordering]
+        eigenvectors = eigenvectors[:, ordering]
+        nontrivial_positions = np.where(eigenvalues > 1e-9)[0]
+        usable_dimensions = int(nontrivial_positions.size)
+        if usable_dimensions < 1:
+            return self._deterministic_cluster_chunks(ordered_ids, effective_cluster_count, month_index_by_node)
+        if usable_dimensions < effective_cluster_count:
+            return self._deterministic_cluster_chunks(ordered_ids, effective_cluster_count, month_index_by_node)
+
+        embedding = eigenvectors[:, nontrivial_positions[:effective_cluster_count]]
+        model = KMeans(n_clusters=effective_cluster_count, init="k-means++", n_init=1, random_state=42)
+        labels = model.fit_predict(embedding)
+
+        cluster_members: dict[int, list[str]] = defaultdict(list)
+        for node_id, label in zip(ordered_ids, labels, strict=True):
+            cluster_members[int(label)].append(node_id)
+
+        max_cluster_size = max(len(members) for members in cluster_members.values())
+        if max_cluster_size > max(60, math.ceil(len(ordered_ids) / effective_cluster_count) * 2):
+            return self._deterministic_cluster_chunks(ordered_ids, effective_cluster_count, month_index_by_node)
+
+        ordered_labels = sorted(
+            cluster_members,
+            key=lambda label: (
+                sum(month_index_by_node.get(node_id, 0) for node_id in cluster_members[label]) / max(len(cluster_members[label]), 1),
+                min(cluster_members[label]),
+            ),
+        )
+        remap = {label: index for index, label in enumerate(ordered_labels)}
+        return {node_id: remap[int(label)] for node_id, label in zip(ordered_ids, labels, strict=True)}
+
+    def _compute_display_clusters(
+        self,
+        nodes: list[dict[str, Any]],
+        edges: list[dict[str, Any]],
+    ) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+        non_timeline_nodes = [
+            node for node in nodes
+            if node["cluster_id"] is not None and node["cluster_role"] != "timeline"
+        ]
+        members_by_parent: dict[int, list[dict[str, Any]]] = defaultdict(list)
+        month_index_by_node = {node["id"]: int(node.get("month_index") or 0) for node in non_timeline_nodes}
+        node_by_id = {node["id"]: node for node in non_timeline_nodes}
+        for node in non_timeline_nodes:
+            members_by_parent[int(node["cluster_id"])].append(node)
+
+        intra_cluster_edges: dict[int, list[tuple[str, str, float]]] = defaultdict(list)
+        for edge in edges:
+            if edge["flow_kind"] not in {"mention", "context", "support"}:
+                continue
+            source = node_by_id.get(edge["source"])
+            target = node_by_id.get(edge["target"])
+            if source is None or target is None:
+                continue
+            if source["cluster_id"] != target["cluster_id"]:
+                continue
+            intra_cluster_edges[int(source["cluster_id"])].append(
+                (edge["source"], edge["target"], float(edge.get("weight", 1) or 1))
+            )
+
+        community_specs: list[dict[str, Any]] = []
+        for parent_cluster_id in sorted(members_by_parent):
+            members = members_by_parent[parent_cluster_id]
+            member_ids = sorted(node["id"] for node in members)
+            if len(member_ids) <= DISPLAY_CLUSTER_REFINEMENT_THRESHOLD:
+                community_specs.append(
+                    {
+                        "parent_cluster_id": None,
+                        "source_cluster_id": parent_cluster_id,
+                        "node_ids": member_ids,
+                    }
+                )
+                continue
+
+            target_count = min(
+                DISPLAY_CLUSTER_MAX_COUNT,
+                max(2, math.ceil(len(member_ids) / DISPLAY_CLUSTER_TARGET_SIZE)),
+            )
+            local_assignments = self._fixed_k_spectral_assignments(
+                member_ids,
+                intra_cluster_edges.get(parent_cluster_id, []),
+                target_count,
+                month_index_by_node,
+            )
+
+            local_members: dict[int, list[str]] = defaultdict(list)
+            for node_id, label in local_assignments.items():
+                local_members[int(label)].append(node_id)
+
+            ordered_local_labels = sorted(
+                local_members,
+                key=lambda label: (
+                    sum(month_index_by_node.get(node_id, 0) for node_id in local_members[label]) / max(len(local_members[label]), 1),
+                    min(local_members[label]),
+                ),
+            )
+            for local_label in ordered_local_labels:
+                community_specs.append(
+                    {
+                        "parent_cluster_id": parent_cluster_id,
+                        "source_cluster_id": parent_cluster_id,
+                        "node_ids": sorted(local_members[local_label]),
+                    }
+                )
+
+        ordered_specs = sorted(
+            community_specs,
+            key=lambda spec: (
+                sum(month_index_by_node.get(node_id, 0) for node_id in spec["node_ids"]) / max(len(spec["node_ids"]), 1),
+                min(spec["node_ids"]),
+            ),
+        )
+
+        display_meta_by_node: dict[str, dict[str, Any]] = {}
+        communities: list[dict[str, Any]] = []
+        for display_cluster_id, spec in enumerate(ordered_specs):
+            label = f"Community {display_cluster_id + 1}"
+            members = [node_by_id[node_id] for node_id in spec["node_ids"] if node_id in node_by_id]
+            type_counts = Counter(member["type"] for member in members)
+            story_members = sorted(
+                (member for member in members if member["node_type"] == "story"),
+                key=lambda member: (
+                    -(member.get("importance") or 0),
+                    -(member.get("month_index") or -1),
+                    member["id"],
+                ),
+            )
+            for node_id in spec["node_ids"]:
+                display_meta_by_node[node_id] = {
+                    "display_cluster_id": display_cluster_id,
+                    "display_cluster_label": label,
+                    "parent_cluster_id": spec["parent_cluster_id"],
+                }
+
+            community_entry = {
+                "id": display_cluster_id,
+                "label": label,
+                "node_ids": spec["node_ids"],
+                "node_count": len(spec["node_ids"]),
+                "story_count": sum(1 for member in members if member["node_type"] == "story"),
+                "entity_count": sum(1 for member in members if member["node_type"] == "entity"),
+                "dominant_types": [name for name, _count in type_counts.most_common(3)],
+                "anchor_story_ids": [member["id"] for member in story_members[:3]],
+            }
+            if spec["parent_cluster_id"] is not None:
+                community_entry["parent_cluster_id"] = spec["parent_cluster_id"]
+            communities.append(community_entry)
+
+        return display_meta_by_node, communities
+
+    def _compute_cluster_assignments(self, conn: sqlite3.Connection) -> tuple[dict[str, int], int]:
+        conn.row_factory = sqlite3.Row
+        story_rows = conn.execute(
+            "SELECT id, event_date, importance FROM stories"
+        ).fetchall()
+        entity_rows = conn.execute(
+            "SELECT id, name, entity_type, importance FROM entities"
+        ).fetchall()
+        story_entity_rows = conn.execute(
+            "SELECT story_id, entity_id FROM story_entities"
+        ).fetchall()
+        entity_link_rows = conn.execute(
+            "SELECT source_id, target_id, weight FROM entity_links WHERE relation = 'co-mentioned'"
+        ).fetchall()
+
+        story_to_entities: dict[str, list[str]] = defaultdict(list)
+        entity_to_stories: dict[str, list[str]] = defaultdict(list)
+        for row in story_entity_rows:
+            story_to_entities[row["story_id"]].append(row["entity_id"])
+            entity_to_stories[row["entity_id"]].append(row["story_id"])
+
+        story_months = self._story_months_from_records(story_rows)
+        known_story_months = sorted((month for month in story_months.values() if month), key=timeline_month_sort_key)
+        fallback_month = known_story_months[0] if known_story_months else "2020-01"
+        entity_first_seen = self._entity_first_seen_map(entity_rows, entity_to_stories, story_months, fallback_month)
+        context_links = self._build_story_context_links(story_rows, story_to_entities)
+
+        month_index_by_composite: dict[str, int] = {}
+        composite_ids = [f"story:{row['id']}" for row in story_rows]
+        composite_ids.extend(f"entity:{row['id']}" for row in entity_rows if row["entity_type"] != "year")
+        composite_ids = sorted(composite_ids)
+
+        for row in story_rows:
+            composite_id = f"story:{row['id']}"
+            month_index_by_composite[composite_id] = month_index_from_key(story_months.get(row["id"])) or month_index_from_key(fallback_month) or 0
+        for row in entity_rows:
+            if row["entity_type"] == "year":
+                continue
+            composite_id = f"entity:{row['id']}"
+            month_index_by_composite[composite_id] = month_index_from_key(entity_first_seen.get(row["id"])) or month_index_from_key(fallback_month) or 0
+
+        if not composite_ids:
+            return {}, 0
+
+        if len(composite_ids) == 1:
+            return {composite_ids[0]: 0}, 1
+
+        index_by_composite = {composite_id: index for index, composite_id in enumerate(composite_ids)}
+        adjacency = np.zeros((len(composite_ids), len(composite_ids)), dtype=np.float64)
+
+        def add_weight(left_id: str, right_id: str, weight: float) -> None:
+            left_index = index_by_composite.get(left_id)
+            right_index = index_by_composite.get(right_id)
+            if left_index is None or right_index is None or left_index == right_index:
+                return
+            adjacency[left_index, right_index] += weight
+            adjacency[right_index, left_index] += weight
+
+        for row in story_entity_rows:
+            entity_key = f"entity:{row['entity_id']}"
+            if entity_key not in index_by_composite:
+                continue
+            add_weight(f"story:{row['story_id']}", entity_key, 1.0)
+
+        for row in entity_link_rows:
+            add_weight(f"entity:{row['source_id']}", f"entity:{row['target_id']}", max(1, row["weight"]) * 0.75)
+
+        for link in context_links:
+            add_weight(f"story:{link['source']}", f"story:{link['target']}", link["weight"] * 0.45)
+
+        degrees = adjacency.sum(axis=1)
+        laplacian = np.diag(degrees) - adjacency
+        inv_sqrt_degrees = np.zeros_like(degrees)
+        nonzero = degrees > 0
+        inv_sqrt_degrees[nonzero] = 1.0 / np.sqrt(degrees[nonzero])
+        d_inv_sqrt = np.diag(inv_sqrt_degrees)
+        normalized_laplacian = d_inv_sqrt @ laplacian @ d_inv_sqrt
+
+        eigenvalues, eigenvectors = np.linalg.eigh(normalized_laplacian)
+        ordering = np.argsort(eigenvalues)
+        eigenvalues = eigenvalues[ordering]
+        eigenvectors = eigenvectors[:, ordering]
+        nontrivial_positions = np.where(eigenvalues > 1e-9)[0]
+
+        if nontrivial_positions.size == 0:
+            assignments = {composite_id: 0 for composite_id in composite_ids}
+            return assignments, 1
+
+        nontrivial_values = eigenvalues[nontrivial_positions]
+        cluster_count = self._pick_cluster_count(nontrivial_values, len(composite_ids))
+        if cluster_count <= 1:
+            assignments = {composite_id: 0 for composite_id in composite_ids}
+            return assignments, 1
+
+        embedding_positions = nontrivial_positions[:cluster_count]
+        embedding = eigenvectors[:, embedding_positions]
+        model = KMeans(n_clusters=cluster_count, init="k-means++", n_init=1, random_state=42)
+        labels = model.fit_predict(embedding)
+
+        cluster_members: dict[int, list[str]] = defaultdict(list)
+        for composite_id, label in zip(composite_ids, labels, strict=True):
+            cluster_members[int(label)].append(composite_id)
+
+        ordered_clusters = sorted(
+            cluster_members,
+            key=lambda label: (
+                min(month_index_by_composite[composite_id] for composite_id in cluster_members[label]),
+                min(cluster_members[label]),
+            ),
+        )
+        remap = {original_label: new_label for new_label, original_label in enumerate(ordered_clusters)}
+        assignments = {composite_id: remap[int(label)] for composite_id, label in zip(composite_ids, labels, strict=True)}
+        return assignments, len(ordered_clusters)
+
+    def _persist_cluster_assignments(self, conn: sqlite3.Connection) -> int:
+        assignments, cluster_count = self._compute_cluster_assignments(conn)
+
+        conn.execute("UPDATE stories SET cluster_id = NULL, cluster_role = 'story'")
+        conn.execute(
+            """
+            UPDATE entities
+            SET cluster_id = NULL,
+                cluster_role = CASE WHEN entity_type = 'year' THEN 'timeline' ELSE 'entity' END
+            """
+        )
+
+        story_updates = []
+        entity_updates = []
+        for composite_id, cluster_id in assignments.items():
+            node_kind, node_id = composite_id.split(":", 1)
+            if node_kind == "story":
+                story_updates.append((cluster_id, node_id))
+            else:
+                entity_updates.append((cluster_id, node_id))
+
+        if story_updates:
+            conn.executemany("UPDATE stories SET cluster_id = ? WHERE id = ?", story_updates)
+        if entity_updates:
+            conn.executemany("UPDATE entities SET cluster_id = ? WHERE id = ?", entity_updates)
+
+        conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+            ("community_count", str(cluster_count)),
+        )
+        return cluster_count
 
     def _source_signature(self) -> str:
         if self.source_path.exists():
@@ -417,6 +904,7 @@ class GraphStore:
                     );
                     """
                 )
+                self._ensure_cluster_columns(conn)
                 row = conn.execute("SELECT value FROM meta WHERE key = 'source_signature'").fetchone()
                 count = conn.execute("SELECT COUNT(*) FROM stories").fetchone()[0]
         except sqlite3.DatabaseError as exc:
@@ -473,6 +961,7 @@ class GraphStore:
                     "INSERT INTO entity_links (source_id, target_id, relation, weight) VALUES (:source, :target, :relation, :weight)",
                     payload["entity_links"],
                 )
+                self._persist_cluster_assignments(conn)
         except sqlite3.DatabaseError as exc:
             raise GraphStoreError("Failed to rebuild the AI graph database.") from exc
 
@@ -944,6 +1433,8 @@ class GraphStore:
                 details_markdown=details_markdown,
                 details_html=render_markdown_safe(details_markdown),
                 importance=row["importance"],
+                cluster_id=row["cluster_id"],
+                cluster_role=row["cluster_role"],
                 tags=sorted(set(story_to_tags[row["id"]])),
                 entities=entity_refs,
                 related_stories=related_stories,
@@ -961,6 +1452,8 @@ class GraphStore:
                 group_name=row["group_name"],
                 description=row["description"],
                 importance=row["importance"],
+                cluster_id=row["cluster_id"],
+                cluster_role=row["cluster_role"],
                 story_count=len(stories),
                 mention_count=sum(item.importance for item in stories) or len(stories),
                 stories=[{"id": story.id, "title": story.title, "kind": story.kind, "status": story.status, "event_date": story.event_date} for story in stories],
@@ -1000,7 +1493,27 @@ class GraphStore:
     def get_dashboard_data(self) -> dict[str, Any]:
         self._refresh()
         stats = self.get_runtime_stats()
-        featured_stories = list(self._stories.values())[:8]
+
+        all_stories = list(self._stories.values())
+        current_date = date.today()
+        current_month_index = current_date.year * 12 + current_date.month
+        recent_floor = current_month_index - 11
+
+        def digest_sort_key(story: StoryRecord) -> tuple[int, int, int, int, int, str]:
+            month_index = month_index_from_key(timeline_month_key(story.event_date)) or 0
+            year, month, day = timeline_day_sort_key(story.event_date)
+            in_recent_window = int(recent_floor <= month_index <= current_month_index)
+            return (
+                in_recent_window,
+                int(story.importance or 0),
+                month_index,
+                year,
+                month * 100 + day,
+                story.title,
+            )
+
+        featured_stories = sorted(all_stories, key=digest_sort_key, reverse=True)[:20]
+
         hot_entities = sorted(self._entities.values(), key=lambda item: (item.story_count, item.importance, item.name), reverse=True)[:10]
         kind_counts = Counter(story.kind for story in self._stories.values())
         return {
@@ -1073,133 +1586,193 @@ class GraphStore:
 
     def get_graph_data(self) -> dict[str, Any]:
         self._refresh()
-        nodes = []
-        edges = []
-        story_months = {
-            story.id: timeline_month_key(story.event_date)
-            for story in self._stories.values()
-        }
+        story_months = {story.id: timeline_month_key(story.event_date) for story in self._stories.values()}
         known_story_months = sorted((month for month in story_months.values() if month), key=timeline_month_sort_key)
         first_story_month = known_story_months[0] if known_story_months else "2020-01"
         last_story_month = known_story_months[-1] if known_story_months else first_story_month
-        entity_first_seen: dict[str, str] = {}
 
+        entity_first_seen: dict[str, str] = {}
         for entity in self._entities.values():
             candidate_months = [
                 story_months.get(item["id"])
                 for item in entity.stories
-                if item["id"] in story_months and story_months.get(item["id"])
+                if story_months.get(item["id"])
             ]
             if entity.entity_type == "year":
                 candidate_months.append(f"{entity.name}-01")
             entity_first_seen[entity.id] = min(candidate_months, key=timeline_month_sort_key) if candidate_months else first_story_month
 
+        nodes: list[dict[str, Any]] = []
+        node_by_id: dict[str, dict[str, Any]] = {}
         for entity in self._entities.values():
             is_model = entity.entity_type == "model"
             frontend_type = graph_node_type(entity.entity_type, entity.group_name)
-            nodes.append(
-                {
-                    "id": f"entity:{entity.id}",
-                    "label": entity.name,
-                    "node_type": "entity",
-                    "type": frontend_type,
-                    "group": entity.entity_type,
-                    "color_group": slugify(entity.group_name),
-                    "radius": 7 + entity.importance * (2.2 if is_model else 1.7) + min(entity.story_count, 10) * (1.0 if is_model else 0.85) + (2.2 if is_model else 0),
-                    "route": f"/entities/{entity.id}",
-                    "subtitle": entity.group_name,
-                    "description": entity.description,
-                    "story_count": entity.story_count,
-                    "heat": min(1.0, entity.story_count / (10 if is_model else 12)),
-                    "importance": entity.importance,
-                    "emphasis": "model" if is_model else None,
-                    "timeline_month": entity_first_seen.get(entity.id, first_story_month),
-                }
-            )
+            timeline_month = entity_first_seen.get(entity.id, first_story_month)
+            node = {
+                "id": f"entity:{entity.id}",
+                "label": entity.name,
+                "node_type": "entity",
+                "type": frontend_type,
+                "group": entity.entity_type,
+                "color_group": slugify(entity.group_name),
+                "radius": 7 + entity.importance * (2.2 if is_model else 1.7) + min(entity.story_count, 10) * (1.0 if is_model else 0.85) + (2.2 if is_model else 0),
+                "route": f"/entities/{entity.id}",
+                "subtitle": entity.group_name,
+                "description": entity.description,
+                "story_count": entity.story_count,
+                "heat": min(1.0, entity.story_count / (10 if is_model else 12)),
+                "importance": entity.importance,
+                "emphasis": "model" if is_model else None,
+                "timeline_month": timeline_month,
+                "month_index": month_index_from_key(timeline_month),
+                "cluster_id": entity.cluster_id,
+                "cluster_role": entity.cluster_role,
+                "layer_index": 0 if entity.entity_type == "year" else 2,
+                "in_degree": 0,
+                "out_degree": 0,
+                "year": entity.name if entity.entity_type == "year" else "",
+            }
+            nodes.append(node)
+            node_by_id[node["id"]] = node
 
         for story in self._stories.values():
             story_month = story_months.get(story.id) or last_story_month
-            nodes.append(
-                {
-                    "id": f"story:{story.id}",
-                    "label": story.title,
-                    "node_type": "story",
-                    "type": "story",
-                    "group": story.kind,
-                    "color_group": slugify(story.kind),
-                    "radius": 7 + story.importance * 1.9 + min(len(story.entities), 8) * 0.6,
-                    "route": f"/stories/{story.id}",
-                    "subtitle": f"{story.kind} | {story.event_date}",
-                    "description": story.summary,
-                    "story_count": len(story.entities),
-                    "heat": min(1.0, len(story.entities) / 10),
-                    "importance": story.importance,
-                    "event_date": story.event_date,
-                    "year": story.event_date[:4] if story.event_date else "",
-                    "timeline_month": story_month,
-                }
-            )
-            for entity in story.entities:
-                target = self._entities.get(entity["id"])
-                target_type = graph_node_type(target.entity_type, target.group_name) if target is not None else "topic"
+            node = {
+                "id": f"story:{story.id}",
+                "label": story.title,
+                "node_type": "story",
+                "type": "story",
+                "group": story.kind,
+                "color_group": slugify(story.kind),
+                "radius": 7 + story.importance * 1.9 + min(len(story.entities), 8) * 0.6,
+                "route": f"/stories/{story.id}",
+                "subtitle": f"{story.kind} | {story.event_date}",
+                "description": story.summary,
+                "story_count": len(story.entities),
+                "heat": min(1.0, len(story.entities) / 10),
+                "importance": story.importance,
+                "event_date": story.event_date,
+                "year": story.event_date[:4] if story.event_date else "",
+                "timeline_month": story_month,
+                "month_index": month_index_from_key(story_month),
+                "cluster_id": story.cluster_id,
+                "cluster_role": story.cluster_role,
+                "layer_index": 1,
+                "in_degree": 0,
+                "out_degree": 0,
+            }
+            nodes.append(node)
+            node_by_id[node["id"]] = node
+
+        edges: list[dict[str, Any]] = []
+        for story in self._stories.values():
+            story_month = story_months.get(story.id) or last_story_month
+            if story.event_date:
+                year_node_id = f"entity:year-{story.event_date[:4]}"
+                if year_node_id in node_by_id:
+                    edges.append(
+                        {
+                            "source": year_node_id,
+                            "target": f"story:{story.id}",
+                            "weight": 1,
+                            "kind": "timeline",
+                            "flow_kind": "timeline",
+                            "directed": True,
+                            "type": "year_to_story",
+                            "timeline_month": story_month,
+                        }
+                    )
+
+            for entity_ref in story.entities:
+                target = self._entities.get(entity_ref["id"])
+                if target is None:
+                    continue
+                target_type = graph_node_type(target.entity_type, target.group_name)
                 edges.append(
                     {
                         "source": f"story:{story.id}",
-                        "target": f"entity:{entity['id']}",
+                        "target": f"entity:{entity_ref['id']}",
                         "weight": 1,
-                        "kind": "mentions",
+                        "kind": "mention",
+                        "flow_kind": "mention",
+                        "directed": True,
                         "type": graph_edge_type("story", target_type, "mentions"),
                         "timeline_month": story_month,
                     }
                 )
 
         for entity in self._entities.values():
+            if entity.entity_type == "year":
+                continue
             source_type = graph_node_type(entity.entity_type, entity.group_name)
             for link in entity.links:
-                if link["weight"] >= 2 and entity.id < link["target_id"]:
-                    source_month = entity_first_seen.get(entity.id, first_story_month)
-                    target_month = entity_first_seen.get(link["target_id"], first_story_month)
-                    target_entity = self._entities.get(link["target_id"])
-                    target_type = graph_node_type(target_entity.entity_type, target_entity.group_name) if target_entity is not None else "topic"
-                    edges.append(
-                        {
-                            "source": f"entity:{entity.id}",
-                            "target": f"entity:{link['target_id']}",
-                            "weight": max(1, link["weight"]),
-                            "kind": link["relation"],
-                            "type": graph_edge_type(source_type, target_type, link["relation"]),
-                            "timeline_month": max(source_month, target_month),
-                        }
-                    )
+                if link["relation"] != "co-mentioned" or link["weight"] < 2 or entity.id >= link["target_id"]:
+                    continue
+                target_entity = self._entities.get(link["target_id"])
+                if target_entity is None or target_entity.entity_type == "year":
+                    continue
+                source_month = entity_first_seen.get(entity.id, first_story_month)
+                target_month = entity_first_seen.get(target_entity.id, first_story_month)
+                valid_months = [month for month in (source_month, target_month) if month]
+                target_type = graph_node_type(target_entity.entity_type, target_entity.group_name)
+                edges.append(
+                    {
+                        "source": f"entity:{entity.id}",
+                        "target": f"entity:{target_entity.id}",
+                        "weight": max(1, link["weight"]),
+                        "kind": "support",
+                        "flow_kind": "support",
+                        "directed": False,
+                        "type": graph_edge_type(source_type, target_type, "co-mentioned"),
+                        "timeline_month": max(valid_months, key=timeline_month_sort_key) if valid_months else first_story_month,
+                    }
+                )
 
-        story_pair_keys: set[tuple[str, str]] = set()
-        stories = list(self._stories.values())
-        for index, story in enumerate(stories):
-            current_entities = {entity["id"] for entity in story.entities}
-            candidates = []
-            for other in stories[index + 1 :]:
-                overlap = len(current_entities.intersection({entity["id"] for entity in other.entities}))
-                if overlap >= 3:
-                    candidates.append((other.id, overlap))
-            for target_id, weight in sorted(candidates, key=lambda item: (-item[1], item[0]))[:4]:
-                story_pair_keys.add((story.id, target_id, weight))
-        for source_id, target_id, weight in story_pair_keys:
-            source_month = story_months.get(source_id) or first_story_month
-            target_month = story_months.get(target_id) or first_story_month
+        story_rows = [{"id": story.id, "event_date": story.event_date} for story in self._stories.values()]
+        story_to_entities = {story.id: [entity["id"] for entity in story.entities] for story in self._stories.values()}
+        for link in self._build_story_context_links(story_rows, story_to_entities):
             edges.append(
                 {
-                    "source": f"story:{source_id}",
-                    "target": f"story:{target_id}",
-                    "weight": weight,
+                    "source": f"story:{link['source']}",
+                    "target": f"story:{link['target']}",
+                    "weight": link["weight"],
                     "kind": "context",
+                    "flow_kind": "context",
+                    "directed": True,
                     "type": "story_context",
-                    "timeline_month": max(source_month, target_month),
+                    "timeline_month": link["timeline_month"] or last_story_month,
                 }
             )
+
+        max_weight_by_kind = defaultdict(int)
+        in_degree = Counter()
+        out_degree = Counter()
+        for edge in edges:
+            max_weight_by_kind[edge["flow_kind"]] = max(max_weight_by_kind[edge["flow_kind"]], int(edge["weight"]))
+            if edge["directed"]:
+                out_degree[edge["source"]] += 1
+                in_degree[edge["target"]] += 1
+
+        for edge in edges:
+            edge["weight_norm"] = (
+                1.0
+                if max_weight_by_kind[edge["flow_kind"]] <= 1
+                else math.log1p(edge["weight"]) / math.log1p(max_weight_by_kind[edge["flow_kind"]])
+            )
+
+        for node in nodes:
+            node["in_degree"] = in_degree[node["id"]]
+            node["out_degree"] = out_degree[node["id"]]
+        display_meta_by_node, communities = self._compute_display_clusters(nodes, edges)
+        for node in nodes:
+            display_meta = display_meta_by_node.get(node["id"])
+            node["display_cluster_id"] = display_meta["display_cluster_id"] if display_meta else None
+            node["display_cluster_label"] = display_meta["display_cluster_label"] if display_meta else None
 
         return {
             "nodes": nodes,
             "edges": edges,
+            "communities": communities,
             "timeline": {
                 "months": month_range(first_story_month, last_story_month),
                 "start": first_story_month,

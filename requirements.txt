@@ -15,3 +15,5 @@ ollama
 adroit
 pandas
 Flask
+numpy
+scikit-learn

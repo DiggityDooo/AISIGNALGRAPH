@@ -184,5 +184,39 @@
     }, { threshold: 0.12 });
 
     document.querySelectorAll('[data-animate]').forEach((element) => observer.observe(element));
+
+    // Protocol Digest Cycling Logic
+    const stories = [
+      {% for story in featured_stories %}
+      {
+        title: {{ story.title|tojson }},
+        excerpt: {{ story.excerpt|tojson }},
+        url: {{ url_for('story_detail', story_id=story.id)|tojson }}
+      }{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ];
+
+    if (stories.length > 1) {
+      let currentIndex = 0;
+      const titleEl = document.querySelector('.hero-cover-card h3');
+      const excerptEl = document.querySelector('.hero-cover-card p');
+      const linkEl = document.querySelector('.hero-cover-card__link');
+      const cardEl = document.querySelector('.hero-cover-card');
+
+      setInterval(() => {
+        currentIndex = (currentIndex + 1) % stories.length;
+        
+        // Brief fade out effect
+        cardEl.style.opacity = '0';
+        
+        setTimeout(() => {
+          const story = stories[currentIndex];
+          titleEl.textContent = story.title;
+          excerptEl.textContent = story.excerpt;
+          linkEl.href = story.url;
+          cardEl.style.opacity = '1';
+        }, 500);
+      }, 8000); // Cycle every 8 seconds
+    }
   </script>
 {% endblock %}

@@ -1,33 +1,29 @@
-:root {
-  --bg: #0b1015;
-  --surface: rgba(15, 20, 27, 0.8);
-  --surface-2: rgba(21, 28, 37, 0.9);
-  --ink: #e8edf3;
-  --muted: #9aa8b7;
-  --line: rgba(118, 131, 148, 0.22);
-  --teal: #0f766e;
-  --copper: #d7a96e;
-  --blue: #4b8dff;
-  --rose: #c94a61;
-  --amber: #e0aa52;
-  --violet: #8a73ff;
-  --danger: #b42318;
-  --graph-bg: #090d12;
-  --shadow: 0 18px 48px rgba(0, 0, 0, 0.3);
-  --radius: 8px;
-}
+/* app.css — base reset only; premium.css owns all design tokens */
+*, *::before, *::after { box-sizing: border-box; }
 
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
+html, body {
   margin: 0;
   padding: 0;
-  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-  color: var(--ink);
-  background: #091016;
+}
+
+:root {
+  /* Legacy tokens preserved for graph.js / futuristic.css compatibility */
+  --bg: #080b0f;
+  --surface: rgba(17, 24, 32, 0.8);
+  --surface-2: rgba(13, 17, 23, 0.92);
+  --ink: #e8edf4;
+  --muted: #a0adb8;
+  --line: rgba(255,255,255,0.07);
+  --teal: #00d4ff;
+  --copper: #f0a040;
+  --blue: #00d4ff;
+  --rose: #e8394d;
+  --amber: #f0a040;
+  --violet: #00d4ff;
+  --danger: #e8394d;
+  --graph-bg: #06090d;
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.3);
+  --radius: 8px;
 }
 
 a {

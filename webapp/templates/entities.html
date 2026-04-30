@@ -1,31 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Neural Entities | AISIGNALGRAPH{% endblock %}
-
-{% block extra_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='premium.css') }}">
-{% endblock %}
+{% block title %}Actor Directory | AISIGNALGRAPH{% endblock %}
 
 {% block content %}
   <section class="archive-hero archive-hero--purple">
     <div class="page archive-hero__inner">
       <div class="section-heading">
         <div>
-          <p class="eyebrow neon-purple">Entity surveillance</p>
-          <h1 class="protocol-heading">ACTOR DIRECTORY</h1>
+          <span class="eyebrow" style="color: var(--c-amber);">Entity Surveillance</span>
+          <h1 class="protocol-heading">Actor Directory</h1>
           <p class="brand-copy">Interactive dossiers for labs, model families, people, infrastructure brokers, and strategic risk actors.</p>
         </div>
-        <div class="subtle-count mono">{{ entities|length }} NODES IDENTIFIED</div>
+        <div class="subtle-count">{{ entities|length }} nodes identified</div>
       </div>
 
-      <form class="archive-toolbar glass-panel" method="get">
-        <input class="mono" type="search" name="q" value="{{ active.q }}" placeholder="SEARCH ACTOR">
-        <select name="type" class="mono">
-          <option value="">ALL CLASSIFICATIONS</option>
+      <form class="archive-toolbar" method="get">
+        <input type="search" name="q" value="{{ active.q }}" placeholder="Search actor...">
+        <select name="type">
+          <option value="">All classifications</option>
           {% for item in filters.types %}
-            <option value="{{ item }}" {% if active.type == item %}selected{% endif %}>{{ item|upper }}</option>
+            <option value="{{ item }}" {% if active.type == item %}selected{% endif %}>{{ item }}</option>
           {% endfor %}
         </select>
-        <button type="submit" class="btn-premium">EXECUTE QUERY</button>
+        <button type="submit" class="btn-premium" style="grid-column: span 3;">Search</button>
       </form>
     </div>
   </section>
@@ -35,25 +31,25 @@
       {% for entity in entities %}
         <a class="dossier-card glass-panel" href="{{ url_for('entity_detail', entity_id=entity.id) }}" data-animate>
           <div class="dossier-card__header">
-            <span class="mono dossier-stamp">FILE {{ "%03d"|format(loop.index) }}</span>
-            <span class="mono redacted">{{ entity.id|upper }}</span>
+            <span class="dossier-stamp">File {{ "%03d"|format(loop.index) }}</span>
+            <span class="redacted">{{ entity.entity_type }}</span>
           </div>
-          <div class="archive-card__meta mono">
-            <span>{{ entity.entity_type|upper }}</span>
-            <span>{{ entity.story_count }} REFERENCES</span>
+          <div class="archive-card__meta">
+            <span>{{ entity.entity_type }}</span>
+            <span>{{ entity.story_count }} refs</span>
           </div>
           <h2>{{ entity.name }}</h2>
           <p>{{ entity.excerpt }}</p>
-          <div class="dossier-card__footer mono">
-            <span>{{ entity.group_name|upper }}</span>
-            <span>OPEN DOSSIER</span>
+          <div class="dossier-card__footer">
+            <span>{{ entity.group_name }}</span>
+            <span>Open dossier</span>
           </div>
         </a>
       {% else %}
         <article class="dossier-card glass-panel">
           <div class="dossier-card__header">
-            <span class="mono dossier-stamp">FILE 000</span>
-            <span class="mono">EMPTY</span>
+            <span class="dossier-stamp">File 000</span>
+            <span class="redacted">empty</span>
           </div>
           <h2>No actor matched the query vector.</h2>
           <p>Broaden the classification or search string to reopen the dossier field.</p>
@@ -67,12 +63,9 @@
   <script>
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('is-visible');
-        }
+        if (entry.isIntersecting) entry.target.classList.add('is-visible');
       });
-    }, { threshold: 0.1 });
-
-    document.querySelectorAll('[data-animate]').forEach((element) => observer.observe(element));
+    }, { threshold: 0.08 });
+    document.querySelectorAll('[data-animate]').forEach((el) => observer.observe(el));
   </script>
 {% endblock %}

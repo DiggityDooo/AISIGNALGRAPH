@@ -1,23 +1,19 @@
 {% extends "base.html" %}
 {% block title %}{{ story.title }} | AISIGNALGRAPH{% endblock %}
 
-{% block extra_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='premium.css') }}">
-{% endblock %}
-
 {% block content %}
   <section class="detail-shell">
     <div class="page">
       <div class="detail-hero glass-panel">
         <div>
-          <p class="eyebrow neon-cyan">{{ story.kind|upper }}</p>
+          <span class="eyebrow">{{ story.kind }}</span>
           <h1 class="protocol-heading">{{ story.title }}</h1>
           <p class="detail-hero__copy">{{ story.summary }}</p>
         </div>
-        <div class="detail-hero__meta mono">
-          <span>{{ story.status|upper }}</span>
+        <div class="detail-hero__meta">
+          <span>{{ story.status }}</span>
           <span>{{ story.event_date }}</span>
-          <span>{{ story.entities|length }} LINKS</span>
+          <span>{{ story.entities|length }} links</span>
         </div>
       </div>
 
@@ -31,7 +27,7 @@
             <h2>Tags</h2>
             <div class="archive-chip-row">
               {% for tag in story.tags %}
-                <span class="archive-chip mono">#{{ tag|upper }}</span>
+                <span class="archive-chip">{{ tag }}</span>
               {% endfor %}
             </div>
           </div>
@@ -53,7 +49,7 @@
                 {% for item in story.related_stories %}
                   <li>
                     <a href="{{ url_for('story_detail', story_id=item.id) }}">{{ item.title }}</a>
-                    <span class="inline-meta">{{ item.weight }} shared links</span>
+                    <span class="inline-meta">{{ item.weight }} shared</span>
                   </li>
                 {% endfor %}
               </ul>

@@ -12,6 +12,8 @@
     velocityDecay: 0.46,
     baseCharge: -170,
     maxSignals: navigator.maxTouchPoints > 0 ? 18 : 52,
+    signalSpawnBaseMs: navigator.maxTouchPoints > 0 ? 420 : 280,
+    signalSpawnJitterMs: 120,
     attentionDecay: 0.95,
     zoomExpandDebounceMs: 120,
     zoomExpandThreshold: 1.35,
@@ -150,7 +152,7 @@
     isPaused: false,
     is3DMode: false,
     animationFrameId: null,
-    pulseIntervalId: null,
+    pulseTimerId: null,
     threeGraph: null,
     initialFitPending: true,
   };
@@ -1660,18 +1662,39 @@
     activateNode(source, 0.16);
   }
 
-  function startPulseLoop() {
-    if (state.pulseIntervalId || state.is3DMode || state.isPaused) {
+  function nextPulseDelay() {
+    const speedFactor = 1 / Math.max(state.signalSpeed, 0.25);
+    const congestion = Math.min(1, state.activeSignals.length / Math.max(CONFIG.maxSignals, 1));
+    const edgePressure = Math.min(1, state.edges.length / 180);
+    const lensFactor = state.lens === "signal" ? 0.9 : state.lens === "local" ? 1.08 : 1;
+    const congestionFactor = 1 + Math.pow(congestion, 2.2) * 4.5;
+    const densityFactor = 1 + edgePressure * 0.45;
+    const jitter = Math.random() * CONFIG.signalSpawnJitterMs;
+    return Math.max(
+      120,
+      Math.round(CONFIG.signalSpawnBaseMs * speedFactor * congestionFactor * densityFactor * lensFactor + jitter),
+    );
+  }
+
+  function queueNextPulse() {
+    if (state.pulseTimerId || state.is3DMode || state.isPaused) {
       return;
     }
-    const interval = Math.max(110, Math.round(360 / Math.max(state.signalSpeed, 0.25)));
-    state.pulseIntervalId = window.setInterval(spawnSignal, interval);
+    state.pulseTimerId = window.setTimeout(() => {
+      state.pulseTimerId = null;
+      spawnSignal();
+      queueNextPulse();
+    }, nextPulseDelay());
+  }
+
+  function startPulseLoop() {
+    queueNextPulse();
   }
 
   function stopPulseLoop() {
-    if (state.pulseIntervalId) {
-      window.clearInterval(state.pulseIntervalId);
-      state.pulseIntervalId = null;
+    if (state.pulseTimerId) {
+      window.clearTimeout(state.pulseTimerId);
+      state.pulseTimerId = null;
     }
   }
 
@@ -1838,7 +1861,7 @@
     refs.detailBadge.textContent = (node.type || "node").toUpperCase();
     refs.detailTitle.textContent = node.label;
     refs.detailSubtitle.textContent = node.subtitle || "";
-    refs.detailCopy.textContent = node.description || "";
+    refs.detailCopy.innerHTML = node.details_html || node.description || "";
     refs.detailMeta.innerHTML = `
       <div><span class="label">Type</span><div>${node.type}</div></div>
       <div><span class="label">Cluster</span><div>${node.cluster_id != null ? `C${node.cluster_id + 1}` : "Timeline"}</div></div>
@@ -2122,6 +2145,14 @@
           Accept: "text/event-stream",
         },
       });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        refs.rebuildButton.textContent = response.status === 429 ? "… COOLDOWN" : "⚠ REBUILD FAILED";
+        if (payload.message) {
+          fail(payload.message, "rebuildGraph");
+        }
+        return;
+      }
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -2142,6 +2173,8 @@
           if (payload.status === "done") {
             refs.rebuildButton.textContent = "✓ REBUILT";
             await loadGraph();
+          } else if (payload.status === "cancelled") {
+            refs.rebuildButton.textContent = "… CANCELLED";
           } else if (payload.status === "error") {
             refs.rebuildButton.textContent = "⚠ REBUILD FAILED";
           } else if (payload.status === "busy") {
@@ -2479,7 +2512,13 @@
 
   async function loadGraph() {
     const response = await fetch("/api/graph", { headers: { Accept: "application/json" } });
+    if (!response.ok) {
+      throw new Error(`Graph request failed with status ${response.status}`);
+    }
     const payload = await response.json();
+    if (!Array.isArray(payload.nodes) || !Array.isArray(payload.edges)) {
+      throw new Error(payload.message || "Graph payload was malformed.");
+    }
 
     state.rawNodes = payload.nodes.map((node) => ({
       ...node,
@@ -2512,6 +2551,10 @@
     refs.yearFilter.max = String(endYear);
     refs.yearFilter.value = String(endYear);
     refs.yearValue.textContent = String(endYear);
+
+    if (payload.status === "degraded" && payload.message) {
+      fail(payload.message, "loadGraph");
+    }
 
     setupSVG();
     applyFilters();

@@ -17,3 +17,6 @@ pandas
 Flask
 numpy
 scikit-learn
+flasgger
+flask-limiter
+pytest

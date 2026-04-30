@@ -4,3 +4,7 @@ __pycache__/
 .env
 data/*.db
 !data/ai_graph.db
+logs/
+server_start.log
+*.log
+.DS_Store

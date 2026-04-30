@@ -40,6 +40,14 @@ Open `http://127.0.0.1:5000`.
 
 Use the `Rebuild from master document` button in the UI, or remove `data/ai_graph.db` and restart the app.
 
+## Import the jobs appendix
+
+To refresh the jobs appendix inside `data/ai_master.md` from the external jobs masterdoc:
+
+```bash
+./.venv/bin/python scripts/import_jobs_masterdoc.py /home/seanb/Downloads/Pics/AI_Jobs_Masterdoc.md
+```
+
 ## Security and reliability changes
 
 - The secret key is no longer hardcoded.

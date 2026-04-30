@@ -3,14 +3,22 @@ import json
 import os
 import re
 import secrets
+import threading
 import time
+from collections import defaultdict, deque
+from functools import wraps
 from pathlib import Path
+from urllib.parse import urlparse
 
 from flask import Flask, Response, abort, flash, jsonify, redirect, render_template, request, session, stream_with_context, url_for
 from werkzeug.exceptions import HTTPException
 
+from .config import Config
+from .logging import setup_logging
+
 from .graph_store import GraphStore, GraphStoreError, LEGACY_MASTER_DOCUMENT_PATH
 from .jobs import DatabaseJobManager
+from .types import GraphData, HealthReport, JobState
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,127}$")
 
@@ -19,14 +27,20 @@ def create_app() -> Flask:
     root_path = Path(__file__).resolve().parent.parent
 
     app = Flask(__name__, template_folder="templates", static_folder="static")
+    app.config.from_object(Config)
     app.config["ROOT_PATH"] = root_path
     app.config["MAX_CONTENT_LENGTH"] = 1_000_000
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-    app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
+    if not app.config.get("SECRET_KEY"):
+        app.config["SECRET_KEY"] = secrets.token_hex(32)
 
-    source_path = _resolve_master_document_path(root_path)
+    setup_logging(root_path / "logs")
+
+    source_path = _resolve_master_document_path(root_path, app.config.get("AI_MASTER_DOC_PATH"))
+    db_path = _resolve_path_setting(root_path, app.config.get("DATABASE_PATH"), "data/ai_graph.db")
     app.config["AI_MASTER_DOC_PATH"] = str(source_path)
+    app.config["DATABASE_PATH"] = str(db_path)
     if "FLASK_SECRET_KEY" not in os.environ:
         app.logger.warning("FLASK_SECRET_KEY is not set; using an ephemeral development secret.")
 
@@ -34,7 +48,7 @@ def create_app() -> Flask:
     job_manager = None
     startup_error = None
     try:
-        graph_store = GraphStore(root_path, source_path=source_path)
+        graph_store = GraphStore(root_path, source_path=source_path, db_path=db_path)
         job_manager = DatabaseJobManager(graph_store)
     except Exception as exc:  # noqa: BLE001
         startup_error = "The AI graph could not be initialized. Check AI_MASTER_DOC_PATH, the seed file, and the database state."
@@ -43,6 +57,8 @@ def create_app() -> Flask:
     app.extensions["graph_store"] = graph_store
     app.extensions["job_manager"] = job_manager
     app.extensions["startup_error"] = startup_error
+    rate_limit_lock = threading.Lock()
+    rate_limit_windows: dict[str, deque[float]] = defaultdict(deque)
 
     @app.context_processor
     def inject_globals():
@@ -51,9 +67,48 @@ def create_app() -> Flask:
             "csrf_token": _get_csrf_token,
         }
 
+    def consume_rate_limit(bucket: str, limit: int) -> int | None:
+        if limit <= 0:
+            return None
+        window_seconds = int(app.config.get("RATE_LIMIT_WINDOW_SECONDS", 60))
+        key = f"{bucket}:{request.remote_addr or 'anonymous'}"
+        now = time.monotonic()
+        with rate_limit_lock:
+            entries = rate_limit_windows[key]
+            while entries and now - entries[0] >= window_seconds:
+                entries.popleft()
+            if len(entries) >= limit:
+                return max(1, int(window_seconds - (now - entries[0])))
+            entries.append(now)
+        return None
+
+    def rate_limit(bucket: str, config_key: str):
+        def decorator(fn):
+            @wraps(fn)
+            def wrapped(*args, **kwargs):
+                retry_after = consume_rate_limit(bucket, int(app.config.get(config_key, 0)))
+                if retry_after is None:
+                    return fn(*args, **kwargs)
+                return (
+                    jsonify(
+                        {
+                            "status": "rate_limited",
+                            "message": "Rate limit exceeded.",
+                            "retry_after": retry_after,
+                        }
+                    ),
+                    429,
+                )
+
+            return wrapped
+
+        return decorator
+
     @app.before_request
     def protect_post_routes():
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            if request.path.startswith("/api/") and not _is_same_origin_request():
+                abort(403)
             token = request.form.get("csrf_token", "") or request.headers.get("X-CSRF-Token", "")
             expected = session.get("_csrf_token", "")
             if not token or not expected or not hmac.compare_digest(token, expected):
@@ -187,10 +242,43 @@ def create_app() -> Flask:
             }
         )
 
+    @app.get("/api/health")
+    def api_health():
+        report: HealthReport = {
+            "status": "unhealthy" if startup_error else "healthy",
+            "warnings": [],
+            "errors": [startup_error] if startup_error else [],
+            "source_path": str(source_path),
+            "source_exists": source_path.exists(),
+            "seed_path": str((root_path / "data" / "ai_graph_seed.json")),
+            "seed_exists": (root_path / "data" / "ai_graph_seed.json").exists(),
+            "database_path": str(db_path),
+            "database_exists": db_path.exists(),
+        }
+        if graph_store is not None:
+            report = graph_store.get_health_report()
+            if startup_error:
+                report.setdefault("errors", []).append(startup_error)
+                report["status"] = "unhealthy"
+        payload = {
+            "status": report["status"],
+            "services_available": graph_store is not None and job_manager is not None,
+            "job": job_manager.get_state() if job_manager is not None else _default_job_state(),
+            "health": report,
+        }
+        return jsonify(payload), 200 if report["status"] == "healthy" else 503
+
     @app.get("/api/graph")
+    @rate_limit("api_graph", "API_GRAPH_RATE_LIMIT")
     def api_graph():
         store, _jobs = require_services()
-        return jsonify(store.get_graph_data())
+        try:
+            payload = store.get_graph_data()
+        except GraphStoreError as exc:
+            app.logger.exception("Falling back to degraded graph payload: %s", exc)
+            return jsonify(_degraded_graph_payload(str(exc), store.get_health_report()))
+        payload["status"] = "ok"
+        return jsonify(payload)
 
     @app.get("/api/story/<story_id>")
     def api_story(story_id: str):
@@ -217,6 +305,7 @@ def create_app() -> Flask:
         )
 
     @app.post("/api/rebuild")
+    @rate_limit("api_rebuild", "API_REBUILD_RATE_LIMIT")
     def api_rebuild():
         store, jobs = require_services()
 
@@ -242,17 +331,25 @@ def create_app() -> Flask:
                 if not snapshot.get("active"):
                     if snapshot.get("status") == "completed":
                         yield f"data: {json.dumps({'status': 'done', 'job': snapshot, 'stats': store.get_runtime_stats()})}\n\n"
+                    elif snapshot.get("status") == "cancelled":
+                        yield f"data: {json.dumps({'status': 'cancelled', 'job': snapshot, 'message': snapshot.get('error') or 'Rebuild cancelled.'})}\n\n"
                     else:
                         yield f"data: {json.dumps({'status': 'error', 'job': snapshot, 'message': snapshot.get('error') or 'Rebuild failed.'})}\n\n"
                     break
                 time.sleep(0.35)
 
-        return Response(stream(), mimetype="text/event-stream")
+        return Response(stream(), mimetype="text/event-stream", headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/rebuild/cancel")
+    def api_cancel_rebuild():
+        _store, jobs = require_services()
+        cancelled = jobs.cancel_job()
+        return jsonify({"status": "cancelling" if cancelled else "idle", "job": jobs.get_state()}), 202 if cancelled else 409
 
     return app
 
 
-def _default_job_state() -> dict[str, str | bool | None]:
+def _default_job_state() -> JobState:
     return {
         "active": False,
         "job_type": None,
@@ -260,13 +357,22 @@ def _default_job_state() -> dict[str, str | bool | None]:
         "finished_at": None,
         "status": "unavailable",
         "error": None,
+        "cancel_requested": False,
     }
 
 
-def _resolve_master_document_path(root_path: Path) -> Path:
-    configured = os.getenv("AI_MASTER_DOC_PATH")
+def _resolve_path_setting(root_path: Path, configured: Path | str | None, default_relative: str = "data/ai_master.md") -> Path:
     if configured:
-        return Path(configured).expanduser()
+        candidate = Path(configured).expanduser()
+        if not candidate.is_absolute():
+            candidate = root_path / candidate
+        return candidate
+    return root_path / default_relative
+
+
+def _resolve_master_document_path(root_path: Path, configured: Path | str | None = None) -> Path:
+    if configured:
+        return _resolve_path_setting(root_path, configured, "data/ai_master.md")
 
     candidates = [
         root_path / "data" / "ai_master.md",
@@ -302,3 +408,26 @@ def _get_csrf_token() -> str:
         token = secrets.token_urlsafe(32)
         session["_csrf_token"] = token
     return token
+
+
+def _is_same_origin_request() -> bool:
+    origin = request.headers.get("Origin")
+    if not origin:
+        return True
+    return urlparse(origin).netloc == request.host
+
+
+def _degraded_graph_payload(message: str, health: HealthReport) -> GraphData:
+    return {
+        "nodes": [],
+        "edges": [],
+        "communities": [],
+        "timeline": {
+            "months": [],
+            "start": "2020-01",
+            "end": "2020-01",
+        },
+        "status": "degraded",
+        "message": message,
+        "health": health,
+    }

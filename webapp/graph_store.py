@@ -13,14 +13,18 @@ from typing import Any
 import bleach
 import markdown
 import numpy as np
+from loguru import logger
 from sklearn.cluster import KMeans
+
+from .types import GraphData, HealthReport
 
 
 LEGACY_MASTER_DOCUMENT_PATH = Path("/home/seanb/Documents/New Folder/AI_Master_Document_2020_2026.md")
 DATASET_VERSION = "master-doc-v2"
+SCHEMA_VERSION = "1"
 DISPLAY_CLUSTER_REFINEMENT_THRESHOLD = 120
-DISPLAY_CLUSTER_TARGET_SIZE = 45
-DISPLAY_CLUSTER_MAX_COUNT = 10
+DISPLAY_CLUSTER_TARGET_SIZE = 12
+DISPLAY_CLUSTER_MAX_COUNT = 20
 MONTHS = {
     "jan": "01",
     "feb": "02",
@@ -34,6 +38,15 @@ MONTHS = {
     "oct": "10",
     "nov": "11",
     "dec": "12",
+}
+JOBS_APPENDIX_SECTION = "ai jobs appendix"
+JOBS_PLATFORM_SUBSECTION = "ai evaluation & training platforms"
+JOBS_CREATION_SUBSECTION = "new job roles ai has created"
+JOBS_DISPLACEMENT_SUBSECTION = "job roles being eliminated or severely reduced"
+JOBS_LAYOFF_SUBSECTION = "companies that have cut jobs and cited ai"
+JOBS_NARRATIVE_SUBSECTIONS = {
+    "entry-level and new graduate impact",
+    "the real picture",
 }
 
 ENTITY_DEFINITIONS = [
@@ -192,6 +205,10 @@ class GraphStoreError(RuntimeError):
     pass
 
 
+class GraphStoreCancelled(GraphStoreError):
+    pass
+
+
 def slugify(value: str) -> str:
     value = re.sub(r"[*_`]", "", value).lower()
     value = re.sub(r"[^a-z0-9]+", "-", value).strip("-")
@@ -331,6 +348,23 @@ def graph_edge_type(source_type: str, target_type: str, relation: str) -> str:
     return f"{source_type}_to_{target_type}"
 
 
+def _community_type_hint(type_names: list[str]) -> str | None:
+    ordered_hints = {
+        "model": "Models",
+        "lab": "Labs",
+        "product": "Products",
+        "risk": "Risks",
+        "topic": "Topics",
+        "person": "People",
+        "story": "Stories",
+    }
+    for type_name in type_names:
+        hint = ordered_hints.get(type_name)
+        if hint:
+            return hint
+    return None
+
+
 @dataclass
 class EntityRecord:
     id: str
@@ -374,13 +408,14 @@ class StoryRecord:
 
 
 class GraphStore:
-    def __init__(self, root_path: Path, source_path: Path | None = None):
+    def __init__(self, root_path: Path, source_path: Path | None = None, db_path: Path | None = None):
         self.root_path = Path(root_path)
         self.data_dir = self.root_path / "data"
-        self.db_path = self.data_dir / "ai_graph.db"
+        self.db_path = Path(db_path) if db_path is not None else self.data_dir / "ai_graph.db"
         self.seed_path = self.data_dir / "ai_graph_seed.json"
         self.source_path = Path(source_path) if source_path is not None else self.data_dir / "ai_master.md"
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._signature: int | None = None
         self._entities: dict[str, EntityRecord] = {}
         self._stories: dict[str, StoryRecord] = {}
@@ -478,11 +513,11 @@ class GraphStore:
         if node_count <= 1 or nontrivial_count <= 0:
             return 1
 
-        valid_cluster_max = min(8, node_count, nontrivial_count)
+        valid_cluster_max = min(25, node_count, nontrivial_count)
         if valid_cluster_max < 2:
             return 1
 
-        candidate_max = min(8, node_count - 1, nontrivial_count - 1)
+        candidate_max = min(25, node_count - 1, nontrivial_count - 1)
         if candidate_max < 4:
             return max(2, valid_cluster_max)
 
@@ -664,9 +699,9 @@ class GraphStore:
         display_meta_by_node: dict[str, dict[str, Any]] = {}
         communities: list[dict[str, Any]] = []
         for display_cluster_id, spec in enumerate(ordered_specs):
-            label = f"Community {display_cluster_id + 1}"
             members = [node_by_id[node_id] for node_id in spec["node_ids"] if node_id in node_by_id]
             type_counts = Counter(member["type"] for member in members)
+            dominant_types = [name for name, _count in type_counts.most_common(3)]
             story_members = sorted(
                 (member for member in members if member["node_type"] == "story"),
                 key=lambda member: (
@@ -675,6 +710,7 @@ class GraphStore:
                     member["id"],
                 ),
             )
+            label = self._community_label(display_cluster_id, members, story_members, dominant_types)
             for node_id in spec["node_ids"]:
                 display_meta_by_node[node_id] = {
                     "display_cluster_id": display_cluster_id,
@@ -689,7 +725,7 @@ class GraphStore:
                 "node_count": len(spec["node_ids"]),
                 "story_count": sum(1 for member in members if member["node_type"] == "story"),
                 "entity_count": sum(1 for member in members if member["node_type"] == "entity"),
-                "dominant_types": [name for name, _count in type_counts.most_common(3)],
+                "dominant_types": dominant_types,
                 "anchor_story_ids": [member["id"] for member in story_members[:3]],
             }
             if spec["parent_cluster_id"] is not None:
@@ -697,6 +733,62 @@ class GraphStore:
             communities.append(community_entry)
 
         return display_meta_by_node, communities
+
+    def _community_label(
+        self,
+        display_cluster_id: int,
+        members: list[dict[str, Any]],
+        story_members: list[dict[str, Any]],
+        dominant_types: list[str],
+    ) -> str:
+        entity_candidates = sorted(
+            (
+                member
+                for member in members
+                if member["node_type"] == "entity" and member.get("type") != "year"
+            ),
+            key=lambda member: (
+                -(member.get("importance") or 0),
+                -(member.get("story_count") or 0),
+                member["label"],
+            ),
+        )
+        unique_entity_labels: list[str] = []
+        seen_entity_labels: set[str] = set()
+        for member in entity_candidates:
+            label = clean_md(member["label"])
+            normalized = label.lower()
+            if not label or normalized in seen_entity_labels:
+                continue
+            seen_entity_labels.add(normalized)
+            unique_entity_labels.append(label)
+            if len(unique_entity_labels) == 3:
+                break
+
+        if len(unique_entity_labels) >= 2:
+            return f"{unique_entity_labels[0]} + {unique_entity_labels[1]}"
+        if unique_entity_labels:
+            type_hint = _community_type_hint(dominant_types)
+            if type_hint and unique_entity_labels[0] != type_hint:
+                return f"{unique_entity_labels[0]} / {type_hint}"
+            return unique_entity_labels[0]
+
+        story_candidates = [title_from_text(member["label"], fallback=member["label"]) for member in story_members if clean_md(member["label"])]
+        story_candidates = [
+            candidate
+            for candidate in story_candidates
+            if candidate
+            and re.search(r"[A-Za-z]", candidate)
+            and not re.fullmatch(r"[0-9 .\-]+", candidate)
+        ]
+        if story_candidates:
+            type_hint = _community_type_hint(dominant_types)
+            if type_hint and type_hint.lower() not in story_candidates[0].lower():
+                return f"{story_candidates[0]} / {type_hint}"
+            return story_candidates[0]
+
+        type_hint = _community_type_hint(dominant_types) or "Cluster"
+        return f"{type_hint} {display_cluster_id + 1}"
 
     def _compute_cluster_assignments(self, conn: sqlite3.Connection) -> tuple[dict[str, int], int]:
         conn.row_factory = sqlite3.Row
@@ -849,6 +941,10 @@ class GraphStore:
             return f"{DATASET_VERSION}:{int(self.source_path.stat().st_mtime_ns)}"
         return f"{DATASET_VERSION}:fallback"
 
+    def _check_cancelled(self, cancel_event: Any | None) -> None:
+        if cancel_event is not None and getattr(cancel_event, "is_set", lambda: False)():
+            raise GraphStoreCancelled("Database rebuild cancelled.")
+
     def _validate_payload(self, payload: dict[str, Any]) -> None:
         required_top_level = {"entities", "stories", "story_entities", "story_tags", "entity_links"}
         missing = sorted(required_top_level.difference(payload))
@@ -905,17 +1001,20 @@ class GraphStore:
                     """
                 )
                 self._ensure_cluster_columns(conn)
+                conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("schema_version", SCHEMA_VERSION))
                 row = conn.execute("SELECT value FROM meta WHERE key = 'source_signature'").fetchone()
                 count = conn.execute("SELECT COUNT(*) FROM stories").fetchone()[0]
         except sqlite3.DatabaseError as exc:
+            logger.error(f"Failed to initialize the AI graph database: {exc}")
             raise GraphStoreError("Failed to initialize the AI graph database.") from exc
         if count == 0 or not row or row[0] != self._source_signature():
+            logger.info("Refreshing graph database from {}", self.source_path)
             self.seed_database(reset=True)
 
-    def seed_database(self, reset: bool = False) -> None:
+    def seed_database(self, reset: bool = False, cancel_event: Any | None = None) -> None:
         try:
             if self.source_path.exists():
-                payload = self._build_payload_from_master_document()
+                payload = self._build_payload_from_master_document(cancel_event=cancel_event)
             elif self.seed_path.exists():
                 payload = json.loads(self.seed_path.read_text(encoding="utf-8"))
             else:
@@ -923,9 +1022,11 @@ class GraphStore:
                     f"No dataset source was found. Set AI_MASTER_DOC_PATH or add a seed file at {self.seed_path}."
                 )
             self._validate_payload(payload)
+            self._check_cancelled(cancel_event)
         except GraphStoreError:
             raise
         except (OSError, json.JSONDecodeError, KeyError, ValueError) as exc:
+            logger.error(f"Failed to load or parse the AI graph source data: {exc}")
             raise GraphStoreError("Failed to load or parse the AI graph source data.") from exc
 
         try:
@@ -943,9 +1044,11 @@ class GraphStore:
                         """
                     )
 
+                self._check_cancelled(cancel_event)
                 conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("dataset_name", payload.get("name", "AI Signal Graph")))
                 conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("source_signature", self._source_signature()))
                 conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("source_path", str(self.source_path)))
+                conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("schema_version", SCHEMA_VERSION))
 
                 conn.executemany(
                     "INSERT INTO entities (id, name, entity_type, group_name, description, importance) VALUES (:id, :name, :type, :group, :description, :importance)",
@@ -961,6 +1064,7 @@ class GraphStore:
                     "INSERT INTO entity_links (source_id, target_id, relation, weight) VALUES (:source, :target, :relation, :weight)",
                     payload["entity_links"],
                 )
+                self._check_cancelled(cancel_event)
                 self._persist_cluster_assignments(conn)
         except sqlite3.DatabaseError as exc:
             raise GraphStoreError("Failed to rebuild the AI graph database.") from exc
@@ -968,7 +1072,7 @@ class GraphStore:
         self._signature = None
         self._refresh()
 
-    def _build_payload_from_master_document(self) -> dict[str, Any]:
+    def _build_payload_from_master_document(self, cancel_event: Any | None = None) -> dict[str, Any]:
         lines = self.source_path.read_text(encoding="utf-8").splitlines()
         stories: list[dict[str, Any]] = []
         seen: set[str] = set()
@@ -978,6 +1082,8 @@ class GraphStore:
         i = 0
 
         while i < len(lines):
+            if i % 250 == 0:
+                self._check_cancelled(cancel_event)
             raw = lines[i].rstrip()
             line = raw.strip()
 
@@ -1032,9 +1138,12 @@ class GraphStore:
             self._append_story(stories, seen, story)
 
         connected_entities: set[str] = set()
+        synthetic_entity_map: dict[str, dict[str, Any]] = {}
         story_entities: list[tuple[str, str]] = []
         story_tags: list[tuple[str, str]] = []
         for story in stories:
+            for entity in story.pop("synthetic_entities", []):
+                synthetic_entity_map.setdefault(entity["id"], entity)
             for entity_id in story.pop("entity_ids"):
                 connected_entities.add(entity_id)
                 story_entities.append((story["id"], entity_id))
@@ -1042,6 +1151,7 @@ class GraphStore:
                 story_tags.append((story["id"], tag))
 
         entity_map = {item["id"]: item for item in ENTITY_DEFINITIONS}
+        entity_map.update(synthetic_entity_map)
         entities = [self._entity_record(entity_map[entity_id]) for entity_id in sorted(connected_entities)]
         entity_links = self._build_entity_links(stories, story_entities)
         return {
@@ -1074,7 +1184,7 @@ class GraphStore:
                 "status": "watch",
                 "date": "2024-11",
                 "summary": "The K1.5 line extended Moonshot AI's relevance in the Chinese model race around large context windows and stronger reasoning behavior.",
-                "details": "## Detail\n\nKimi K1.5 represented Moonshot AI's stronger push into the long-context and reasoning conversation.",
+                "details": "## Detail\n\nMoonshot AI's Kimi K1.5 represented Moonshot AI's stronger push into the long-context and reasoning conversation.",
                 "importance": 3,
                 "tags": ["model-release", "kimi", "moonshot", "long-context", "2024"],
                 "entity_ids": ["moonshot-ai", "kimi-family", "kimi-k1-5-model", "context-windows", "china", "year-2024"],
@@ -1142,11 +1252,288 @@ class GraphStore:
         seen.add(fingerprint)
         stories.append(story)
 
+    def _jobs_kind_for_section(self, section: str, subsection: str) -> str | None:
+        section_lower = clean_md(section).lower()
+        subsection_lower = clean_md(subsection).lower()
+        if JOBS_APPENDIX_SECTION not in section_lower:
+            return None
+        if JOBS_PLATFORM_SUBSECTION in subsection_lower:
+            return "ai-work-platform"
+        if JOBS_CREATION_SUBSECTION in subsection_lower:
+            return "job-creation"
+        if JOBS_DISPLACEMENT_SUBSECTION in subsection_lower:
+            return "job-displacement"
+        if JOBS_LAYOFF_SUBSECTION in subsection_lower:
+            return "ai-layoff"
+        if subsection_lower in JOBS_NARRATIVE_SUBSECTIONS:
+            return "labor-analysis"
+        return None
+
+    def _lookup_entity_id_by_alias(self, label: str) -> str | None:
+        normalized = slugify(clean_md(label))
+        if not normalized:
+            return None
+        for item in ENTITY_DEFINITIONS:
+            if item["id"] == normalized:
+                return item["id"]
+            aliases = item.get("aliases", []) + [item["name"]]
+            for alias in aliases:
+                if slugify(alias) == normalized:
+                    return item["id"]
+        return None
+
+    def _synthetic_entity(
+        self,
+        label: str,
+        *,
+        entity_type: str,
+        group_name: str,
+        description: str,
+        importance: int = 3,
+        prefix: str,
+        aliases: list[str] | None = None,
+    ) -> tuple[str, dict[str, Any] | None]:
+        existing_id = self._lookup_entity_id_by_alias(label)
+        if existing_id is not None:
+            return existing_id, None
+        entity_id = f"{prefix}-{slugify(label)}"
+        entity = {
+            "id": entity_id,
+            "name": clean_md(label),
+            "type": entity_type,
+            "group": group_name,
+            "description": description,
+            "importance": importance,
+            "aliases": sorted({clean_md(alias) for alias in (aliases or []) if clean_md(alias)}),
+        }
+        if clean_md(label) not in entity["aliases"]:
+            entity["aliases"].append(clean_md(label))
+        return entity_id, entity
+
+    def _normalize_jobs_date(self, default_date: str, *texts: str) -> str:
+        for text in texts:
+            normalized = self._normalize_date("", text)
+            if normalized != "reference":
+                return normalized
+        return default_date
+
+    def _job_role_aliases(self, role_label: str) -> list[str]:
+        aliases = [clean_md(role_label)]
+        aliases.extend(part.strip() for part in re.split(r"\s*/\s*", clean_md(role_label)) if part.strip())
+        return sorted(set(alias for alias in aliases if alias))
+
+    def _build_jobs_details(self, section: str, subsection: str, fields: list[tuple[str, str]]) -> str:
+        body = "\n".join(f"**{label}:** {clean_md(value)}" for label, value in fields if clean_md(value))
+        return self._build_details(section, subsection, body)
+
+    def _jobs_table_story(self, cells: list[str], section: str, subsection: str, current_year: str) -> dict[str, Any] | None:
+        kind = self._jobs_kind_for_section(section, subsection)
+        if kind is None:
+            return None
+
+        lowered_cells = [clean_md(cell).lower() for cell in cells]
+        if kind == "ai-work-platform" and lowered_cells[:4] == ["platform", "role type", "pay range", "notes"]:
+            return None
+        if kind == "job-creation" and lowered_cells[:4] == ["role", "what they do", "pay (us)", "trend"]:
+            return None
+        if kind == "job-displacement" and lowered_cells[:3] == ["job / role", "status", "impact / evidence"]:
+            return None
+        if kind == "ai-layoff" and lowered_cells[:5] == ["company", "jobs cut", "industry", "date", "ai attribution"]:
+            return None
+
+        section_tags = self._section_tags(section, subsection, current_year, kind)
+        status = self._infer_status(current_year, kind)
+        synthetic_entities: list[dict[str, Any]] = []
+        entity_ids: set[str] = set()
+
+        def register_entity(
+            label: str,
+            *,
+            entity_type: str,
+            group_name: str,
+            description: str,
+            importance: int = 3,
+            prefix: str,
+            aliases: list[str] | None = None,
+        ) -> None:
+            entity_id, entity = self._synthetic_entity(
+                label,
+                entity_type=entity_type,
+                group_name=group_name,
+                description=description,
+                importance=importance,
+                prefix=prefix,
+                aliases=aliases,
+            )
+            entity_ids.add(entity_id)
+            if entity is not None:
+                synthetic_entities.append(entity)
+
+        if kind == "ai-work-platform" and len(cells) >= 4:
+            platform, role_type, pay_range = cells[0], cells[1], cells[2]
+            notes = " | ".join(cells[3:])
+            event_date = self._normalize_jobs_date("2026-04", notes, platform, role_type)
+            title = clean_md(platform)
+            summary = short_excerpt(f"{platform} offers {role_type}. {notes}", 240)
+            details = self._build_jobs_details(
+                section,
+                subsection,
+                [("Platform", platform), ("Role Type", role_type), ("Pay Range", pay_range), ("Notes", notes)],
+            )
+            register_entity(
+                platform,
+                entity_type="company",
+                group_name="Platforms",
+                description=f"AI work platform imported from the jobs appendix: {clean_md(notes)}",
+                importance=3,
+                prefix="org",
+            )
+            register_entity(
+                role_type,
+                entity_type="keyword",
+                group_name="Labor",
+                description=f"AI labor role imported from the jobs appendix: {clean_md(role_type)}",
+                importance=3,
+                prefix="job-role",
+                aliases=self._job_role_aliases(role_type),
+            )
+            entity_ids.update(self._match_entities(" ".join(cells + [section, subsection, current_year])))
+            tags = sorted(section_tags.union({slugify(title), slugify(role_type), "labor", "platform"}).union(self._entity_tags(list(entity_ids))))
+            return {
+                "id": slugify(f"{event_date}-{title}"),
+                "title": title,
+                "kind": kind,
+                "status": status,
+                "date": event_date,
+                "summary": summary,
+                "details": details,
+                "importance": self._story_importance(kind, list(entity_ids), title, notes),
+                "tags": tags,
+                "entity_ids": sorted(entity_ids),
+                "synthetic_entities": synthetic_entities,
+            }
+
+        if kind == "job-creation" and len(cells) >= 3:
+            role_name, role_desc = cells[0], cells[1]
+            pay_trend = " | ".join(cells[2:])
+            event_date = self._normalize_jobs_date("2026-04", role_desc, pay_trend, role_name)
+            title = clean_md(role_name)
+            summary = short_excerpt(f"{role_desc} | {pay_trend}", 240)
+            details = self._build_jobs_details(
+                section,
+                subsection,
+                [("Role", role_name), ("Description", role_desc), ("Pay/Trend", pay_trend)],
+            )
+            register_entity(
+                role_name,
+                entity_type="keyword",
+                group_name="Labor",
+                description=f"AI-created work role imported from the jobs appendix: {clean_md(role_desc)}",
+                importance=3,
+                prefix="job-role",
+                aliases=self._job_role_aliases(role_name),
+            )
+            entity_ids.add("labor")
+            entity_ids.update(self._match_entities(" ".join(cells + [section, subsection, current_year])))
+            tags = sorted(section_tags.union({slugify(title), "labor", "job-creation"}).union(self._entity_tags(list(entity_ids))))
+            return {
+                "id": slugify(f"{event_date}-{title}"),
+                "title": title,
+                "kind": kind,
+                "status": status,
+                "date": event_date,
+                "summary": summary,
+                "details": details,
+                "importance": self._story_importance(kind, list(entity_ids), title, role_desc),
+                "tags": tags,
+                "entity_ids": sorted(entity_ids),
+                "synthetic_entities": synthetic_entities,
+            }
+
+        if kind == "job-displacement" and len(cells) >= 3:
+            role_name, impact_status = cells[0], cells[1]
+            evidence = " | ".join(cells[2:])
+            event_date = self._normalize_jobs_date("2026-04", evidence, impact_status, role_name)
+            title = clean_md(role_name)
+            summary = short_excerpt(f"{impact_status}. {evidence}", 240)
+            details = self._build_jobs_details(
+                section,
+                subsection,
+                [("Job / Role", role_name), ("Status", impact_status), ("Impact / Evidence", evidence)],
+            )
+            register_entity(
+                role_name,
+                entity_type="keyword",
+                group_name="Labor",
+                description=f"AI-displaced work role imported from the jobs appendix: {clean_md(evidence)}",
+                importance=3,
+                prefix="job-role",
+                aliases=self._job_role_aliases(role_name),
+            )
+            entity_ids.add("labor")
+            entity_ids.update(self._match_entities(" ".join(cells + [section, subsection, current_year])))
+            tags = sorted(section_tags.union({slugify(title), slugify(impact_status), "labor", "job-displacement"}).union(self._entity_tags(list(entity_ids))))
+            return {
+                "id": slugify(f"{event_date}-{title}"),
+                "title": title,
+                "kind": kind,
+                "status": status,
+                "date": event_date,
+                "summary": summary,
+                "details": details,
+                "importance": self._story_importance(kind, list(entity_ids), title, evidence),
+                "tags": tags,
+                "entity_ids": sorted(entity_ids),
+                "synthetic_entities": synthetic_entities,
+            }
+
+        if kind == "ai-layoff" and len(cells) >= 5:
+            company, jobs_cut, industry, date_value = cells[0], cells[1], cells[2], cells[3]
+            attribution = " | ".join(cells[4:])
+            event_date = self._normalize_jobs_date("2026-04", date_value, attribution, company)
+            title = clean_md(company)
+            summary = short_excerpt(f"{jobs_cut} jobs cut in {industry}. {attribution}", 240)
+            details = self._build_jobs_details(
+                section,
+                subsection,
+                [("Company", company), ("Jobs Cut", jobs_cut), ("Industry", industry), ("Date", date_value), ("AI Attribution", attribution)],
+            )
+            register_entity(
+                company,
+                entity_type="company",
+                group_name="Companies",
+                description=f"Employer imported from the jobs appendix: {clean_md(industry)}. {clean_md(attribution)}",
+                importance=3,
+                prefix="org",
+            )
+            entity_ids.add("labor")
+            entity_ids.update(self._match_entities(" ".join(cells + [section, subsection, current_year])))
+            tags = sorted(section_tags.union({slugify(title), slugify(industry), "labor", "ai-layoff"}).union(self._entity_tags(list(entity_ids))))
+            return {
+                "id": slugify(f"{event_date}-{title}"),
+                "title": title,
+                "kind": kind,
+                "status": status,
+                "date": event_date,
+                "summary": summary,
+                "details": details,
+                "importance": self._story_importance(kind, list(entity_ids), title, attribution),
+                "tags": tags,
+                "entity_ids": sorted(entity_ids),
+                "synthetic_entities": synthetic_entities,
+            }
+
+        return None
+
     def _story_from_table_row(self, row: str, section: str, subsection: str, current_year: str) -> dict[str, Any] | None:
         cells = [clean_md(cell) for cell in row.strip("|").split("|")]
         cells = [cell for cell in cells if cell]
         if not cells:
             return None
+
+        jobs_story = self._jobs_table_story(cells, section, subsection, current_year)
+        if jobs_story is not None:
+            return jobs_story
 
         kind = self._infer_kind(section, subsection)
         status = self._infer_status(current_year, kind)
@@ -1234,6 +1621,9 @@ class GraphStore:
         }
 
     def _infer_kind(self, section: str, subsection: str) -> str:
+        jobs_kind = self._jobs_kind_for_section(section, subsection)
+        if jobs_kind is not None:
+            return jobs_kind
         haystack = f"{section} {subsection}".lower()
         if "model release timeline" in haystack or "model family" in haystack:
             return "model-release"
@@ -1319,9 +1709,9 @@ class GraphStore:
 
     def _story_importance(self, kind: str, entity_ids: list[str], title: str, body: str) -> int:
         score = 2
-        if kind in {"timeline", "model-release", "policy", "infrastructure", "agents"}:
+        if kind in {"timeline", "model-release", "policy", "infrastructure", "agents", "ai-work-platform", "job-creation", "job-displacement", "ai-layoff"}:
             score += 1
-        if kind in {"analysis", "business"}:
+        if kind in {"analysis", "business", "labor-analysis"}:
             score += 1
         score += min(3, len(entity_ids) // 3)
         if re.search(r"\b(gpt-4|gpt-4o|gpt-5|chatgpt|alphafold|deepseek|gemini|claude|llama|nvidia|openai|anthropic)\b", f"{title} {body}".lower()):
@@ -1381,6 +1771,7 @@ class GraphStore:
                 story_tags = conn.execute("SELECT story_id, tag FROM story_tags").fetchall()
                 entity_links = conn.execute("SELECT source_id, target_id, relation, weight FROM entity_links").fetchall()
         except sqlite3.DatabaseError as exc:
+            logger.error(f"Failed to read the AI graph database: {exc}")
             raise GraphStoreError("Failed to read the AI graph database. Rebuild the dataset and try again.") from exc
 
         story_to_entities: dict[str, list[str]] = defaultdict(list)
@@ -1474,6 +1865,57 @@ class GraphStore:
         with self._connect() as conn:
             row = conn.execute("SELECT value FROM meta WHERE key = 'dataset_name'").fetchone()
         return row[0] if row else "AI Signal Graph"
+
+    def get_health_report(self) -> HealthReport:
+        warnings: list[str] = []
+        errors: list[str] = []
+        report: HealthReport = {
+            "source_path": str(self.source_path),
+            "source_exists": self.source_path.exists(),
+            "seed_path": str(self.seed_path),
+            "seed_exists": self.seed_path.exists(),
+            "database_path": str(self.db_path),
+            "database_exists": self.db_path.exists(),
+            "warnings": warnings,
+            "errors": errors,
+        }
+
+        if not report["source_exists"] and report["seed_exists"]:
+            warnings.append("Configured source document is missing; rebuilds will use the JSON seed fallback.")
+        elif not report["source_exists"]:
+            errors.append("Configured source document is missing and no seed fallback is available.")
+
+        if not report["database_exists"]:
+            warnings.append("Database file has not been created yet.")
+            report["status"] = "degraded" if not errors else "unhealthy"
+            return report
+
+        try:
+            with self._connect() as conn:
+                meta_rows = conn.execute("SELECT key, value FROM meta").fetchall()
+                meta = {key: value for key, value in meta_rows}
+                report["stories"] = int(conn.execute("SELECT COUNT(*) FROM stories").fetchone()[0])
+                report["entities"] = int(conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0])
+                report["communities"] = int(meta.get("community_count", "0"))
+                report["schema_version"] = meta.get("schema_version")
+                report["source_signature"] = meta.get("source_signature")
+        except sqlite3.DatabaseError as exc:
+            logger.error(f"Database health check failed: {exc}")
+            errors.append("Failed to read graph database health information.")
+            report["status"] = "unhealthy"
+            return report
+
+        if report.get("stories", 0) == 0:
+            errors.append("Graph database contains zero stories.")
+        if report.get("entities", 0) == 0:
+            errors.append("Graph database contains zero entities.")
+        if report.get("schema_version") != SCHEMA_VERSION:
+            warnings.append(
+                f"Schema version mismatch detected. expected={SCHEMA_VERSION} actual={report.get('schema_version') or 'missing'}"
+            )
+
+        report["status"] = "unhealthy" if errors else ("degraded" if warnings else "healthy")
+        return report
 
     def get_runtime_stats(self) -> dict[str, Any]:
         self._refresh()
@@ -1584,7 +2026,7 @@ class GraphStore:
         stories = [self._stories[item["id"]] for item in entity.stories if item["id"] in self._stories]
         return {"record": entity, "stories": stories, "linked_entities": linked_entities}
 
-    def get_graph_data(self) -> dict[str, Any]:
+    def get_graph_data(self) -> GraphData:
         self._refresh()
         story_months = {story.id: timeline_month_key(story.event_date) for story in self._stories.values()}
         known_story_months = sorted((month for month in story_months.values() if month), key=timeline_month_sort_key)
@@ -1631,6 +2073,7 @@ class GraphStore:
                 "in_degree": 0,
                 "out_degree": 0,
                 "year": entity.name if entity.entity_type == "year" else "",
+                "details_html": entity.description,
             }
             nodes.append(node)
             node_by_id[node["id"]] = node
@@ -1660,6 +2103,7 @@ class GraphStore:
                 "layer_index": 1,
                 "in_degree": 0,
                 "out_degree": 0,
+                "details_html": story.details_html,
             }
             nodes.append(node)
             node_by_id[node["id"]] = node

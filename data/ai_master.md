@@ -671,6 +671,112 @@ An AI agent is a system that doesn't just answer questions — it takes actions,
 
 * 2026 — Entry-level white-collar jobs contracting fastest: junior analysts, legal researchers, marketing copywriters, code reviewers.
 
+<!-- BEGIN AI_JOBS_APPENDIX -->
+Imported from AI_Jobs_Masterdoc.md (Updated: April 2026).
+
+## **AI Jobs Appendix 2026**
+
+### **AI Evaluation & Training Platforms**
+| Platform | Role Type | Pay Range | Notes |
+| :---- | :---- | :---- | :---- |
+| Handshake AI | AI Evaluator | Varies | most consistent income stream. Evaluation and RLHF tasks. |
+| Mercor | AI Evaluator / Expert Contractor | $40-$120/hr | Fastest-growing platform. 30k+ contractors, avg $95/hr, pays $1.5M+ daily. Clients include OpenAI, Anthropic, 6 of Magnificent 7\. Raised $350M at $10B valuation (Oct 2025). |
+| Outlier AI (Scale AI) | AI Trainer / Evaluator | $15-$50/hr | Scale AI subsidiary. 700k+ contractors globally. Generalists \~$15/hr, physics/math experts up to $50/hr. |
+| Scale AI | Data Labeling / Annotation Lead | $20-$100/hr | Enterprise annotation platform. Meta invested $14.3B for 49% stake (June 2025). CEO moved to Meta. |
+| Mindrift | LLM Evaluator / AI Tutor | $15-$100+/hr | 70% of 10k tutors hold advanced degrees. Positioned between commodity and premium tiers. |
+| DataAnnotation.tech | AI Trainer | $20-$65/hr | Recruits directly from job boards. US-based contractors. Easy onboarding. |
+| Appen / CrowdGen | Data Annotator | $2-$36/hr | 1M+ contractors across 200+ countries. Entry-level crowdwork. One of the oldest platforms. |
+| Alignerr | AI Trainer / Annotator | $15-$150/hr | Generalist and annotation roles. AI interview via 'Zara'. Set your own hourly rate. |
+| Remotasks | Data Annotator | $5-$25/hr | Large global platform, commodity tier. High task volume. |
+| Toloka | Multilingual AI Tasker | $5-$20/hr | Europe-based. Specializes in multilingual and localization tasks. |
+| Prolific | Research Participant / Evaluator | $8-$20/hr | Used more for academic AI research studies. Easy entry. |
+| Micro1 | AI Evaluator / Engineer | $20-$150/hr | Selective vetting via AI interviewer 'Zara'. Awards 'Micro1 Certified' badge. Requires gov ID. |
+| Invisible Technologies | AI Operations Specialist | $15-$40/hr | Structured remote roles. Long-term team-based projects for enterprise clients. |
+| TELUS International | AI Data Specialist | $15-$150/hr | Medical and niche annotation. PhDs can earn $50-$150/hr. |
+| TransPerfect | Multilingual AI Annotator | $15-$40/hr | Language and localization company. Handles multilingual NLP evaluation. |
+| Braintrust | AI Evaluator / Engineer | $30-$100/hr | Decentralized talent network. Client-driven projects, not open marketplace. |
+| SuperAnnotate | Image / Video Annotator | $10-$50/hr | Computer vision and advanced AI training. Image, video, text annotation. |
+| Luel AI | AI Evaluator | Varies | Newer platform in the space. Part of 2026 ecosystem. |
+| OpenTrain AI | AI Trainer | Varies | Newer platform. Growing presence in 2026 AI training economy. |
+
+### **New Job Roles AI Has Created**
+| Role | What They Do | Pay (US) | Trend |
+| :---- | :---- | :---- | :---- |
+| AI Engineer / ML Engineer | Builds, trains, and deploys AI models and systems | $106k-$200k+ | \+143% growth |
+| AI Trainer / AI Evaluator | Evaluates model outputs, provides human feedback, RLHF tasks | $30k-$120k+ | Booming |
+| AI Data Specialist | Ensures models are fed clean, structured, relevant data | $60k-$115k | Growing fast |
+| AI Security Specialist | Protects AI systems from data poisoning, prompt injection, adversarial attacks | $90k-$160k | Rising urgency |
+| AI Ethics Officer | Ensures AI deployment aligns with legal, ethical, and corporate standards | $100k-$180k | Government pressure driving growth |
+| AI Product Manager | Bridges AI capabilities and business outcomes. Strategy and roadmap. | $130k-$200k | High demand |
+| Prompt Engineer | Designs and tests prompts for LLMs. Was the hot job of 2023-2024. | $110k-$150k | Fading fast in 2025 |
+| AI Content Creator | Produces content using AI tools at scale | $50k-$100k | \+134% growth |
+| LLM Ops / AI Ops | Manages lifecycle of AI models in production. Like DevOps but for AI. | $110k-$170k | Emerging |
+| AI Safety Researcher | Studies alignment, risks, and failure modes of AI systems | $150k-$400k+ | Niche but critical |
+| Red Teamer | Attacks AI systems to find weaknesses before deployment | $100k-$200k | Growing with regulation |
+| Data Center Construction Worker | Builds the physical infrastructure AI runs on. Each center needs \~1,500 on-site workers. | $50k-$80k | 110k+ jobs created in 2024 |
+| AI Policy Analyst | Advises governments and companies on AI regulation and workforce strategy | $80k-$140k | Tied to regulation wave |
+| AI Consultant | Helps companies figure out where and how to deploy AI | $100k-$200k+ | Steady demand |
+| AI Researcher | Pushes the frontier of model capabilities and understanding | $150k-$350k+ | Always needed |
+
+### **Job Roles Being Eliminated or Severely Reduced**
+| Job / Role | Status | Impact / Evidence |
+| :---- | :---- | :---- |
+| Data Entry Clerk | Active elimination | Major outsourcing firms (Cognizant, Infosys, Wipro) cut headcount 30-40% since 2024\. AI OCR and doc processing made manual data entry obsolete. Avg salary dropped from $38k to $33k (2024-2026). 65-80% of remaining roles gone by 2028\. |
+| Customer Service Rep | Rapid transformation | Klarna cut 700 agents (from 2,300 to 1,600) after AI handled 70% of all customer interactions. US customer service employment down \~80,000 positions from 2022-2024. BLS projects 5% decline by 2033\. |
+| Copywriter / Content Writer | Heavily impacted | Job postings down 28% in 2025, accelerating from \-12% in 2024\. Commodity content (product descriptions, ad copy, templated blogs) now largely automated. Jasper, Copy.ai, and direct GPT/Claude access commoditized the low end of the market. |
+| Computer Graphic Artist / 3D Artist / VFX Artist | Severe decline | Job postings down 33% in 2025 (following \-12% in 2024). DALL-E, Midjourney, and video tools like Veo 3 generate complex visuals in seconds. Entire lower tier of the market automated away. |
+| Photographer | Major decline | Down 28% in 2025\. AI image generation replacing stock photography, product shots, and basic commercial work. |
+| Medical Transcriptionist | Declining | AI speech recognition now transcribes doctor-patient conversations with near-perfect accuracy. BLS projects 4.7% employment decline through 2033\. Job postings down 20% in 2025\. |
+| Paralegal (Document Review) | Largely automated | Harvey AI (valued at $3B) handles contract review, due diligence, legal research, and brief drafting. Document review was historically the biggest source of paralegal billable hours. Now almost entirely automated at major law firms. |
+| Bank Teller | Structural decline | BLS projects 15% decline from 2023 to 2033 (elimination of \~51,400 jobs). Digital banking and AI-powered self-service replacing branch roles. |
+| Cashier | Structural decline | BLS projects 11% decline by 2033 (353,100 jobs). Self-checkout, AI inventory systems, and automated retail expanding. |
+| Telemarketer / Call Center Agent | Near-eliminated | AI chatbots and voice agents handling outbound and inbound calls at scale. One of the most exposed roles. Already significantly reduced at most large companies. |
+| Travel Agent | Near-eliminated | AI trip planning tools and direct booking platforms have collapsed the middle tier. Niche luxury and complex travel remain. |
+| Taxi Dispatcher | Eliminated | Route optimization AI replaced dispatchers in freight and ride-hailing starting \~2018. Uber, Lyft, DoorDash dispatch is fully algorithmic. |
+| Junior Software Engineer | Significant reduction | 30% of Microsoft code is now AI-written. Big tech cut new grad hiring by 50%+ since 2019 and 25% in 2024 alone. Entry-level P1 roles down 73.4% vs only 7.4% across all levels. |
+| Proofreader | Largely automated | Grammarly, Claude, and GPT handle near-perfect proofreading at near-zero cost. Human proofreading remains only for high-stakes publishing. |
+| Medical Scribe | Declining fast | Job postings down 20% in 2025\. AI transcription handles most clinical documentation tasks automatically. |
+| Corporate Compliance Specialist | Rapid decline | Down 6% in 2024, then down another 29% in 2025\. Government deregulation reducing demand, plus AI automating the compliance workflow that remains. |
+| Market Research Analyst (entry-level) | Heavily impacted | Bloomberg research estimates AI can replace 53% of market research analyst tasks. Junior analyst roles especially exposed. |
+| Translator (commodity work) | Commoditized | AI translation (DeepL, GPT-4o, Gemini) handles standard documents and web content at near-zero cost. High-stakes legal/medical translation still requires humans. |
+| Journalist / Reporter | Under pressure | Job postings down 22% in 2025\. AI-generated news summaries and automated reporting tools hitting the lower end of the market. PR specialists also down 21%. |
+| HR / Payroll Processor | Active reduction | Paycom laid off 500+ employees after automating payroll. IBM automated its HR department with AI agents (8,000 job cuts). Automated back-office functions reducing headcount across the industry. |
+
+### **Companies That Have Cut Jobs and Cited AI**
+| Company | Jobs Cut | Industry | Date | AI Attribution |
+| :---- | :---- | :---- | :---- | :---- |
+| Klarna | 700 | Fintech | 2024 | AI handles 70% of all customer interactions. Cut from 2,300 to 1,600 agents. |
+| Workday | \~1,750 | HR Software | 2025 | Cut 8.5% of workforce to reallocate toward AI investments. |
+| Salesforce | \~4,000 | CRM / Software | 2025 | AI handles up to 50% of company work (Benioff). Cut customer support roles. |
+| Microsoft | \~6,000 | Technology | May 2025 | 30% of code now AI-written. Majority of layoffs targeted software engineers. |
+| Amazon | \~14,000 | E-Commerce / Cloud | 2025 | Cited AI enabling leaner structures. Corporate role elimination. |
+| IBM | \~8,000 | Technology | 2025 | AI agents took over HR department functions. |
+| Dropbox | 528 | Software | Oct 2024 | Refocused around AI-powered search. Wanted flatter, AI-led structure. |
+| Fiverr | \~250 | Online Marketplace | Sept 2025 | 30% of workforce. Repositioned as AI-first company. CEO said tasks previously done by humans will be AI-handled. |
+| Google (Cloud) | 100+ | Technology | Oct 2025 | Eliminated design and UX roles. Redirected resources toward AI engineering. |
+| Grammarly | \~230 | Software | Feb 2024 | Restructuring to focus on AI-enabled writing tools. |
+| HP | \~6,000 | Technology | Nov 2025 | Automation and AI-driven productivity efforts cited. |
+| PayPal | \~2,500 | Fintech | Jan 2024 | Automation in fraud detection, risk management, customer support. |
+| Chegg | \~388 | EdTech | 2025 | 45% of workforce. Diminished search traffic and AI alternatives replacing their product. |
+| Duolingo | \~10% contractors | EdTech | Jan 2024 | Offboarded contractor workforce as company pivoted to AI for content translation. |
+| Indeed / Glassdoor | \~1,300 | Job Search | 2025 | Parent company (Recruit Holdings) restructuring in response to AI-driven job search. |
+| UPS | \~14,000 corporate | Logistics | 2025 | AI and automation enabling leaner corporate structure. 66% of volume through automated facilities. |
+| Paycom | 500+ | HR Software | Oct 2025 | Automated payroll and back-office. Staff told their roles were replaced by AI-driven systems. |
+| Citigroup | \~20,000 (planned) | Financial Services | By 2026 | Automation and AI-enabled systems to run middle-office with fewer employees. |
+| Pinterest | \~700 | Social Media | Jan 2026 | 15% of workforce. Moving toward AI-forward strategy. Replacing with AI-proficient talent. |
+| Dow | \~4,500 | Manufacturing | Jan 2026 | Shift focus to AI. Announced January 2026\. |
+| Cisco | \~200+ | Technology | Aug 2025 | Pivoting toward AI-driven networking and security products. |
+| CrowdStrike | \~500 | Cybersecurity | May 2025 | 5% of staff. Cited 'AI efficiency' as reason. |
+| Ergo (Munich Re) | \~1,000 by 2030 | Insurance | By 2030 | AI automating traditional insurance tasks. 200/year through voluntary measures. |
+
+### **Entry-Level and New Graduate Impact**
+* Entry-Level and New Graduate Impact — Apr 2026 snapshot: This is where the damage is most concentrated. AI is not just eliminating mid-career roles. It is cutting off the bottom rung of the career ladder entirely. Entry-level P1 positions at tech companies have seen an average 73.4% decrease in hiring, versus only a 7.4% decrease across all job levels. Big tech companies have cut new grad hiring by more than 50% since 2019 and by 25% in 2024 alone. The average age of technical hires has increased by three years since 2021\. As one UC Berkeley CS professor put it: why hire an undergraduate when AI is cheaper and faster? 4.8% of recent college graduates could not find jobs in 2025\. 40% of white-collar job seekers in 2024 failed to secure even a single interview. High-paying positions over $96k hit decade-low hiring levels. Dario Amodei (Anthropic CEO) has said AI could eliminate half of all entry-level white-collar jobs within five years. DOGE launched in January 2025 with an explicit mandate to eliminate federal jobs through AI optimization.
+
+### **The Real Picture**
+* The Real Picture — Apr 2026 snapshot: AI has created more jobs than it has provably eliminated so far. In 2024, 119,900 AI-related jobs were created versus roughly 12,700 confirmed AI-related job losses. The net is positive on paper. But the jobs created require significantly higher education and skills than the jobs lost. 77% of AI jobs require a master's degree, 18% require a PhD. The jobs being destroyed are the accessible ones. Data entry, customer service, basic coding, transcription, copywriting. The jobs being created mostly sit behind graduate degree walls. The redistribution is real. So is the disruption. The smartest move for anyone in the current market is to work inside the AI ecosystem directly, not compete against it. That is exactly what platforms like Mercor, Handshake, and Outlier provide.
+
+<!-- END AI_JOBS_APPENDIX -->
+
 | KEY PEOPLE The Humans Behind the Revolution |
 | :---: |
 

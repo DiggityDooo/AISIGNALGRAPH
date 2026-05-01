@@ -45,7 +45,12 @@ body {
   pointer-events: none !important;
 }
 
-#sigma-container,
+#sigma-container {
+  width: 100%;
+  min-height: 400px;
+  background: transparent !important;
+}
+
 #sigma-container canvas {
   background: transparent !important;
 }

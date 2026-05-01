@@ -20,3 +20,5 @@ scikit-learn
 flasgger
 flask-limiter
 pytest
+gunicorn
+python-dotenv

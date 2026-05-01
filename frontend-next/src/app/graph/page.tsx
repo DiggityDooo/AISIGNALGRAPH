@@ -1,54 +1,68 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import TopNav from "@/components/ui/TopNav";
 import KineticText from "@/components/ui/KineticText";
 import { motion, AnimatePresence } from "framer-motion";
-import { useEffect, useState, useRef } from "react";
-import Script from "next/script";
+import { useEffect, useRef, useState } from "react";
+
+const GraphRuntime = dynamic(() => import("./GraphRuntime"), { ssr: false });
 
 export default function GraphPage() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [status, setStatus] = useState("Establishing Neural Link...");
   const [progress, setProgress] = useState(0);
   const [stats, setStats] = useState({ nodes: 0, edges: 0 });
-  const [scriptsReady, setScriptsReady] = useState(0);
+  const loadingTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const timer = setInterval(() => {
+    if (isLoaded) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
       setProgress((prev) => (prev < 90 ? prev + 1 : prev));
     }, 30);
 
-    fetch("/api/graph")
-      .then((res) => res.json())
-      .then((data) => {
-        setStats({
-          nodes: data.nodes.length,
-          edges: data.edges.length
-        });
-        setStatus("Matrix Synced. Vectorizing...");
-        setProgress(100);
-        // Wait a bit for the graph to actually build before hiding loading
-        setTimeout(() => setIsLoaded(true), 2000);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch graph:", err);
-        setStatus("Neural Link Interrupted.");
-      });
+    return () => window.clearInterval(timer);
+  }, [isLoaded]);
 
-    return () => clearInterval(timer);
+  useEffect(() => {
+    return () => {
+      if (loadingTimeoutRef.current !== null) {
+        window.clearTimeout(loadingTimeoutRef.current);
+      }
+    };
   }, []);
 
-  const handleScriptLoad = () => {
-    setScriptsReady(prev => prev + 1);
+  const settleOverlay = () => {
+    if (loadingTimeoutRef.current !== null) {
+      window.clearTimeout(loadingTimeoutRef.current);
+    }
+
+    loadingTimeoutRef.current = window.setTimeout(() => {
+      setIsLoaded(true);
+    }, 250);
+  };
+
+  const handleReady = ({ nodes, edges }: { nodes: number; edges: number }) => {
+    setStats({ nodes, edges });
+    setStatus("Matrix Synced. Vectorizing...");
+    setProgress(100);
+    settleOverlay();
+  };
+
+  const handleError = (error: unknown) => {
+    console.error("Gephi Lite: Runtime error.", error);
+    setStatus("Neural Link Interrupted.");
+    setProgress(100);
+    settleOverlay();
   };
 
   return (
     <div id="app-root" className="relative w-full h-screen bg-black overflow-hidden">
-      <Script src="/graphology.umd.min.js" strategy="beforeInteractive" />
-      <Script src="/graphology-layout-forceatlas2.bundle.js" strategy="beforeInteractive" />
-      <Script src="/sigma.min.js" strategy="beforeInteractive" />
-      <Script src="/graph.js" strategy="afterInteractive" />
       <link rel="stylesheet" href="/gephi_lite.css" />
+      <GraphRuntime onReady={handleReady} onError={handleError} />
 
       <TopNav />
 
@@ -138,7 +152,7 @@ export default function GraphPage() {
             <canvas id="signal-canvas" className="absolute inset-0 pointer-events-none z-10"></canvas>
             
             {/* Animated Node Visualizer Port */}
-            <div id="node-visualizer-container" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20">
+            <div id="node-visualizer-container" className="node-visualizer-container absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20">
                 <div className="neural-sphere">
                     <div className="sphere-core"></div>
                     <div className="sphere-orbit sphere-orbit--1"></div>
@@ -181,4 +195,3 @@ export default function GraphPage() {
     </div>
   );
 }
-

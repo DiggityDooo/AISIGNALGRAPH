@@ -1,142 +1,109 @@
 {% extends "base.html" %}
-{% block title %}Graph | AI Signal Graph{% endblock %}
+{% block title %}Graph | Gephi Lite AI{% endblock %}
 {% block extra_head %}
-  <meta name="csrf-token" content="{{ csrf_token() }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='futuristic.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='gephi_lite.css') }}">
 {% endblock %}
 {% block extra_scripts %}
-  <script src="{{ url_for('static', filename='vendor/d3.v7.min.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='vendor/3d-force-graph.min.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='shader.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='graph.js') }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/graphology.umd.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/graphology-layout-forceatlas2.bundle.js') }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/sigma.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='graph.js', v='20260430-9') }}" defer></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const rebuildBtn = document.getElementById('rebuild-button');
+    if (rebuildBtn) {
+      rebuildBtn.addEventListener('click', () => {
+        rebuildBtn.classList.add('is-loading');
+        rebuildBtn.textContent = 'REFRESHING...';
+        // The actual load logic is in graph.js, but we can wait for the graph to signal completion 
+        // or just timeout for visual feedback.
+        setTimeout(() => {
+          rebuildBtn.classList.remove('is-loading');
+          rebuildBtn.textContent = 'REBUILD';
+        }, 2000);
+      });
+    }
+  });
+</script>
 {% endblock %}
 {% block content %}
-  <div id="app-root" data-dataset-name="{{ overview.dataset_name }}" data-source-path="{{ overview.source_path }}">
-    <canvas id="bg-shader"></canvas>
-    <svg id="graph-svg" aria-label="AI Signal Graph"></svg>
-    <canvas id="node-canvas"></canvas>
-    <canvas id="signal-canvas"></canvas>
-    <div id="3d-graph-container" style="position: absolute; inset: 0; z-index: 1; display: none;"></div>
-
-    <div id="ui-overlay">
-      <header id="hud-top" class="glass-panel" style="border: none; border-bottom: var(--border-subtle); border-radius: 0;">
-        <span class="hud-title protocol-heading" style="color: var(--color-primary);">AISIGNALGRAPH // PROTOCOL</span>
-        <div class="hud-divider"></div>
-        <div class="hud-stats">
-          <span class="label">Nodes <span id="stat-nodes" style="color: var(--color-ink);">{{ overview.stats.entities + overview.stats.stories }}</span></span>
-          <span class="label">Edges <span id="stat-edges" style="color: var(--color-ink);">{{ overview.stats.links }}</span></span>
-          <span class="label">Active <span id="stat-signals" style="color: var(--color-primary);">0</span></span>
-          <span class="label">Source <span id="stat-dataset" style="color: var(--color-muted);">{{ overview.dataset_name }}</span></span>
-        </div>
-        <div class="hud-divider"></div>
-        <div class="hud-controls">
-          <button id="mode-3d-toggle" class="btn-hud" type="button">3D MODE</button>
-          <button id="rebuild-button" class="btn-hud" type="button">⟳ REBUILD</button>
-          <button id="simulation-toggle" class="btn-hud" type="button">⏸ PAUSE</button>
-          <button id="fit-button" class="btn-hud" type="button">⊡ FIT</button>
-        </div>
-      </header>
-
-      <aside id="hud-left" class="glass-panel" style="border: none; border-right: var(--border-subtle); border-radius: 0;">
-        <div class="hud-block">
-          <div class="hud-field">
-            <span class="label">Search</span>
-            <input id="graph-search" type="search" placeholder="Find a story, lab, model, or risk">
-          </div>
-
-          <div class="hud-field">
-            <span class="label">Lens</span>
-            <select id="graph-lens">
-              <option value="global">Global graph</option>
-              <option value="chronological">Chronological</option>
-              <option value="signal">High signal</option>
-              <option value="local">Local graph</option>
-              <option value="orphans">Orphans</option>
-              <option value="clusters">Clusters</option>
-            </select>
-          </div>
-
-          <div class="hud-field">
-            <span class="label">Sort</span>
-            <select id="graph-sort">
-              <option value="signal">Best signal</option>
-              <option value="connected">Most connected</option>
-              <option value="newest">Newest</option>
-              <option value="oldest">Oldest</option>
-              <option value="alphabetical">A-Z</option>
-            </select>
-          </div>
-
-          <div class="hud-filter-grid">
-            <span class="label">Node types</span>
-            <div id="node-type-filters" class="hud-checklist"></div>
-          </div>
-
-          <div class="hud-filter-grid">
-            <span class="label">Relations</span>
-            <div id="edge-type-filters" class="hud-checklist"></div>
-          </div>
-
-          <div class="hud-chip-row">
-            <span class="hud-chip">Stories</span>
-            <span class="hud-chip">Labs</span>
-            <span class="hud-chip">Models</span>
-            <span class="hud-chip">Risks</span>
-          </div>
-        </div>
-      </aside>
-
-      <aside id="hud-right" class="glass-panel" style="border: none; border-left: var(--border-subtle); border-radius: 0;" aria-live="polite">
-        <div class="hud-detail-title">
-          <span id="detail-badge" class="hud-badge">Graph</span>
-          <h2 id="detail-title" class="neon-cyan">AI Signal Graph</h2>
-          <button id="detail-close" class="btn-hud hud-right-close" type="button">✕</button>
-        </div>
-        <div id="detail-subtitle" class="label">Select a node to inspect it.</div>
-        <div id="detail-copy" class="hud-detail-copy" style="margin-top: 14px;">
-          The graph combines stories, labs, models, people, and risks into one animated field.
-        </div>
-        <div id="detail-meta" class="hud-meta-list" style="margin-top: 16px;"></div>
-        <div id="detail-tags" class="hud-story-tags" style="margin-top: 14px;"></div>
-        <div id="detail-entities" class="hud-entity-list"></div>
-        <div id="detail-related" class="hud-related-list" style="margin-top: 16px;"></div>
-        <div id="detail-actions" class="hud-actions" style="margin-top: 16px;">
-          <a id="detail-link" class="btn-hud hud-link" href="{{ url_for('stories') }}">OPEN RECORD</a>
-        </div>
-      </aside>
-
-      <footer id="hud-bottom" class="glass-panel" style="border: none; border-top: var(--border-subtle); border-radius: 0;">
-        <div class="hud-bottom-group hud-timeline">
-          <div class="hud-bottom-group--stack" style="flex: 1 1 auto;">
-            <span class="label">Year filter</span>
-            <input id="year-filter" type="range" min="2020" max="2026" value="2026" step="1">
-          </div>
-          <div class="hud-year-readout">
-            <span class="label">Visible through</span>
-            <div id="year-value" class="neon-cyan">2026</div>
-          </div>
-        </div>
-
-        <div class="hud-divider"></div>
-
-        <div class="hud-bottom-group">
-          <div class="hud-bottom-group--stack">
-            <span class="label">Signal speed</span>
-            <input id="signal-speed" type="range" min="0.5" max="3" value="1" step="0.1">
-          </div>
-          <div class="hud-year-readout">
-            <span class="label">Rate</span>
-            <div id="signal-speed-value" class="neon-green">1.0x</div>
-          </div>
-        </div>
-      </footer>
-
-      <div class="hud-mobile-dock">
-        <button class="btn-hud hud-mobile-button" id="filters-toggle" type="button" aria-controls="hud-left" aria-expanded="false">FILTERS</button>
-        <button class="btn-hud hud-mobile-button" id="inspector-toggle" type="button" aria-controls="hud-right" aria-expanded="false">DOSSIER</button>
-      </div>
-
-      <div class="hud-canvas-hint">Drag nodes, pan, zoom, inspect stories.</div>
+<div id="app-root" data-dataset-name="{{ overview.dataset_name }}" data-source-path="{{ overview.source_path }}">
+  <canvas id="flow-canvas-bg" aria-hidden="true"></canvas>
+  <header id="hud-top" class="glass-panel" style="border: none; border-bottom: var(--border-subtle); border-radius: 0; background: rgba(5,5,5,0.8);" data-pointer-reactive>
+    <div style="display: flex; align-items: center; gap: 40px;">
+      <a class="brand protocol-heading" href="{{ url_for('home') }}" style="font-size: 1.2rem; color: var(--color-cyan); text-decoration: none;">AISIGNALGRAPH</a>
+      <nav class="app-nav mono" style="font-size: 0.8rem; letter-spacing: 0.1em;">
+        <a href="{{ url_for('home') }}" class="nav-link">HOME</a>
+        <a href="{{ url_for('dashboard') }}" class="nav-link active">GRAPH</a>
+        <a href="{{ url_for('stories') }}" class="nav-link">STORIES</a>
+        <a href="{{ url_for('entities') }}" class="nav-link">ENTITIES</a>
+      </nav>
     </div>
-  </div>
+    <div class="top-stats mono" style="font-size: 0.75rem;">
+      <span>NODES: <strong id="stat-nodes" class="neon-cyan">0</strong></span>
+      <span>EDGES: <strong id="stat-edges">0</strong></span>
+      <span>SIGNALS: <strong id="stat-signals" class="neon-purple">0</strong></span>
+      <div style="margin-left: 20px; display: flex; gap: 10px;">
+        <button id="rebuild-button" class="btn-premium" style="min-height: 28px; padding: 0 12px; font-size: 0.7rem;" data-magnetic>REBUILD</button>
+        <button id="fit-button" class="btn-premium btn-premium--outline" style="min-height: 28px; padding: 0 12px; font-size: 0.7rem;" data-magnetic>FIT ALL</button>
+      </div>
+    </div>
+  </header>
+
+  <aside id="hud-left" data-pointer-reactive>
+    <div class="hud-block">
+      <div class="hud-field">
+        <label>SEARCH</label>
+        <input id="graph-search" type="search" placeholder="Find node...">
+      </div>
+      <div class="hud-field">
+        <label>LENS</label>
+        <select id="graph-lens">
+          <option value="global">Global view</option>
+          <option value="local">Local neighborhood</option>
+        </select>
+      </div>
+    </div>
+    <div class="hud-block">
+      <label>NODE FILTERS</label>
+      <div id="node-type-filters" class="node-type-filters"></div>
+    </div>
+  </aside>
+
+  <main id="sigma-container">
+    <canvas id="signal-canvas"></canvas>
+    <!-- Moved: Central Neural Visualizer -->
+    <div id="node-visualizer-container" class="node-visualizer-container">
+        <div class="neural-sphere">
+            <div class="sphere-core"></div>
+            <div class="sphere-orbit sphere-orbit--1"></div>
+            <div class="sphere-orbit sphere-orbit--2"></div>
+            <div class="sphere-orbit sphere-orbit--3"></div>
+        </div>
+    </div>
+  </main>
+
+  <aside id="hud-right" data-pointer-reactive>
+    <div id="detail-pane">
+      <h3 id="detail-title">Select a node</h3>
+      <p id="detail-subtitle" class="detail-subtitle">Select any node on the graph to view detailed intelligence.</p>
+      <div id="detail-content"></div>
+    </div>
+  </aside>
+
+  <footer id="hud-bottom" data-pointer-reactive>
+    <div class="bottom-controls">
+      <div class="control-group">
+        <label>TIMELINE FILTER</label>
+        <input id="year-filter" type="range" min="2020" max="2026" value="2026">
+      </div>
+      <div class="year-value" id="year-value">2026</div>
+      <div class="control-group">
+        <label>SIGNAL SPEED</label>
+        <input id="signal-speed" type="range" min="0.5" max="3" value="1" step="0.1">
+      </div>
+    </div>
+  </footer>
+</div>
 {% endblock %}

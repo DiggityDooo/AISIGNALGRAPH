@@ -1,89 +1,80 @@
 {% extends "base.html" %}
-{% block title %}AISIGNALGRAPH | Intelligence Hub{% endblock %}
+{% block title %}AISIGNALGRAPH | Protocol: Vectorized Intelligence{% endblock %}
 
 {% block extra_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='premium.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='premium.css', v='20260430-hero3') }}">
 {% endblock %}
 
 {% block content %}
   {% set stats = overview.stats if overview else {} %}
   {% set featured_stories = overview.featured_stories if overview else [] %}
   {% set hot_entities = overview.hot_entities if overview else [] %}
-
-  {# ── HERO ────────────────────────────────────────── #}
-  <section class="hero hero--zero-day">
-    <div class="hero-inner">
-
-      {# Left: headline + CTA + stats #}
+  {% set lead_story = featured_stories[0] if featured_stories else None %}
+  <section class="hero hero--zero-day" data-pointer-reactive>
+    <canvas id="flow-canvas"></canvas>
+    <div class="hero-grid page">
       <div class="hero-content">
-        <span class="eyebrow" data-animate>Zero-Day Access // Signal Status: Active</span>
-        <h1 class="hero-title" data-animate>The Intelligence Hub for the AI Era</h1>
+        <p class="eyebrow mono neon-cyan" data-animate>ZERO-DAY ACCESS // VECTOR STATUS: ACTIVE</p>
+        <h1 class="hero-title" data-animate>THE INTELLIGENCE HUB FOR THE AI ERA</h1>
         <p class="hero-subtitle" data-animate>
-          Monitor labs, models, safety pressures, and strategic pivots through a live
-          neural archive calibrated for high-signal surveillance.
+          Track labs, models, safety pressure, and strategic pivots through a live neural archive
+          built for high-signal operational awareness.
         </p>
         <div class="hero-actions" data-animate>
-          <a href="{{ url_for('dashboard') }}" class="btn-premium">Enter Neural Graph</a>
-          <a href="{{ url_for('stories') }}" class="btn-premium btn-premium--outline">Browse Archive</a>
+          <a href="{{ url_for('dashboard') }}" class="btn-premium" data-magnetic>ENTER NEURAL SIGNAL</a>
+          <a href="#matrix" class="btn-premium btn-premium--outline" data-magnetic>REVIEW MATRIX</a>
         </div>
-
         <div class="hero-stats" data-animate>
-          <div class="hero-stat">
+          <div class="hero-stat glass-panel glass-panel--cyan" data-tilt data-pointer-reactive>
             <span class="label">Indexed nodes</span>
-            <strong>{{ (stats.entities or 0) + (stats.stories or 0) }}</strong>
+            <strong data-countup="{{ (stats.entities or 0) + (stats.stories or 0) }}">{{ (stats.entities or 0) + (stats.stories or 0) }}</strong>
           </div>
-          <div class="hero-stat">
+          <div class="hero-stat glass-panel" data-tilt data-pointer-reactive>
             <span class="label">Edge lattice</span>
-            <strong>{{ stats.links or 0 }}</strong>
+            <strong data-countup="{{ stats.links or 0 }}">{{ stats.links or 0 }}</strong>
           </div>
-          <div class="hero-stat">
-            <span class="label">Stories</span>
-            <strong>{{ stats.stories or 0 }}</strong>
+          <div class="hero-stat glass-panel" data-tilt data-pointer-reactive>
+            <span class="label">Active signals</span>
+            <strong data-countup="{{ stats.active_signals or 0 }}">{{ stats.active_signals or 0 }}</strong>
           </div>
-          <div class="hero-stat">
-            <span class="label">Entities</span>
-            <strong>{{ stats.entities or 0 }}</strong>
+          <div class="hero-stat glass-panel" data-tilt data-pointer-reactive>
+            <span class="label">Dataset</span>
+            <strong>{{ overview.dataset_name if overview else "offline" }}</strong>
           </div>
         </div>
       </div>
 
-      {# Right: live story feed #}
-      <div class="hero-feed" data-animate>
-        <div class="hero-feed-list">
-          <div class="hero-feed-header-row">
-            <h2>Recent Intelligence</h2>
-            <a href="{{ url_for('stories') }}" class="section-link">View All</a>
+      <div class="hero-core-shell" data-animate>
+        <div class="hero-core-status glass-panel">
+          <span class="label">Visual protocol</span>
+          <strong data-spline-status>tracking signal flow</strong>
+        </div>
+        <div class="hero-core-frame glass-panel glass-panel--cyan" data-spline-shell data-pointer-reactive>
+          <div class="hero-core-wave" data-spline-wave aria-hidden="true"></div>
+          <div class="hero-editorial">
+            <span class="mono hero-editorial__tag">protocol brief 03</span>
+            <h3>Automated Intelligence Touchpoints</h3>
+            <p>Operate from a single surveillance view across labs, model families, policy pressure, and risk acceleration.</p>
           </div>
-          {% for story in featured_stories[:5] %}
-            <a class="hero-feed-item" href="{{ url_for('story_detail', story_id=story.id) }}">
-              <span class="hero-feed-index">{{ "%02d"|format(loop.index) }}</span>
-              <div>
-                <div class="hero-feed-meta">
-                  <span class="hero-feed-kind">{{ story.kind }}</span>
-                  <span class="hero-feed-date">{{ story.event_date }}</span>
-                </div>
-                <div class="hero-feed-title">{{ story.title }}</div>
-                <div class="hero-feed-excerpt">{{ story.excerpt }}</div>
+          <article class="hero-cover-card glass-panel" data-pointer-reactive>
+            <div class="hero-cover-card__visual"></div>
+            <div class="hero-cover-card__body">
+              <span class="mono hero-cover-card__kicker">Protocol digest</span>
+              <div class="hero-cover-card__meta mono">
+                <span class="hero-cover-card__channel">protocol</span>
+                <span class="hero-cover-card__stamp">live feed</span>
               </div>
-            </a>
-          {% else %}
-            <div class="hero-feed-item">
-              <span class="hero-feed-index">--</span>
-              <div>
-                <div class="hero-feed-meta">
-                  <span class="hero-feed-kind">status</span>
-                  <span class="hero-feed-date">offline</span>
-                </div>
-                <div class="hero-feed-title">Archive feed unavailable</div>
-                <div class="hero-feed-excerpt">Data services are starting up. The graph dashboard is still accessible.</div>
-              </div>
+              <h3>{{ lead_story.title if lead_story else "Live Archive Cover" }}</h3>
+              <p>{{ lead_story.excerpt if lead_story else "Background intelligence panels can now use Gemini-generated visuals directly from the local asset set." }}</p>
+              <a href="{{ url_for('story_detail', story_id=lead_story.id) if lead_story else url_for('stories') }}" class="hero-cover-card__link">OPEN BRIEF</a>
+              <div class="hero-cover-card__progress" aria-hidden="true"><span></span></div>
             </div>
-          {% endfor %}
+          </article>
+          <div class="hero-core-fallback-grid" aria-hidden="true"></div>
         </div>
       </div>
     </div>
 
-    {# Ticker #}
     <div class="ticker-shell" aria-label="Protocol stats">
       <div class="ticker-track">
         <span>nodes {{ (stats.entities or 0) + (stats.stories or 0) }}</span>
@@ -102,81 +93,78 @@
     </div>
   </section>
 
-  {# ── MATRIX FEATURES ──────────────────────────────── #}
   <section id="matrix" class="matrix-grid matrix-grid--intelligence">
-    <article class="matrix-card glass-panel" data-animate>
-      <span class="eyebrow">01 // Neural History</span>
+    <article class="matrix-card glass-panel" data-animate data-tilt data-pointer-reactive>
+      <p class="mono neon-purple">01 // NEURAL HISTORY</p>
       <h3>Chronological Mapping</h3>
       <p>Traverse model releases, board crises, infrastructure shocks, and labor signals from the first breakout cycle through the present archive.</p>
     </article>
-    <article class="matrix-card glass-panel" data-animate>
-      <span class="eyebrow">02 // Lab Tracking</span>
+    <article class="matrix-card glass-panel" data-animate data-tilt data-pointer-reactive>
+      <p class="mono neon-cyan">02 // LAB TRACKING</p>
       <h3>Frontier Surveillance</h3>
       <p>Maintain live dossiers on labs, platforms, and compute brokers shaping capability concentration across the model economy.</p>
     </article>
-    <article class="matrix-card glass-panel" data-animate>
-      <span class="eyebrow" style="color: var(--c-green);">03 // Alignment Risk</span>
+    <article class="matrix-card glass-panel" data-animate data-tilt data-pointer-reactive>
+      <p class="mono neon-emerald">03 // ALIGNMENT RISK</p>
       <h3>Vectorized Threats</h3>
       <p>Track where deployment velocity, regulation pressure, and public-risk narratives converge into actionable intelligence signals.</p>
     </article>
   </section>
 
-  {# ── RECENT STORIES ───────────────────────────────── #}
   <section class="protocol-section">
-    <div class="page">
+    <div class="page protocol-preview">
       <div class="section-heading" data-animate>
         <div>
-          <span class="eyebrow">Protocol preview</span>
+          <p class="eyebrow neon-cyan">Protocol preview</p>
           <h2 class="protocol-heading">Recent Intelligence Bursts</h2>
         </div>
-        <a href="{{ url_for('stories') }}" class="section-link">Open Archive</a>
+        <a href="{{ url_for('stories') }}" class="section-link mono">OPEN ARCHIVE</a>
       </div>
       <div class="archive-preview-grid">
         {% for story in featured_stories[:3] %}
-          <article class="archive-preview-card glass-panel" data-animate>
-            <div class="archive-preview-meta">
-              <span>{{ story.kind }}</span>
+          <article class="archive-preview-card glass-panel" data-animate data-tilt data-pointer-reactive>
+            <div class="archive-preview-meta mono">
+              <span>{{ story.kind|upper }}</span>
               <span>{{ story.event_date }}</span>
             </div>
             <h3><a href="{{ url_for('story_detail', story_id=story.id) }}">{{ story.title }}</a></h3>
             <p>{{ story.excerpt }}</p>
           </article>
         {% else %}
-          <article class="archive-preview-card glass-panel" data-animate>
-            <div class="archive-preview-meta">
-              <span>status</span>
-              <span>offline</span>
+          <article class="archive-preview-card glass-panel" data-animate data-tilt data-pointer-reactive>
+            <div class="archive-preview-meta mono">
+              <span>STATUS</span>
+              <span>OFFLINE</span>
             </div>
             <h3>Archive feed unavailable</h3>
-            <p>The landing page loaded without graph telemetry. The dashboard can still be accessed when data services recover.</p>
+            <p>The landing page loaded without graph telemetry. The dashboard can still be accessed when the data services recover.</p>
           </article>
         {% endfor %}
       </div>
     </div>
   </section>
 
-  {# ── AUTHORITY / HOT ENTITIES ─────────────────────── #}
   <section class="protocol-section protocol-section--muted">
     <div class="page authority-layout">
       <div class="authority-copy" data-animate>
-        <span class="eyebrow" style="color: var(--c-amber);">Authority Layer</span>
+        <p class="eyebrow neon-purple">Authority layer</p>
         <h2 class="protocol-heading">Primary Actors in the Current Field</h2>
         <p>
           The archive surfaces the entities with the highest story density first, exposing which labs,
           model families, and risk vectors currently dominate the network.
         </p>
-        <a href="{{ url_for('entities') }}" class="btn-premium btn-premium--outline">Access Dossiers</a>
+        <a href="{{ url_for('entities') }}" class="btn-premium btn-premium--outline" data-magnetic>ACCESS DOSSIERS</a>
       </div>
       <div class="authority-stack">
         {% for entity in hot_entities[:5] %}
-          <a class="authority-card glass-panel" href="{{ url_for('entity_detail', entity_id=entity.id) }}" data-animate>
+          <a class="authority-card glass-panel" href="{{ url_for('entity_detail', entity_id=entity.id) }}" data-animate data-tilt data-pointer-reactive>
             <div>
-              <span class="label">Entity {{ "%02d"|format(loop.index) }}</span>
+              <span class="label">Entity {{ loop.index }}</span>
               <h3>{{ entity.name }}</h3>
               <p>{{ entity.excerpt }}</p>
             </div>
-            <div class="authority-metrics">
-              <span>{{ entity.entity_type }}</span>
+            <div class="authority-metrics mono">
+              <span>{{ entity.entity_type|upper }}</span>
               <span>{{ entity.story_count }} refs</span>
             </div>
           </a>
@@ -187,24 +175,30 @@
 {% endblock %}
 
 {% block extra_scripts %}
+  <script src="{{ url_for('static', filename='flow_field.js', v='20260430-hero4') }}"></script>
+  <script src="{{ url_for('static', filename='spline_handler.js', v='20260430-hero4') }}" defer></script>
   <script>
-    // Scroll-aware nav
-    const topbar = document.querySelector('.topbar');
-    if (topbar) {
-      window.addEventListener('scroll', () => {
-        topbar.classList.toggle('is-scrolled', window.scrollY > 20);
-      }, { passive: true });
-    }
-
-    // Intersection observer for animate-in
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('is-visible');
-        }
-      });
-    }, { threshold: 0.1 });
-
-    document.querySelectorAll('[data-animate]').forEach((el) => observer.observe(el));
+    window.__heroStories = [
+      {% for story in featured_stories %}
+      {
+        title: {{ story.title|tojson }},
+        excerpt: {{ story.excerpt|tojson }},
+        url: {{ url_for('story_detail', story_id=story.id)|tojson }},
+        kind: {{ (story.kind or 'news')|tojson }},
+        stamp: {{ (story.event_date or 'live')|tojson }}
+      }{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ];
+    window.__heroEntities = [
+      {% for entity in hot_entities %}
+      {
+        title: {{ entity.name|tojson }},
+        excerpt: {{ entity.excerpt|tojson }},
+        url: {{ url_for('entity_detail', entity_id=entity.id)|tojson }},
+        kind: "entity",
+        stamp: {{ ((entity.entity_type or 'entity') ~ ' // ' ~ (entity.story_count|string) ~ ' refs')|tojson }}
+      }{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ];
   </script>
 {% endblock %}

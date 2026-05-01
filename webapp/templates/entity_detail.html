@@ -1,24 +1,28 @@
 {% extends "base.html" %}
 {% block title %}{{ entity.record.name }} | AISIGNALGRAPH{% endblock %}
 
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='premium.css') }}">
+{% endblock %}
+
 {% block content %}
   <section class="detail-shell">
     <div class="page">
-      <div class="detail-hero glass-panel">
+      <div class="detail-hero glass-panel" data-animate data-pointer-reactive>
         <div>
-          <span class="eyebrow" style="color: var(--c-amber);">{{ entity.record.entity_type }}</span>
+          <p class="eyebrow neon-purple">{{ entity.record.entity_type|upper }}</p>
           <h1 class="protocol-heading">{{ entity.record.name }}</h1>
           <p class="detail-hero__copy">{{ entity.record.description }}</p>
         </div>
-        <div class="detail-hero__meta">
-          <span class="redacted">{{ entity.record.id }}</span>
-          <span>{{ entity.record.story_count }} stories</span>
-          <span>{{ entity.record.group_name }}</span>
+        <div class="detail-hero__meta mono">
+          <span class="redacted">{{ entity.record.id|upper }}</span>
+          <span>{{ entity.record.story_count }} STORIES</span>
+          <span>{{ entity.record.group_name|upper }}</span>
         </div>
       </div>
 
       <div class="detail-layout detail-layout--premium">
-        <aside class="detail-sidebar glass-panel">
+        <aside class="detail-sidebar glass-panel" data-animate data-pointer-reactive>
           <div class="sidebar-block">
             <h2>Profile</h2>
             <p>{{ entity.record.description }}</p>
@@ -42,19 +46,19 @@
           {% endif %}
         </aside>
 
-        <article class="detail-content glass-panel">
+        <article class="detail-content" data-animate>
           <div class="section-heading">
             <div>
-              <span class="eyebrow">Connected Stories</span>
+              <p class="eyebrow neon-cyan">Connected stories</p>
               <h2 class="protocol-heading">Where This Actor Surfaces</h2>
             </div>
           </div>
           <div class="detail-story-stack">
             {% for story in entity.stories %}
-              <article class="archive-card glass-panel">
-                <div class="archive-card__meta">
-                  <span>{{ story.kind }}</span>
-                  <span>{{ story.status }}</span>
+              <article class="archive-card archive-card--story glass-panel" data-animate data-tilt data-pointer-reactive>
+                <div class="archive-card__meta mono">
+                  <span>{{ story.kind|upper }}</span>
+                  <span>{{ story.status|upper }}</span>
                   <span>{{ story.event_date }}</span>
                 </div>
                 <h3><a href="{{ url_for('story_detail', story_id=story.id) }}">{{ story.title }}</a></h3>

@@ -9,12 +9,23 @@
     {% block extra_head %}{% endblock %}
   </head>
   <body class="{{ body_class|default('') }}">
-    <div id="terminal-loader" style="position: fixed; inset: 0; background: var(--c-bg); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; color: var(--c-cyan); pointer-events: none; transition: opacity 0.45s ease; font-size: 0.78rem; letter-spacing: 0.14em;">
-      <div id="loader-text">INITIALIZING AISIGNALGRAPH...</div>
+    {% if not fullscreen_shell %}
+      <div class="site-chrome" aria-hidden="true">
+        <div class="site-progress">
+          <span data-scroll-progress></span>
+        </div>
+        <div class="ambient-orb ambient-orb--primary" data-ambient-orb></div>
+        <div class="ambient-orb ambient-orb--secondary" data-ambient-orb></div>
+      </div>
+    {% endif %}
+
+    <div id="terminal-loader" style="position: fixed; inset: 0; background: var(--color-bg, #050505); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; color: var(--color-cyan, #8ce8ff); pointer-events: none; transition: opacity 0.5s ease; font-size: 0.78rem; letter-spacing: 0.14em;">
+        <div id="loader-text">INITIALIZING AISIGNALGRAPH PROTOCOL...</div>
     </div>
+
     <div class="app-shell{% if fullscreen_shell %} app-shell--fullscreen{% endif %}">
       {% if not fullscreen_shell %}
-        <header class="topbar" id="site-topbar">
+        <header class="topbar glass-panel" style="border: none; border-bottom: var(--border-subtle); border-radius: 0;" data-pointer-reactive id="site-topbar">
           <div class="topbar__inner">
             <div class="brand-block">
               <a class="brand" href="{{ url_for('home') }}">AISIGNALGRAPH</a>
@@ -46,36 +57,50 @@
       </main>
     </div>
 
+    <script src="{{ url_for('static', filename='site-effects.js', v='20260430-wow1') }}" defer></script>
     {% block extra_scripts %}{% endblock %}
 
     <script>
-      window.addEventListener('load', () => {
-        const loader = document.getElementById('terminal-loader');
-        const text   = document.getElementById('loader-text');
-        const phrases = [
-          "ESTABLISHING SECURE CONNECTION...",
-          "LOADING GRAPH TOPOLOGY...",
-          "PROTOCOL READY."
-        ];
-        let p = 0;
-        const interval = setInterval(() => {
-          if (p < phrases.length) {
-            text.textContent = phrases[p++];
-          } else {
-            clearInterval(interval);
-            loader.style.opacity = '0';
-            setTimeout(() => loader.remove(), 450);
-          }
-        }, 280);
-      });
+        // Terminal Loader Animation
+        window.addEventListener('load', () => {
+            const loader = document.getElementById('terminal-loader');
+            const text = document.getElementById('loader-text');
+            const phrases = [
+                "ESTABLISHING SECURE CONNECTION...",
+                "DECRYPTING NEURAL VECTORS...",
+                "LOADING GRAPH TOPOLOGY...",
+                "PROTOCOL READY."
+            ];
+            let p = 0;
+            const interval = setInterval(() => {
+                if (p < phrases.length) {
+                    text.textContent = phrases[p++];
+                } else {
+                    clearInterval(interval);
+                    loader.style.opacity = '0';
+                    setTimeout(() => loader.remove(), 500);
+                }
+            }, 300);
+        });
 
-      // Scroll-aware nav (works on all pages)
-      const topbar = document.getElementById('site-topbar');
-      if (topbar) {
-        window.addEventListener('scroll', () => {
-          topbar.classList.toggle('is-scrolled', window.scrollY > 12);
-        }, { passive: true });
-      }
+        // Scroll-aware nav
+        const topbar = document.getElementById('site-topbar');
+        if (topbar) {
+            window.addEventListener('scroll', () => {
+                topbar.classList.toggle('is-scrolled', window.scrollY > 12);
+            }, { passive: true });
+        }
+
+        // Global Search Shortcut (/)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                const searchInput = document.querySelector('input[type="search"], #graph-search');
+                if (searchInput) {
+                    searchInput.focus();
+                }
+            }
+        });
     </script>
 
     {% if not fullscreen_shell %}

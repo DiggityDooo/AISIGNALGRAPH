@@ -7,4 +7,6 @@ data/*.db
 logs/
 server_start.log
 *.log
+gephi-lite/
+**/node_modules/
 .DS_Store

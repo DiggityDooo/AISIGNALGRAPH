@@ -54,6 +54,7 @@ export default function EntitiesPage() {
                 title={entity.type}
                 value={entity.name}
                 description={entity.excerpt}
+                href={`/entities/${entity.id}`}
                 className="w-full aspect-square"
               />
             </motion.div>

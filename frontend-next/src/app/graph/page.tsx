@@ -44,10 +44,10 @@ export default function GraphPage() {
 
   return (
     <div id="app-root" className="relative w-full h-screen bg-black overflow-hidden">
-      <Script src="/graphology.umd.min.js" strategy="afterInteractive" onLoad={handleScriptLoad} />
-      <Script src="/graphology-layout-forceatlas2.bundle.js" strategy="afterInteractive" onLoad={handleScriptLoad} />
-      <Script src="/sigma.min.js" strategy="afterInteractive" onLoad={handleScriptLoad} />
-      <Script src="/graph.js" strategy="afterInteractive" onLoad={handleScriptLoad} />
+      <Script src="/graphology.umd.min.js" strategy="beforeInteractive" />
+      <Script src="/graphology-layout-forceatlas2.bundle.js" strategy="beforeInteractive" />
+      <Script src="/sigma.min.js" strategy="beforeInteractive" />
+      <Script src="/graph.js" strategy="afterInteractive" />
       <link rel="stylesheet" href="/gephi_lite.css" />
 
       <TopNav />

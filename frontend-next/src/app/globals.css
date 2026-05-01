@@ -44,3 +44,8 @@ body {
   visibility: hidden !important;
   pointer-events: none !important;
 }
+
+#sigma-container,
+#sigma-container canvas {
+  background: transparent !important;
+}

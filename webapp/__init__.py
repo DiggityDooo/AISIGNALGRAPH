@@ -280,6 +280,50 @@ def create_app() -> Flask:
         payload["status"] = "ok"
         return jsonify(payload)
 
+    @app.get("/api/stories")
+    def api_stories():
+        store, _jobs = require_services()
+        q = request.args.get("q", "")
+        kind = request.args.get("kind")
+        tag = request.args.get("tag")
+        status = request.args.get("status")
+        
+        results = store.list_stories(q=q, kind=kind or None, tag=tag or None, status=status or None)
+        return jsonify([{
+            "id": s.id,
+            "title": s.title,
+            "kind": s.kind,
+            "status": s.status,
+            "event_date": s.event_date,
+            "summary": s.summary,
+            "excerpt": s.excerpt,
+            "tags": s.tags
+        } for s in results])
+
+    @app.get("/api/entities")
+    def api_entities():
+        store, _jobs = require_services()
+        q = request.args.get("q", "")
+        entity_type = request.args.get("type")
+        
+        items = store.list_entities(q=q, entity_type=entity_type or None)
+        return jsonify([{
+            "id": e.id,
+            "name": e.name,
+            "type": e.entity_type,
+            "group": e.group_name,
+            "story_count": e.story_count,
+            "excerpt": e.excerpt
+        } for e in items])
+
+    @app.get("/api/filters")
+    def api_filters():
+        store, _jobs = require_services()
+        return jsonify({
+            "stories": store.get_story_filters(),
+            "entities": store.get_entity_filters()
+        })
+
     @app.get("/api/story/<story_id>")
     def api_story(story_id: str):
         _validate_identifier(story_id)

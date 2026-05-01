@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #050202; /* Deepest near-black crimson */
+  --color-foreground: #F3E8E8; /* Off-white with a hint of warmth */
+  
+  --color-void: #0A0000;
+  --color-primary: #FF2A4D; /* Vivid Crimson */
+  --color-secondary: #800015; /* Deep Blood Red */
+  --color-muted: #A38C8F; /* Desaturated red-grey */
+
+  --font-display: var(--font-display), sans-serif;
+  --font-mono: var(--font-mono), monospace;
+}
+
+:root {
+  /* Lenis smooth scrolling requires this */
+  scrollbar-width: none;
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+body {
+  background-color: var(--color-background);
+  background-image: radial-gradient(circle at center, var(--color-void) 0%, var(--color-background) 100%);
+  color: var(--color-foreground);
+  font-family: var(--font-mono);
+  overflow-x: hidden;
+  cursor: none; /* We will use a custom cursor */
+}
+
+/* Glassmorphism Panel Utility */
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/5 backdrop-blur-md border border-primary/20 rounded-lg shadow-[0_0_15px_rgba(255,42,77,0.1)];
+  }
+}
+
+/* Hide Next.js Dev Indicators */
+#nextjs-portal, .nextjs-portal, [data-nextjs-toast-errors-parent], [data-nextjs-static-indicator] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

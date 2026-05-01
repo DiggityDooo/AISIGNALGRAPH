@@ -147,16 +147,16 @@ def create_app() -> Flask:
             abort(503)
         return graph_store, job_manager
 
-    @app.get("/hub")
-    def intelligence_hub():
-        return app.send_static_file("hub/index.html")
-
-    @app.get("/_next/<path:path>")
-    def next_static(path):
-        return app.send_static_file(f"hub/_next/{path}")
-
     @app.get("/")
     def home():
+        return app.send_static_file("hub/index.html")
+
+    @app.get("/hub")
+    def intelligence_hub():
+        return redirect(url_for("home"))
+
+    @app.get("/v1")
+    def legacy_home():
         overview = None
         if graph_store is not None:
             try:
@@ -165,8 +165,16 @@ def create_app() -> Flask:
                 app.logger.exception("Failed to load overview data for home route.")
         return render_template("home.html", overview=overview)
 
+    @app.get("/_next/<path:path>")
+    def next_static(path):
+        return app.send_static_file(f"hub/_next/{path}")
+
     @app.get("/graph")
     def dashboard():
+        return app.send_static_file("hub/graph.html")
+
+    @app.get("/v1/graph")
+    def legacy_graph():
         store, _jobs = require_services()
         overview = store.get_dashboard_data()
         return render_template("dashboard.html", overview=overview, fullscreen_shell=True, body_class="body-graph-shell")
@@ -183,6 +191,10 @@ def create_app() -> Flask:
 
     @app.get("/stories")
     def stories():
+        return app.send_static_file("hub/stories.html")
+
+    @app.get("/v1/stories")
+    def legacy_stories():
         store, _jobs = require_services()
         q = _normalize_query_value(request.args.get("q", ""), max_length=160)
         kind = _normalize_query_value(request.args.get("kind", ""), max_length=64)
@@ -202,6 +214,27 @@ def create_app() -> Flask:
             active={"q": q, "kind": kind, "tag": tag, "status": status},
         )
 
+    @app.get("/entities")
+    def entities():
+        return app.send_static_file("hub/entities.html")
+
+    @app.get("/v1/entities")
+    def legacy_entities():
+        store, _jobs = require_services()
+        q = _normalize_query_value(request.args.get("q", ""), max_length=160)
+        entity_type = _normalize_query_value(request.args.get("type", ""), max_length=32)
+
+        filters = store.get_entity_filters()
+        _validate_choice(entity_type, filters["types"])
+
+        items = store.list_entities(q=q, entity_type=entity_type or None)
+        return render_template(
+            "entities.html",
+            entities=items,
+            filters=filters,
+            active={"q": q, "type": entity_type},
+        )
+
     @app.get("/stories/<story_id>")
     def story_detail(story_id: str):
         _validate_identifier(story_id)
@@ -210,32 +243,6 @@ def create_app() -> Flask:
         if story is None:
             abort(404)
         return render_template("story_detail.html", story=story)
-
-    @app.get("/entities")
-    def entities():
-        store, _jobs = require_services()
-        q = _normalize_query_value(request.args.get("q", ""), max_length=160)
-        entity_type = _normalize_query_value(request.args.get("type", ""), max_length=32)
-
-        filters = store.get_entity_filters()
-        _validate_choice(entity_type, filters["types"])
-
-        results = store.list_entities(q=q, entity_type=entity_type or None)
-        return render_template(
-            "entities.html",
-            entities=results,
-            filters=filters,
-            active={"q": q, "type": entity_type},
-        )
-
-    @app.get("/entities/<entity_id>")
-    def entity_detail(entity_id: str):
-        _validate_identifier(entity_id)
-        store, _jobs = require_services()
-        entity = store.get_entity(entity_id)
-        if entity is None:
-            abort(404)
-        return render_template("entity_detail.html", entity=entity)
 
     @app.get("/api/graph")
     @rate_limit("api_graph", "API_GRAPH_RATE_LIMIT")

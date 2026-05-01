@@ -155,16 +155,6 @@ def create_app() -> Flask:
     def intelligence_hub():
         return redirect(url_for("home"))
 
-    @app.get("/v1")
-    def legacy_home():
-        overview = None
-        if graph_store is not None:
-            try:
-                overview = graph_store.get_dashboard_data()
-            except GraphStoreError:
-                app.logger.exception("Failed to load overview data for home route.")
-        return render_template("home.html", overview=overview)
-
     @app.get("/_next/<path:path>")
     def next_static(path):
         return app.send_static_file(f"hub/_next/{path}")
@@ -173,70 +163,23 @@ def create_app() -> Flask:
     def dashboard():
         return app.send_static_file("hub/graph.html")
 
-    @app.get("/v1/graph")
-    def legacy_graph():
-        store, _jobs = require_services()
-        overview = store.get_dashboard_data()
-        return render_template("dashboard.html", overview=overview, fullscreen_shell=True, body_class="body-graph-shell")
-
-    @app.get("/api/stories/featured")
-    def api_featured_stories():
-        store, _jobs = require_services()
-        # Get high importance stories as featured
-        stories = store.list_stories(limit=10)
-        featured = [s for s in stories if s["importance"] >= 4]
-        if not featured:
-            featured = stories[:3]
-        return jsonify(featured)
-
     @app.get("/stories")
     def stories():
         return app.send_static_file("hub/stories.html")
-
-    @app.get("/v1/stories")
-    def legacy_stories():
-        store, _jobs = require_services()
-        q = _normalize_query_value(request.args.get("q", ""), max_length=160)
-        kind = _normalize_query_value(request.args.get("kind", ""), max_length=64)
-        tag = _normalize_query_value(request.args.get("tag", ""), max_length=64)
-        status = _normalize_query_value(request.args.get("status", ""), max_length=32)
-
-        filters = store.get_story_filters()
-        _validate_choice(kind, filters["kinds"])
-        _validate_choice(tag, filters["tags"])
-        _validate_choice(status, filters["statuses"])
-
-        results = store.list_stories(q=q, kind=kind or None, tag=tag or None, status=status or None)
-        return render_template(
-            "stories.html",
-            stories=results,
-            filters=filters,
-            active={"q": q, "kind": kind, "tag": tag, "status": status},
-        )
 
     @app.get("/entities")
     def entities():
         return app.send_static_file("hub/entities.html")
 
-    @app.get("/v1/entities")
-    def legacy_entities():
-        store, _jobs = require_services()
-        q = _normalize_query_value(request.args.get("q", ""), max_length=160)
-        entity_type = _normalize_query_value(request.args.get("type", ""), max_length=32)
-
-        filters = store.get_entity_filters()
-        _validate_choice(entity_type, filters["types"])
-
-        items = store.list_entities(q=q, entity_type=entity_type or None)
-        return render_template(
-            "entities.html",
-            entities=items,
-            filters=filters,
-            active={"q": q, "type": entity_type},
-        )
-
     @app.get("/stories/<story_id>")
     def story_detail(story_id: str):
+        # Prevent intercepting Next.js static data files
+        if story_id.startswith("__next") or story_id.endswith(".txt") or story_id.endswith(".json"):
+             hub_file = Path(app.static_folder) / "hub" / "stories" / story_id
+             if hub_file.exists():
+                 return app.send_static_file(f"hub/stories/{story_id}")
+             abort(404)
+             
         _validate_identifier(story_id)
         store, _jobs = require_services()
         story = store.get_story(story_id)
@@ -244,11 +187,30 @@ def create_app() -> Flask:
             abort(404)
         return render_template("story_detail.html", story=story)
 
-    @app.get("/api/graph")
-    @rate_limit("api_graph", "API_GRAPH_RATE_LIMIT")
-    def api_graph():
+    @app.get("/entities/<entity_id>")
+    def entity_detail(entity_id: str):
+        # Prevent intercepting Next.js static data files
+        if entity_id.startswith("__next") or entity_id.endswith(".txt") or entity_id.endswith(".json"):
+             hub_file = Path(app.static_folder) / "hub" / "entities" / entity_id
+             if hub_file.exists():
+                 return app.send_static_file(f"hub/entities/{entity_id}")
+             abort(404)
+
+        _validate_identifier(entity_id)
         store, _jobs = require_services()
-        return jsonify(store.get_graph_data())
+        entity = store.get_entity(entity_id)
+        if entity is None:
+            abort(404)
+        return render_template("entity_detail.html", entity=entity)
+
+    # API ROUTES
+    @app.get("/api/overview")
+    def api_overview():
+        store, jobs = require_services()
+        return jsonify({
+            "stats": store.get_runtime_stats(),
+            "job": jobs.get_state(),
+        })
 
     @app.get("/api/health")
     def api_health():
@@ -256,22 +218,89 @@ def create_app() -> Flask:
             return jsonify({"status": "error", "message": startup_error}), 503
         store, jobs = require_services()
         report = store.get_health_report()
-        return jsonify(
-            {
-                "status": "healthy",
-                "database": str(db_path),
-                "source": str(source_path),
-                "stats": store.get_runtime_stats(),
-                "job": jobs.get_state(),
-                "report": report,
-            }
-        )
+        return jsonify({
+            "status": "healthy",
+            "database": str(db_path),
+            "source": str(source_path),
+            "stats": store.get_runtime_stats(),
+            "job": jobs.get_state(),
+            "report": report,
+        })
+
+    @app.get("/api/graph")
+    @rate_limit("api_graph", "API_GRAPH_RATE_LIMIT")
+    def api_graph():
+        store, _jobs = require_services()
+        try:
+            payload = store.get_graph_data()
+            payload["status"] = "ok"
+            return jsonify(payload)
+        except GraphStoreError as exc:
+            app.logger.exception("Falling back to degraded graph payload: %s", exc)
+            return jsonify(_degraded_graph_payload(str(exc), store.get_health_report()))
+
+    @app.get("/api/stories")
+    def api_stories():
+        store, _jobs = require_services()
+        q = request.args.get("q", "")
+        kind = request.args.get("kind")
+        tag = request.args.get("tag")
+        status = request.args.get("status")
+        
+        results = store.list_stories(q=q, kind=kind or None, tag=tag or None, status=status or None)
+        return jsonify([{
+            "id": s.id,
+            "title": s.title,
+            "kind": s.kind,
+            "status": s.status,
+            "event_date": s.event_date,
+            "summary": s.summary,
+            "excerpt": s.excerpt,
+            "tags": s.tags
+        } for s in results])
+
+    @app.get("/api/entities")
+    def api_entities():
+        store, _jobs = require_services()
+        q = request.args.get("q", "")
+        entity_type = request.args.get("type")
+        
+        items = store.list_entities(q=q, entity_type=entity_type or None)
+        return jsonify([{
+            "id": e.id,
+            "name": e.name,
+            "type": e.entity_type,
+            "group": e.group_name,
+            "story_count": e.story_count,
+            "excerpt": e.excerpt
+        } for e in items])
+
+    @app.get("/api/filters")
+    def api_filters():
+        store, _jobs = require_services()
+        return jsonify({
+            "stories": store.get_story_filters(),
+            "entities": store.get_entity_filters()
+        })
+
+    @app.get("/api/story/<story_id>")
+    def api_story(story_id: str):
+        store, _jobs = require_services()
+        story = store.get_story(story_id)
+        if not story: abort(404)
+        return jsonify({
+            "id": story.id,
+            "title": story.title,
+            "content_html": story.details_html,
+            "kind": story.kind,
+            "event_date": story.event_date,
+            "tags": story.tags
+        })
 
     @app.post("/api/rebuild")
     @rate_limit("api_rebuild", "API_REBUILD_RATE_LIMIT")
     def api_rebuild():
         store, jobs = require_services()
-
         @stream_with_context
         def stream():
             try:
@@ -292,37 +321,58 @@ def create_app() -> Flask:
                     yield f"data: {encoded}\n\n"
                     last_snapshot = encoded
                 if not snapshot.get("active"):
-                    if snapshot.get("status") == "completed":
-                        yield f"data: {json.dumps({'status': 'done', 'job': snapshot, 'stats': store.get_runtime_stats()})}\n\n"
-                    elif snapshot.get("status") == "cancelled":
-                        yield f"data: {json.dumps({'status': 'cancelled', 'job': snapshot, 'message': snapshot.get('error') or 'Rebuild cancelled.'})}\n\n"
-                    else:
-                        yield f"data: {json.dumps({'status': 'error', 'job': snapshot, 'message': snapshot.get('error') or 'Rebuild failed.'})}\n\n"
                     break
                 time.sleep(0.35)
-
         return Response(stream(), mimetype="text/event-stream", headers={"Cache-Control": "no-store"})
 
-    @app.post("/api/rebuild/cancel")
-    def api_cancel_rebuild():
-        _store, jobs = require_services()
-        cancelled = jobs.cancel_job()
-        return jsonify({"status": "cancelling" if cancelled else "idle", "job": jobs.get_state()}), 202 if cancelled else 409
+    # LEGACY / V1 ROUTES
+    @app.get("/v1")
+    def legacy_home():
+        overview = None
+        if graph_store is not None:
+            try:
+                overview = graph_store.get_dashboard_data()
+            except GraphStoreError:
+                app.logger.exception("Failed to load overview data for home route.")
+        return render_template("home.html", overview=overview)
+
+    @app.get("/v1/graph")
+    def legacy_graph():
+        store, _jobs = require_services()
+        overview = store.get_dashboard_data()
+        return render_template("dashboard.html", overview=overview, fullscreen_shell=True, body_class="body-graph-shell")
+
+    @app.get("/v1/stories")
+    def legacy_stories():
+        store, _jobs = require_services()
+        q = _normalize_query_value(request.args.get("q", ""), max_length=160)
+        kind = _normalize_query_value(request.args.get("kind", ""), max_length=64)
+        tag = _normalize_query_value(request.args.get("tag", ""), max_length=64)
+        status = _normalize_query_value(request.args.get("status", ""), max_length=32)
+        filters = store.get_story_filters()
+        results = store.list_stories(q=q, kind=kind or None, tag=tag or None, status=status or None)
+        return render_template("stories.html", stories=results, filters=filters, active={"q": q, "kind": kind, "tag": tag, "status": status})
+
+    @app.get("/v1/entities")
+    def legacy_entities():
+        store, _jobs = require_services()
+        q = _normalize_query_value(request.args.get("q", ""), max_length=160)
+        entity_type = _normalize_query_value(request.args.get("type", ""), max_length=32)
+        filters = store.get_entity_filters()
+        items = store.list_entities(q=q, entity_type=entity_type or None)
+        return render_template("entities.html", entities=items, filters=filters, active={"q": q, "type": entity_type})
+
+    @app.get("/<path:path>")
+    def hub_assets(path):
+        hub_file = Path(app.static_folder) / "hub" / path
+        if hub_file.exists() and hub_file.is_file():
+            return app.send_static_file(f"hub/{path}")
+        abort(404)
 
     return app
 
-
 def _default_job_state() -> JobState:
-    return {
-        "active": False,
-        "job_type": None,
-        "started_at": None,
-        "finished_at": None,
-        "status": "unavailable",
-        "error": None,
-        "cancel_requested": False,
-    }
-
+    return {"active": False, "job_type": None, "started_at": None, "finished_at": None, "status": "unavailable", "error": None, "cancel_requested": False}
 
 def _resolve_path_setting(root_path: Path, configured: Path | str | None, default_relative: str = "data/ai_master.md") -> Path:
     if configured:
@@ -332,38 +382,24 @@ def _resolve_path_setting(root_path: Path, configured: Path | str | None, defaul
         return candidate
     return root_path / default_relative
 
-
 def _resolve_master_document_path(root_path: Path, configured: Path | str | None = None) -> Path:
     if configured:
         return _resolve_path_setting(root_path, configured, "data/ai_master.md")
-
-    candidates = [
-        root_path / "data" / "ai_master.md",
-        root_path / "data" / "AI_Master_Document_2020_2026.md",
-        LEGACY_MASTER_DOCUMENT_PATH,
-    ]
+    candidates = [root_path / "data" / "ai_master.md", root_path / "data" / "AI_Master_Document_2020_2026.md", LEGACY_MASTER_DOCUMENT_PATH]
     for candidate in candidates:
-        if candidate.exists():
-            return candidate
+        if candidate.exists(): return candidate
     return root_path / "data" / "ai_master.md"
-
 
 def _normalize_query_value(value: str, max_length: int) -> str:
     normalized = " ".join(value.split())
-    if len(normalized) > max_length:
-        abort(400)
+    if len(normalized) > max_length: abort(400)
     return normalized
 
-
 def _validate_choice(value: str, allowed: list[str]) -> None:
-    if value and value not in allowed:
-        abort(400)
-
+    if value and value not in allowed: abort(400)
 
 def _validate_identifier(value: str) -> None:
-    if not ID_RE.fullmatch(value):
-        abort(404)
-
+    if not ID_RE.fullmatch(value): abort(404)
 
 def _get_csrf_token() -> str:
     token = session.get("_csrf_token")
@@ -372,11 +408,12 @@ def _get_csrf_token() -> str:
         session["_csrf_token"] = token
     return token
 
-
 def _is_same_origin_request() -> bool:
     referer = request.headers.get("Referer")
-    if not referer:
-        return False
+    if not referer: return False
     parsed_referer = urlparse(referer)
     parsed_host = urlparse(request.host_url)
     return parsed_referer.netloc == parsed_host.netloc
+
+def _degraded_graph_payload(error: str, health: HealthReport) -> dict:
+    return {"status": "error", "message": error, "nodes": [], "edges": [], "health": health}

@@ -54,6 +54,7 @@ export default function StoriesPage() {
                 title={story.kind}
                 value={story.title}
                 description={story.excerpt}
+                href={`/stories/${story.id}`}
                 className="w-full aspect-video"
               />
             </motion.div>

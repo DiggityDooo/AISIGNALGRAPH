@@ -1,12 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  devIndicators: false,
+  devIndicators: {
+    buildActivity: false,
+  },
   async rewrites() {
     return [
       {
         source: "/api/:path*",
-        destination: "http://localhost:5000/api/:path*",
+        destination: `http://localhost:${process.env.PORT || 8080}/api/:path*`,
       },
     ];
   },

@@ -147,6 +147,14 @@ def create_app() -> Flask:
             abort(503)
         return graph_store, job_manager
 
+    @app.get("/hub")
+    def intelligence_hub():
+        return app.send_static_file("hub/index.html")
+
+    @app.get("/_next/<path:path>")
+    def next_static(path):
+        return app.send_static_file(f"hub/_next/{path}")
+
     @app.get("/")
     def home():
         overview = None
@@ -162,6 +170,16 @@ def create_app() -> Flask:
         store, _jobs = require_services()
         overview = store.get_dashboard_data()
         return render_template("dashboard.html", overview=overview, fullscreen_shell=True, body_class="body-graph-shell")
+
+    @app.get("/api/stories/featured")
+    def api_featured_stories():
+        store, _jobs = require_services()
+        # Get high importance stories as featured
+        stories = store.list_stories(limit=10)
+        featured = [s for s in stories if s["importance"] >= 4]
+        if not featured:
+            featured = stories[:3]
+        return jsonify(featured)
 
     @app.get("/stories")
     def stories():
@@ -202,10 +220,10 @@ def create_app() -> Flask:
         filters = store.get_entity_filters()
         _validate_choice(entity_type, filters["types"])
 
-        items = store.list_entities(q=q, entity_type=entity_type or None)
+        results = store.list_entities(q=q, entity_type=entity_type or None)
         return render_template(
             "entities.html",
-            entities=items,
+            entities=results,
             filters=filters,
             active={"q": q, "type": entity_type},
         )
@@ -219,132 +237,26 @@ def create_app() -> Flask:
             abort(404)
         return render_template("entity_detail.html", entity=entity)
 
-    @app.post("/actions/reseed")
-    def reseed_database():
-        _store, jobs = require_services()
-        try:
-            jobs.start_reseed()
-            flash("Rebuilt the AI graph database from the configured source document.", "success")
-        except RuntimeError as exc:
-            flash(str(exc), "error")
-        except GraphStoreError as exc:
-            app.logger.exception("Graph reseed failed: %s", exc)
-            flash("Failed to rebuild the AI graph database.", "error")
-        return redirect(url_for("dashboard"))
-
-    @app.get("/api/overview")
-    def api_overview():
-        store, jobs = require_services()
-        return jsonify(
-            {
-                "stats": store.get_runtime_stats(),
-                "job": jobs.get_state(),
-            }
-        )
-
-    @app.get("/api/health")
-    def api_health():
-        report: HealthReport = {
-            "status": "unhealthy" if startup_error else "healthy",
-            "warnings": [],
-            "errors": [startup_error] if startup_error else [],
-            "source_path": str(source_path),
-            "source_exists": source_path.exists(),
-            "seed_path": str((root_path / "data" / "ai_graph_seed.json")),
-            "seed_exists": (root_path / "data" / "ai_graph_seed.json").exists(),
-            "database_path": str(db_path),
-            "database_exists": db_path.exists(),
-        }
-        if graph_store is not None:
-            report = graph_store.get_health_report()
-            if startup_error:
-                report.setdefault("errors", []).append(startup_error)
-                report["status"] = "unhealthy"
-        payload = {
-            "status": report["status"],
-            "services_available": graph_store is not None and job_manager is not None,
-            "job": job_manager.get_state() if job_manager is not None else _default_job_state(),
-            "health": report,
-        }
-        return jsonify(payload), 200 if report["status"] == "healthy" else 503
-
     @app.get("/api/graph")
     @rate_limit("api_graph", "API_GRAPH_RATE_LIMIT")
     def api_graph():
         store, _jobs = require_services()
-        try:
-            payload = store.get_graph_data()
-        except GraphStoreError as exc:
-            app.logger.exception("Falling back to degraded graph payload: %s", exc)
-            return jsonify(_degraded_graph_payload(str(exc), store.get_health_report()))
-        payload["status"] = "ok"
-        return jsonify(payload)
+        return jsonify(store.get_graph_data())
 
-    @app.get("/api/stories")
-    def api_stories():
-        store, _jobs = require_services()
-        q = request.args.get("q", "")
-        kind = request.args.get("kind")
-        tag = request.args.get("tag")
-        status = request.args.get("status")
-        
-        results = store.list_stories(q=q, kind=kind or None, tag=tag or None, status=status or None)
-        return jsonify([{
-            "id": s.id,
-            "title": s.title,
-            "kind": s.kind,
-            "status": s.status,
-            "event_date": s.event_date,
-            "summary": s.summary,
-            "excerpt": s.excerpt,
-            "tags": s.tags
-        } for s in results])
-
-    @app.get("/api/entities")
-    def api_entities():
-        store, _jobs = require_services()
-        q = request.args.get("q", "")
-        entity_type = request.args.get("type")
-        
-        items = store.list_entities(q=q, entity_type=entity_type or None)
-        return jsonify([{
-            "id": e.id,
-            "name": e.name,
-            "type": e.entity_type,
-            "group": e.group_name,
-            "story_count": e.story_count,
-            "excerpt": e.excerpt
-        } for e in items])
-
-    @app.get("/api/filters")
-    def api_filters():
-        store, _jobs = require_services()
-        return jsonify({
-            "stories": store.get_story_filters(),
-            "entities": store.get_entity_filters()
-        })
-
-    @app.get("/api/story/<story_id>")
-    def api_story(story_id: str):
-        _validate_identifier(story_id)
-        store, _jobs = require_services()
-        story = store.get_story(story_id)
-        if story is None:
-            abort(404)
+    @app.get("/api/health")
+    def api_health():
+        if startup_error:
+            return jsonify({"status": "error", "message": startup_error}), 503
+        store, jobs = require_services()
+        report = store.get_health_report()
         return jsonify(
             {
-                "id": story.id,
-                "title": story.title,
-                "kind": story.kind,
-                "status": story.status,
-                "event_date": story.event_date,
-                "year": story.event_date[:4] if story.event_date else "",
-                "summary": story.summary,
-                "content_html": story.details_html,
-                "tags": story.tags,
-                "entities": story.entities,
-                "related_stories": story.related_stories,
-                "route": url_for("story_detail", story_id=story.id),
+                "status": "healthy",
+                "database": str(db_path),
+                "source": str(source_path),
+                "stats": store.get_runtime_stats(),
+                "job": jobs.get_state(),
+                "report": report,
             }
         )
 
@@ -448,30 +360,16 @@ def _validate_identifier(value: str) -> None:
 
 def _get_csrf_token() -> str:
     token = session.get("_csrf_token")
-    if token is None:
-        token = secrets.token_urlsafe(32)
+    if not token:
+        token = secrets.token_hex(32)
         session["_csrf_token"] = token
     return token
 
 
 def _is_same_origin_request() -> bool:
-    origin = request.headers.get("Origin")
-    if not origin:
-        return True
-    return urlparse(origin).netloc == request.host
-
-
-def _degraded_graph_payload(message: str, health: HealthReport) -> GraphData:
-    return {
-        "nodes": [],
-        "edges": [],
-        "communities": [],
-        "timeline": {
-            "months": [],
-            "start": "2020-01",
-            "end": "2020-01",
-        },
-        "status": "degraded",
-        "message": message,
-        "health": health,
-    }
+    referer = request.headers.get("Referer")
+    if not referer:
+        return False
+    parsed_referer = urlparse(referer)
+    parsed_host = urlparse(request.host_url)
+    return parsed_referer.netloc == parsed_host.netloc

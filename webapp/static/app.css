@@ -66,6 +66,16 @@ code {
   background: rgba(8, 12, 17, 0.88);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(118, 131, 148, 0.18);
+  overflow: hidden;
+}
+
+.topbar::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(140, 232, 255, 0.75), rgba(255, 49, 72, 0.78), transparent);
+  opacity: 0.55;
 }
 
 .topbar__inner {

@@ -4,7 +4,7 @@
 {% block content %}
   <section class="detail-shell">
     <div class="page">
-      <div class="detail-hero glass-panel">
+      <div class="detail-hero glass-panel" data-animate data-pointer-reactive>
         <div>
           <span class="eyebrow">{{ story.kind }}</span>
           <h1 class="protocol-heading">{{ story.title }}</h1>
@@ -18,7 +18,7 @@
       </div>
 
       <div class="detail-layout detail-layout--premium">
-        <aside class="detail-sidebar glass-panel">
+        <aside class="detail-sidebar glass-panel" data-animate data-pointer-reactive>
           <div class="sidebar-block">
             <h2>Summary</h2>
             <p>{{ story.summary }}</p>
@@ -57,7 +57,7 @@
           {% endif %}
         </aside>
 
-        <article class="detail-content glass-panel">
+        <article class="detail-content glass-panel" data-animate data-pointer-reactive>
           <div class="markdown-body">{{ story.details_html | safe }}</div>
         </article>
       </div>

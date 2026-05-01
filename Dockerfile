@@ -1,4 +1,15 @@
-FROM nginx:alpine
-COPY index.html /usr/share/nginx/html/index.html
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+ENV FLASK_SECRET_KEY=REDACTED_SECRET
+ENV PORT=8080
+
 EXPOSE 8080
-CMD sed -i 's/listen 80/listen 8080/' /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'
+
+CMD ["python", "app.py"]

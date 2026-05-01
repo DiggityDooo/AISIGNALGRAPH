@@ -167,8 +167,8 @@
   function inspectNode(node) {
     state.selectedNode = node;
     const nodeType = node.semanticType || node.node_type || "entity";
-    const detailUrl = node.route || ((nodeType === "story" || nodeType === "topic") 
-      ? `/stories/${node.id.split(':').pop()}` 
+    const detailUrl = node.route || ((nodeType === "story" || nodeType === "topic")
+      ? `/stories/${node.id.split(':').pop()}`
       : `/entities/${node.id.split(':').pop()}`);
 
     refs.detailTitle.innerHTML = `<a href="${detailUrl}" class="detail-title-link" title="Open full dossier">${node.label || node.id}</a>`;
@@ -212,7 +212,7 @@
     // 2. Apply CSS Variables
     container.style.setProperty('--node-glow-color', color);
     appRoot.style.setProperty('--node-glow-color', color);
-    
+
     // 3. Trigger "Select" Animation
     container.classList.remove('node-selected-active');
     void container.offsetWidth; // Force Reflow
@@ -288,7 +288,7 @@
       const response = await fetch(`/api/graph?dataset=${dataset}`);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
-      
+
       state.nodes = (data.nodes || []).map((node) => ({
         ...node,
         semanticType: node.semanticType || node.node_type || node.type || "topic"
@@ -391,6 +391,7 @@
       // Render
       console.log("Gephi Lite: Initializing Sigma renderer...");
       state.renderer = new SigmaLib(graph, refs.container, {
+        allowInvalidContainer: true,
         renderLabels: true,
         labelSize: 11,
         labelFont: "Outfit, Inter, system-ui, sans-serif",

@@ -416,8 +416,9 @@ select:focus {
 
 @media (max-width: 860px) {
   #app-root {
-    grid-template-columns: 1fr;
-    grid-template-rows: 68px minmax(0, 1fr) auto auto auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   #hud-left,
@@ -427,20 +428,41 @@ select:focus {
     grid-column: 1;
   }
 
+  #hud-top {
+    height: auto;
+    padding: 10px 16px;
+  }
+
   #hud-left {
-    grid-row: 3;
-    border-right: 0;
-    border-top: 1px solid var(--color-line);
+    position: absolute;
+    top: 68px;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    z-index: 100;
+    border-right: 1px solid var(--color-line);
   }
 
   #hud-right {
-    grid-row: 4;
+    position: absolute;
+    top: 68px;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    z-index: 110;
+    border-left: 0;
+    border-top: 1px solid var(--color-line);
+    background: rgba(5, 5, 5, 0.95);
+  }
+
+  #sigma-container {
+    flex: 1;
+    width: 100%;
   }
 
   #hud-bottom {
-    grid-row: 5;
-    padding: 12px 16px;
     height: auto;
+    padding: 12px 16px;
   }
 
   .top-stats {

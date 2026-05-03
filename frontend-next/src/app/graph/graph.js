@@ -774,13 +774,29 @@ export async function initGephiLite(options = {}) {
       });
     }
 
-    addManagedListener(appRoot, "mousemove", (event) => {
+    const updatePointer = (clientX, clientY) => {
       const rect = appRoot.getBoundingClientRect();
-      bgFlow.mouseX = (event.clientX - rect.left) / Math.max(1, rect.width) - 0.5;
-      bgFlow.mouseY = (event.clientY - rect.top) / Math.max(1, rect.height) - 0.5;
-      appRoot.style.setProperty("--hud-pointer-x", `${(((event.clientX - rect.left) / Math.max(1, rect.width)) * 100).toFixed(2)}%`);
-      appRoot.style.setProperty("--hud-pointer-y", `${(((event.clientY - rect.top) / Math.max(1, rect.height)) * 100).toFixed(2)}%`);
+      bgFlow.mouseX = (clientX - rect.left) / Math.max(1, rect.width) - 0.5;
+      bgFlow.mouseY = (clientY - rect.top) / Math.max(1, rect.height) - 0.5;
+      appRoot.style.setProperty("--hud-pointer-x", `${(((clientX - rect.left) / Math.max(1, rect.width)) * 100).toFixed(2)}%`);
+      appRoot.style.setProperty("--hud-pointer-y", `${(((clientY - rect.top) / Math.max(1, rect.height)) * 100).toFixed(2)}%`);
+    };
+
+    addManagedListener(appRoot, "mousemove", (event) => {
+      updatePointer(event.clientX, event.clientY);
     });
+
+    addManagedListener(appRoot, "touchmove", (event) => {
+      if (event.touches.length > 0) {
+        updatePointer(event.touches[0].clientX, event.touches[0].clientY);
+      }
+    }, { passive: true });
+
+    addManagedListener(appRoot, "touchstart", (event) => {
+      if (event.touches.length > 0) {
+        updatePointer(event.touches[0].clientX, event.touches[0].clientY);
+      }
+    }, { passive: true });
 
     bgFlow.initialized = true;
   }

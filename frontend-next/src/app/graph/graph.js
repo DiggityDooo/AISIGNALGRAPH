@@ -510,7 +510,8 @@ export async function initGephiLite(options = {}) {
     console.log(`Gephi Lite: Fetching graph data for dataset: ${dataset}`);
 
     try {
-      const response = await fetch(`/api/graph?dataset=${dataset}`);
+      const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:8080' : '';
+      const response = await fetch(`${baseUrl}/api/graph?dataset=${dataset}`);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
 

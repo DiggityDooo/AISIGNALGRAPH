@@ -130,6 +130,9 @@ export default function GraphPage() {
             <span className="hidden xs:inline">Edges: <strong id="stat-edges" className="text-white">{stats.edges}</strong></span>
             <span>Signals: <strong id="stat-signals" className="text-secondary">0</strong></span>
             <div className="flex gap-2 ml-2 md:ml-4">
+              <button id="toggle-3d-button" className="glass-panel px-2 md:px-3 py-1 hover:bg-primary/10 transition-colors font-mono text-[10px] uppercase tracking-wider" title="Toggle 3D Neural Space">
+                <span id="toggle-3d-label">3D</span>
+              </button>
               <button id="rebuild-button" className="glass-panel px-2 md:px-3 py-1 hover:bg-primary/10 transition-colors">Rebuild</button>
               <button id="fit-button" className="glass-panel px-2 md:px-3 py-1 hover:bg-white/5 transition-colors">Fit</button>
             </div>
@@ -165,6 +168,7 @@ export default function GraphPage() {
 
           {/* Graph Container */}
           <main id="sigma-container" className="flex-1 relative bg-black">
+            <div id="three-container" className="absolute inset-0 z-5" style={{ display: 'none' }}></div>
             <canvas id="signal-canvas" className="absolute inset-0 pointer-events-none z-10"></canvas>
             
             {/* Animated Node Visualizer Port */}

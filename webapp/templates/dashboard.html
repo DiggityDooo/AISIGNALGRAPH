@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Graph | Gephi Lite AI{% endblock %}
+{% block title %}Graph | AISIGNALGRAPH{% endblock %}
 {% block extra_head %}
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='gephi_lite.css') }}">
@@ -8,7 +8,8 @@
 <script src="{{ url_for('static', filename='vendor/graphology.umd.min.js') }}" defer></script>
 <script src="{{ url_for('static', filename='vendor/graphology-layout-forceatlas2.bundle.js') }}" defer></script>
 <script src="{{ url_for('static', filename='vendor/sigma.min.js') }}" defer></script>
-<script src="{{ url_for('static', filename='graph.js', v='20260430-9') }}" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+<script src="{{ url_for('static', filename='graph.js', v='20260504-3d') }}" defer></script>
 <script>
   document.addEventListener('DOMContentLoaded', () => {
     const rebuildBtn = document.getElementById('rebuild-button');
@@ -103,6 +104,7 @@
         <label>SIGNAL SPEED</label>
         <input id="signal-speed" type="range" min="0.5" max="3" value="1" step="0.1">
       </div>
+      <button id="mode-3d-button" class="btn-premium btn-premium--outline" style="min-height: 28px; padding: 0 14px; font-size: 0.7rem; letter-spacing: 0.1em; flex-shrink: 0;" title="Toggle 3D graph view">3D MODE</button>
     </div>
   </footer>
 </div>

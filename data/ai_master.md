@@ -1212,3 +1212,78 @@ ollama run mistral:7b
 
 *— End of Document —*  
 Source: huggingface.co/models  •  April 2026
+
+| SUPPLEMENTAL INTELLIGENCE FEED — May 2026 Update |
+| :---: |
+
+## **Recent AI Developments: Late 2024 – May 2026**
+
+### **Model Releases & Breakthroughs**
+
+| Date | Event |
+| :---- | :---- |
+| Nov 2024 | Amazon releases Nova foundation models (Micro, Lite, Pro) on AWS Bedrock — multimodal text/image. Amazon's first in-house frontier model family. |
+| Dec 2024 | Google releases Gemini 2.0 Flash Thinking — experimental reasoning model with visible chain-of-thought. |
+| Jan 2025 | Alibaba releases Qwen 2.5 family — 0.5B to 72B models. Qwen 2.5 Coder becomes top open-source coding model. |
+| Feb 2025 | Microsoft releases Phi-4 — 14B parameter model outperforming much larger models on math and reasoning. Small model revolution continues. |
+| Mar 2025 | Cohere releases Command A — 111B parameter model optimized for enterprise RAG and agentic workflows. |
+| Mar 2025 | Black Forest Labs releases FLUX 1.1 Pro — overtakes Midjourney on multiple image quality benchmarks. Open weights available. |
+| Apr 2025 | Google releases Gemini 2.5 Pro with native code execution — model can write and run code during inference. |
+| Apr 2025 | Anthropic releases Claude 4 Opus with multi-agent orchestration — single model coordinates sub-agents for complex tasks. |
+| May 2025 | OpenAI releases GPT-4.1 and GPT-4.1 mini — optimized for coding with 1M token context. Significant cost reduction. |
+| Jun 2025 | Google DeepMind releases AlphaEvolve — AI system that designs better algorithms. Discovers novel sorting algorithms faster than human-designed ones. |
+| Jul 2025 | Mistral releases Codestral Mamba — first coding-specific state space model. Challenges transformer dominance for code tasks. |
+| Aug 2025 | Moonshot AI releases Kimi K2 — open-source agentic model. Downloads exceed 1M in first week. |
+| Sep 2025 | xAI releases Grok 3 — massive model trained on Colossus (100K H100 supercluster). Competitive with GPT-5 on reasoning. |
+| Oct 2025 | DeepSeek releases DeepSeek R1.5 — reasoning model with improved multimodal capability. Openly available. |
+| Nov 2025 | Anthropic releases Claude 3.5 Opus — extended thinking model with 500K context and computer use improvements. |
+| Jan 2026 | Google releases Gemini 3 Flash — fastest frontier model ever deployed. Sub-100ms latency for most queries. |
+| Feb 2026 | OpenAI releases GPT-5 Turbo — 50% cost reduction from GPT-5 with equivalent quality. |
+| Mar 2026 | Meta releases Llama 5 preview (internal) — rumored 1T+ parameter MoE with real-time video understanding. |
+| Apr 2026 | DeepSeek V4 Pro achieves #1 on Chatbot Arena — first Chinese model to top the leaderboard. Western labs scramble. |
+| May 2026 | Google DeepMind announces Gemini 3 Pro — surpasses all models on SWE-bench Verified (67% → 78%). |
+
+### **Company & Business Developments**
+
+| Date | Event |
+| :---- | :---- |
+| Nov 2024 | Perplexity AI valued at $9B — AI search engine raised $500M from Jeff Bezos, Nvidia. 100M+ monthly users. |
+| Dec 2024 | Anthropic reaches $1B ARR (annualized revenue) — fastest B2B SaaS company to reach this milestone. |
+| Jan 2025 | Cerebras files for IPO — wafer-scale AI chip company seeks $8B valuation. |
+| Feb 2025 | Google acquires Character.AI research team for $2.7B — Noam Shazeer returns to Google. |
+| Mar 2025 | Cursor (Anysphere) raises $900M at $9B valuation — AI coding IDE becomes fastest-growing developer tool. |
+| Apr 2025 | OpenAI acquires Rockset and io.net — builds infrastructure for real-time AI search and distributed GPU compute. |
+| May 2025 | Anthropic and Google Cloud announce multi-year $6B partnership. Claude integrated natively into Google Workspace. |
+| Jun 2025 | AMD releases MI350X — first chiplet-based AI accelerator. Claims 2x H200 inference performance. |
+| Jul 2025 | Apple releases M5 chip with dedicated LLM inference engine — 3x faster on-device AI vs M4. |
+| Sep 2025 | TSMC begins 2nm AI chip production — powers next-gen Nvidia Blackwell Ultra and AMD MI400. |
+| Oct 2025 | SoftBank's Stargate Phase 1 completes — 5 AI data centers operational across Texas and Arizona. |
+| Jan 2026 | Nvidia releases B300 (Blackwell Ultra) — 4x inference throughput vs B200. $70K per chip. Sold out through 2027. |
+| Feb 2026 | OpenAI annual revenue reaches $12B — up from $3.7B in 2024. ChatGPT Plus hits 30M subscribers. |
+| Mar 2026 | Anthropic valued at $100B+ in secondary market trades — largest private AI valuation ever. |
+| Apr 2026 | Google's AI revenue (Cloud + Workspace AI) reaches $15B annual run rate — up 180% YoY. |
+
+### **Regulation & Safety Updates**
+
+| Date | Event |
+| :---- | :---- |
+| Jan 2025 | EU AI Act enforcement begins — first fines issued to non-compliant companies. |
+| Feb 2025 | California introduces SB 892 — new AI safety bill replacing vetoed SB 1047. Requires safety assessments for models trained above 10^26 FLOP. |
+| Mar 2025 | UN adopts Global AI Governance Framework — non-binding but establishes international norms for frontier AI. |
+| Jun 2025 | UK AI Safety Institute publishes first comprehensive safety evaluation of GPT-5, Gemini 3, and Claude 4.5. All flagged for autonomous capability risks. |
+| Sep 2025 | China establishes mandatory AI model registration — all models above 1B parameters must register with CAC before deployment. |
+| Jan 2026 | US Congress passes AI Workforce Transition Act — $2B fund for worker retraining in AI-displaced industries. |
+| Mar 2026 | EU proposes AI Tax on companies using AI to replace workers — 2% levy on AI-driven productivity gains above threshold. Controversial. |
+| Apr 2026 | G7 Summit establishes AI Safety Board — permanent international body for frontier model safety coordination. |
+
+### **Science & Research Breakthroughs**
+
+| Date | Event |
+| :---- | :---- |
+| Nov 2024 | Google DeepMind's GenCast weather model outperforms all existing weather prediction systems — 97% accuracy at 15-day forecasts. |
+| Jan 2025 | Isomorphic Labs (DeepMind spinoff) enters Phase 2 clinical trials for first AI-discovered drug targeting liver cancer. |
+| Mar 2025 | AlphaFold 3 released — predicts protein-ligand interactions, not just structure. Drug design implications massive. |
+| Jun 2025 | MIT and Anthropic publish 'Mechanistic Interpretability at Scale' — first full map of Claude 3.5 Sonnet's internal representations. Breakthrough for AI transparency. |
+| Sep 2025 | Google DeepMind announces GNOME 2 — AI discovers 2.2 million novel stable materials. Accelerates materials science by estimated 800 years of human research. |
+| Feb 2026 | DeepMind and CERN use AI to detect anomalous particle interactions — potential evidence of physics beyond the Standard Model. |
+| Apr 2026 | AI-assisted cancer screening deployed across UK NHS — 15% improvement in early detection rates for breast and lung cancer. |

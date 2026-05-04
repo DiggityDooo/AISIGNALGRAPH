@@ -715,3 +715,11 @@ select:focus {
 .detail-divider {
   margin: 10px 0;
 }
+
+/* 3D Mode Button Active State */
+.btn-premium.is-active-3d {
+  background: linear-gradient(135deg, var(--color-primary), #ff5b6f);
+  border-color: rgba(255, 135, 148, 0.6);
+  box-shadow: 0 0 14px rgba(255, 49, 72, 0.35);
+  color: #fff;
+}

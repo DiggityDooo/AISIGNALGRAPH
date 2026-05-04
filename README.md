@@ -1,58 +1,54 @@
-# AI Signal Graph
+# AISIGNALGRAPH
 
-This app is now a local AI knowledge graph, not a scraper UI.
+The intelligence hub for mapping Artificial Intelligence evolution (2020-present).
 
-It ignores the old markdown vault, old generated notes, and `scraper.db`.
+AISIGNALGRAPH is a high-performance knowledge graph and intelligence hub that transforms raw AI data into an interactive, navigable ecosystem of stories, entities, and relationships.
 
-The application will load its master document from the first valid source in this order:
+## 🚀 Key Features
 
+- **Dimensional Intelligence Hub:** Navigate the AI landscape in both **2D (Sigma.js)** and **3D (Three.js)** modes.
+- **Neural 3D Engine:** Immersive, interactive 3D visualization with raycasted node selection, camera "fly-to" logic, and dynamic neighborhood highlighting.
+- **Deep Context Mapping:** Connects AI stories (advancements, policy, infrastructure) to labs, models, products, risks, and key figures.
+- **Zero-Lag Interface:** Optimized GPU-accelerated interactions with seamless transition between visualization modes.
+- **Structured Data Ingestion:** Automatically imports intelligence from a master markdown document into a relational graph database.
+
+## 📁 Data Sources
+
+The application loads its master intelligence from the first valid source in this order:
 1. `AI_MASTER_DOC_PATH`
 2. `data/ai_master.md`
 3. `data/AI_Master_Document_2020_2026.md`
-4. the legacy local path used on the original development machine
 
-The generated database lives at `data/ai_graph.db`.
+The generated graph database lives at `data/ai_graph.db`.
 
-## What it does
+## 🛠️ Getting Started
 
-- Stores AI stories covering advancements, drama, cheats, policy, and infrastructure.
-- Imports the master document into structured stories, entities, keyword hubs, and relationship edges.
-- Maps those stories to labs, models, products, risks, people, years, and topic nodes.
-- Renders the network as an interactive graph view inspired by Obsidian-style relationship maps with a more fluid force simulation.
-- Supports story and entity exploration through server-rendered detail pages.
+### Prerequisites
+- Python 3.x
+- Flask
 
-## Run it
-
+### Installation & Execution
 ```bash
 ./venv/bin/python -m pip install -r requirements.txt
-export FLASK_SECRET_KEY="$(python - <<'EOF'
-import secrets
-print(secrets.token_hex(32))
-EOF
-)"
-export AI_MASTER_DOC_PATH="/absolute/path/to/AI_Master_Document_2020_2026.md"
+export FLASK_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+export AI_MASTER_DOC_PATH="/absolute/path/to/ai_master.md"
 ./venv/bin/python app.py
 ```
 
-Open `http://127.0.0.1:5000`.
+Open `http://127.0.0.1:5000` to access the hub.
 
-## Reset the dataset
+## 🔄 Dataset Management
 
-Use the `Rebuild from master document` button in the UI, or remove `data/ai_graph.db` and restart the app.
+- **Rebuild:** Use the `REBUILD` button in the UI to re-ingest data from the master document.
+- **Reset:** Manually delete `data/ai_graph.db` and restart to wipe the state.
+- **Jobs Import:** Sync external labor market data using:
+  ```bash
+  ./.venv/bin/python scripts/import_jobs_masterdoc.py /path/to/jobs_masterdoc.md
+  ```
 
-## Import the jobs appendix
+## 🛡️ Security & Integrity
 
-To refresh the jobs appendix inside `data/ai_master.md` from the external jobs masterdoc:
-
-```bash
-./.venv/bin/python scripts/import_jobs_masterdoc.py /home/seanb/Downloads/Pics/AI_Jobs_Masterdoc.md
-```
-
-## Security and reliability changes
-
-- The secret key is no longer hardcoded.
-- The master document path is configurable.
-- Story markdown is sanitized before rendering.
-- The reseed form now uses CSRF protection.
-- Three.js is served locally from `webapp/static/vendor`, and the 3D graph now uses an in-app renderer instead of a CDN-dependent wrapper.
-- The app returns dedicated `400`, `403`, `404`, `500`, and `503` pages.
+- **Environment-Safe:** Configurable document paths and dynamic secret keys.
+- **Sanitized UI:** All markdown and HTML content is sanitized before rendering.
+- **Robustness:** Custom error handling for 40x and 50x states.
+- **Performance:** Native WebGL-accelerated rendering for high-density networks.

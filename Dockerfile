@@ -1,5 +1,5 @@
 # Stage 1: Build the Next.js frontend
-FROM node:20-slim AS frontend-builder
+FROM node:22-slim AS frontend-builder
 WORKDIR /build
 COPY frontend-next/package*.json ./
 RUN npm install

@@ -63,6 +63,21 @@
     return;
   }
 
+  // --- Utilities ---
+  function hexToRGBA(hex, alpha = 1) {
+    let r = 0, g = 0, b = 0;
+    if (hex.length === 4) {
+      r = parseInt(hex[1] + hex[1], 16);
+      g = parseInt(hex[2] + hex[2], 16);
+      b = parseInt(hex[3] + hex[3], 16);
+    } else if (hex.length === 7) {
+      r = parseInt(hex.slice(1, 3), 16);
+      g = parseInt(hex.slice(3, 5), 16);
+      b = parseInt(hex.slice(5, 7), 16);
+    }
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
   // --- UI Helpers ---
   function flashStat(element) {
     if (!element) {
@@ -117,8 +132,15 @@
     element.textContent = String(nextValue);
   }
 
+  let lastStatsUpdate = 0;
   function updateStats(options = {}) {
-    const { animate = false } = options;
+    const { animate = false, force = false } = options;
+    const now = window.performance.now();
+    if (!force && now - lastStatsUpdate < 100) { // Max 10Hz for stats updates
+      return;
+    }
+    lastStatsUpdate = now;
+
     if (refs.statNodes) {
       if (animate) {
         animateStat(refs.statNodes, state.filteredNodes.length);
@@ -273,11 +295,15 @@
     });
   }
 
+  let rebuildTimeout = null;
   function rebuildFromFilters() {
-    state.filteredNodes = filteredNodesByState();
-    const visibleIds = new Set(state.filteredNodes.map((node) => node.id));
-    state.filteredEdges = filteredEdgesByNodes(visibleIds);
-    buildGraph();
+    if (rebuildTimeout) clearTimeout(rebuildTimeout);
+    rebuildTimeout = setTimeout(() => {
+      state.filteredNodes = filteredNodesByState();
+      const visibleIds = new Set(state.filteredNodes.map((node) => node.id));
+      state.filteredEdges = filteredEdgesByNodes(visibleIds);
+      buildGraph();
+    }, 50); // Small debounce to prevent rapid rebuilds
   }
 
   // --- Graph Engine ---
@@ -379,7 +405,8 @@
         slowDown: 1.2
       };
       console.time("FA2-Layout");
-      window.forceAtlas2.assign(graph, { iterations: 1200, settings: spreadSettings });
+      // Reduced iterations for faster initial load, 1200 was too high for a single block
+      window.forceAtlas2.assign(graph, { iterations: 250, settings: spreadSettings });
       console.timeEnd("FA2-Layout");
 
       // Post-layout aggressive spread
@@ -487,11 +514,17 @@
       const p2 = renderer.graphToViewport(this.t);
       const x = p1.x + (p2.x - p1.x) * this.p;
       const y = p1.y + (p2.y - p1.y) * this.p;
+      
+      // Secondary glow - draw first
       ctx.beginPath();
-      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = hexToRGBA(this.c, 0.2);
+      ctx.fill();
+
+      // Primary signal
+      ctx.beginPath();
+      ctx.arc(x, y, 2.8, 0, Math.PI * 2);
       ctx.fillStyle = this.c;
-      ctx.shadowBlur = 5;
-      ctx.shadowColor = this.c;
       ctx.fill();
     }
   }
@@ -507,11 +540,10 @@
   }
 
   function animate() {
-    syncCanvasSize();
     drawBackgroundFlow();
-    ctx.clearRect(0, 0, refs.canvas.width, refs.canvas.height);
+    
     if (state.renderer) {
-      ctx.shadowBlur = 0;
+      ctx.clearRect(0, 0, refs.canvas.width, refs.canvas.height);
       state.activeSignals = state.activeSignals.filter(s => {
         const alive = s.update();
         if (alive) s.draw(ctx, state.renderer);
@@ -548,14 +580,17 @@
     particles: [],
     initialized: false,
     mouseX: 0,
-    mouseY: 0
+    mouseY: 0,
+    lastMouseX: -1,
+    lastMouseY: -1,
+    gradient: null
   };
 
   function initBackgroundFlow() {
     if (!refs.bgCanvas || !bgCtx || bgFlow.initialized) {
       return;
     }
-    const count = 420;
+    const count = 180; // Reduced particle count for performance
     for (let i = 0; i < count; i += 1) {
       bgFlow.particles.push({
         x: Math.random(),
@@ -602,19 +637,27 @@
     }
 
     bgCtx.clearRect(0, 0, width, height);
-    const gradient = bgCtx.createRadialGradient(
-      width * (0.7 + bgFlow.mouseX * 0.1),
-      height * (0.22 - bgFlow.mouseY * 0.05),
-      width * 0.04,
-      width * 0.66,
-      height * 0.35,
-      width * 0.75
-    );
-    gradient.addColorStop(0, "rgba(255, 49, 72, 0.15)");
-    gradient.addColorStop(1, "rgba(255, 49, 72, 0)");
-    bgCtx.fillStyle = gradient;
+    
+    // Only recreate gradient if mouse moved or no gradient exists
+    if (!bgFlow.gradient || bgFlow.mouseX !== bgFlow.lastMouseX || bgFlow.mouseY !== bgFlow.lastMouseY) {
+      bgFlow.gradient = bgCtx.createRadialGradient(
+        width * (0.7 + bgFlow.mouseX * 0.1),
+        height * (0.22 - bgFlow.mouseY * 0.05),
+        width * 0.04,
+        width * 0.66,
+        height * 0.35,
+        width * 0.75
+      );
+      bgFlow.gradient.addColorStop(0, "rgba(255, 49, 72, 0.12)");
+      bgFlow.gradient.addColorStop(1, "rgba(255, 49, 72, 0)");
+      bgFlow.lastMouseX = bgFlow.mouseX;
+      bgFlow.lastMouseY = bgFlow.mouseY;
+    }
+
+    bgCtx.fillStyle = bgFlow.gradient;
     bgCtx.fillRect(0, 0, width, height);
 
+    const dpr = window.devicePixelRatio || 1;
     for (let i = 0; i < bgFlow.particles.length; i += 1) {
       const p = bgFlow.particles[i];
       p.x += p.vx;
@@ -626,7 +669,7 @@
       if (p.y < -0.05) p.y = 1.05;
       if (p.y > 1.05) p.y = -0.05;
       bgCtx.beginPath();
-      bgCtx.arc(p.x * width, p.y * height, p.size * (window.devicePixelRatio || 1), 0, Math.PI * 2);
+      bgCtx.arc(p.x * width, p.y * height, p.size * dpr, 0, Math.PI * 2);
       bgCtx.fillStyle = `rgba(255, 96, 114, ${p.alpha})`;
       bgCtx.fill();
     }

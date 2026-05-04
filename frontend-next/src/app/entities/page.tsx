@@ -7,8 +7,15 @@ import { motion } from "framer-motion";
 
 import { useEffect, useState } from "react";
 
+interface Entity {
+  id: string;
+  name: string;
+  type: string;
+  excerpt?: string;
+}
+
 export default function EntitiesPage() {
-  const [entities, setEntities] = useState<any[]>([]);
+  const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

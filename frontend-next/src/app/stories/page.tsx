@@ -7,8 +7,15 @@ import { motion } from "framer-motion";
 
 import { useEffect, useState } from "react";
 
+interface Story {
+  id: string;
+  kind: string;
+  title: string;
+  excerpt?: string;
+}
+
 export default function StoriesPage() {
-  const [stories, setStories] = useState<any[]>([]);
+  const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

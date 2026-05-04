@@ -46,7 +46,18 @@ export async function initGephiLite(options = {}) {
     activeSignals: [], activeYear: DEFAULT_ACTIVE_YEAR, signalSpeed: 1.0, selectedNode: null, hoveredNode: null,
     visibleNodeTypes: new Set(["story", "entity", "lab", "model", "person", "risk", "topic", "product", "year", "community"]),
     animationFrameId: null,
-    destroyed: false
+    destroyed: false,
+    is3DMode: false,
+    threeScene: null,
+    threeRenderer: null,
+    threeCamera: null,
+    threeControls: null,
+    threeRaycaster: null,
+    threeMouse: null,
+    threeNodeMeshes: [],
+    threeEdgeLines: null,
+    threeAnimFrameId: null,
+    threeHoveredMesh: null
   };
 
   let appRoot = null;
@@ -104,6 +115,9 @@ export async function initGephiLite(options = {}) {
       window.cancelAnimationFrame(state.animationFrameId);
       state.animationFrameId = null;
     }
+
+    // Clean up 3D scene
+    destroy3DScene();
 
     managedListeners.splice(0).reverse().forEach((dispose) => {
       try {
@@ -168,7 +182,10 @@ export async function initGephiLite(options = {}) {
       detailSubtitle: document.getElementById("detail-subtitle"),
       detailContent: document.getElementById("detail-content"),
       detailPane: document.getElementById("detail-pane"),
-      rendererHost: null
+      rendererHost: null,
+      threeContainer: document.getElementById("three-container"),
+      toggle3d: document.getElementById("toggle-3d-button"),
+      toggle3dLabel: document.getElementById("toggle-3d-label")
     };
 
     const signalContext = currentRefs.canvas?.getContext("2d");
@@ -881,7 +898,368 @@ export async function initGephiLite(options = {}) {
       rebuildFromFilters();
     });
 
-    addManagedListener(window, "resize", syncCanvasSize);
+    addManagedListener(window, "resize", () => {
+      syncCanvasSize();
+      if (state.is3DMode && state.threeRenderer && state.threeCamera && refs.threeContainer) {
+        const rect = refs.threeContainer.getBoundingClientRect();
+        state.threeCamera.aspect = rect.width / rect.height;
+        state.threeCamera.updateProjectionMatrix();
+        state.threeRenderer.setSize(rect.width, rect.height);
+      }
+    });
+
+    addManagedListener(refs.toggle3d, "click", () => {
+      toggle3DMode();
+    });
+  }
+
+  // --- 3D Neural Engine ---
+  async function toggle3DMode() {
+    state.is3DMode = !state.is3DMode;
+
+    if (refs.toggle3dLabel) {
+      refs.toggle3dLabel.textContent = state.is3DMode ? "2D" : "3D";
+    }
+    if (refs.toggle3d) {
+      refs.toggle3d.style.background = state.is3DMode ? "rgba(255, 66, 88, 0.3)" : "";
+      refs.toggle3d.style.borderColor = state.is3DMode ? "rgba(255, 66, 88, 0.6)" : "";
+    }
+
+    if (state.is3DMode) {
+      // Hide 2D, show 3D
+      if (refs.rendererHost) refs.rendererHost.style.display = "none";
+      if (refs.canvas) refs.canvas.style.display = "none";
+      if (refs.threeContainer) refs.threeContainer.style.display = "block";
+      const visualizer = document.getElementById("node-visualizer-container");
+      if (visualizer) visualizer.style.display = "none";
+
+      await build3DScene();
+    } else {
+      // Hide 3D, show 2D
+      destroy3DScene();
+      if (refs.rendererHost) refs.rendererHost.style.display = "";
+      if (refs.canvas) refs.canvas.style.display = "";
+      if (refs.threeContainer) refs.threeContainer.style.display = "none";
+      const visualizer = document.getElementById("node-visualizer-container");
+      if (visualizer) visualizer.style.display = "";
+      state.renderer?.refresh();
+    }
+  }
+
+  function destroy3DScene() {
+    if (state.threeAnimFrameId !== null) {
+      window.cancelAnimationFrame(state.threeAnimFrameId);
+      state.threeAnimFrameId = null;
+    }
+    if (state.threeControls) {
+      state.threeControls.dispose();
+      state.threeControls = null;
+    }
+    if (state.threeRenderer) {
+      state.threeRenderer.dispose();
+      state.threeRenderer = null;
+    }
+    if (refs.threeContainer) {
+      refs.threeContainer.innerHTML = "";
+    }
+    state.threeScene = null;
+    state.threeCamera = null;
+    state.threeNodeMeshes = [];
+    state.threeEdgeLines = null;
+    state.threeRaycaster = null;
+    state.threeMouse = null;
+    state.threeHoveredMesh = null;
+  }
+
+  async function build3DScene() {
+    if (!refs.threeContainer) return;
+
+    const THREE = await import("three");
+    const { OrbitControls } = await import("three/examples/jsm/controls/OrbitControls.js");
+
+    destroy3DScene();
+
+    const rect = refs.threeContainer.getBoundingClientRect();
+    const width = rect.width;
+    const height = rect.height;
+
+    // Scene
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x050202, 0.0018);
+
+    // Camera
+    const camera = new THREE.PerspectiveCamera(60, width / height, 1, 5000);
+    camera.position.set(0, 0, 350);
+
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x050202, 1);
+    refs.threeContainer.appendChild(renderer.domElement);
+
+    // Controls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.rotateSpeed = 0.6;
+    controls.zoomSpeed = 0.8;
+    controls.minDistance = 30;
+    controls.maxDistance = 1200;
+
+    // Raycaster
+    const raycaster = new THREE.Raycaster();
+    raycaster.params.Points = { threshold: 5 };
+    const mouse = new THREE.Vector2();
+
+    state.threeScene = scene;
+    state.threeCamera = camera;
+    state.threeRenderer = renderer;
+    state.threeControls = controls;
+    state.threeRaycaster = raycaster;
+    state.threeMouse = mouse;
+
+    // Ambient light
+    scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+    const pointLight = new THREE.PointLight(0xff4258, 2, 800);
+    pointLight.position.set(0, 100, 200);
+    scene.add(pointLight);
+
+    // Build node positions using ForceAtlas2 data
+    const nodes = state.filteredNodes;
+    const edges = state.filteredEdges;
+    if (!nodes.length) return;
+
+    // Compute positions - use graph layout positions if available, else random
+    const nodePositions = new Map();
+    const spreadFactor = 2.5;
+    nodes.forEach((node) => {
+      let x, y, z;
+      if (state.graph && state.graph.hasNode(node.id)) {
+        const attrs = state.graph.getNodeAttributes(node.id);
+        x = (attrs.x || 0) * spreadFactor;
+        y = -(attrs.y || 0) * spreadFactor;
+        z = (Math.random() - 0.5) * 120;
+      } else {
+        x = (Math.random() - 0.5) * 600;
+        y = (Math.random() - 0.5) * 600;
+        z = (Math.random() - 0.5) * 200;
+      }
+      nodePositions.set(node.id, { x, y, z });
+    });
+
+    // Create node meshes with glow
+    const nodeMeshes = [];
+    const nodeGroup = new THREE.Group();
+
+    nodes.forEach((node) => {
+      const pos = nodePositions.get(node.id);
+      const colorKey = node.semanticType || node.node_type || node.type;
+      const colorHex = CONFIG.nodeColors[colorKey] || "#3793ff";
+      const color = new THREE.Color(colorHex);
+      const baseSize = Math.sqrt(node.importance || 1) * 1.2 + 1.0;
+
+      // Core sphere
+      const geometry = new THREE.SphereGeometry(baseSize, 16, 12);
+      const material = new THREE.MeshPhongMaterial({
+        color: color,
+        emissive: color,
+        emissiveIntensity: 0.6,
+        shininess: 80,
+        transparent: true,
+        opacity: 0.92
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(pos.x, pos.y, pos.z);
+      mesh.userData = { nodeId: node.id, nodeData: node, baseColor: colorHex, baseSize };
+      nodeGroup.add(mesh);
+      nodeMeshes.push(mesh);
+
+      // Glow halo
+      const glowGeo = new THREE.SphereGeometry(baseSize * 2.2, 12, 8);
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.08,
+        side: THREE.BackSide
+      });
+      const glow = new THREE.Mesh(glowGeo, glowMat);
+      glow.position.copy(mesh.position);
+      glow.userData.isGlow = true;
+      nodeGroup.add(glow);
+    });
+
+    scene.add(nodeGroup);
+    state.threeNodeMeshes = nodeMeshes;
+
+    // Create edges
+    const edgePositions = [];
+    const edgeColors = [];
+    const edgeColor = new THREE.Color(0x5c363a);
+
+    edges.forEach((edge) => {
+      const sourceId = edge.sourceId || edge.source;
+      const targetId = edge.targetId || edge.target;
+      const srcPos = nodePositions.get(sourceId);
+      const tgtPos = nodePositions.get(targetId);
+      if (srcPos && tgtPos) {
+        edgePositions.push(srcPos.x, srcPos.y, srcPos.z);
+        edgePositions.push(tgtPos.x, tgtPos.y, tgtPos.z);
+        edgeColors.push(edgeColor.r, edgeColor.g, edgeColor.b);
+        edgeColors.push(edgeColor.r, edgeColor.g, edgeColor.b);
+      }
+    });
+
+    if (edgePositions.length) {
+      const lineGeo = new THREE.BufferGeometry();
+      lineGeo.setAttribute("position", new THREE.Float32BufferAttribute(edgePositions, 3));
+      lineGeo.setAttribute("color", new THREE.Float32BufferAttribute(edgeColors, 3));
+      const lineMat = new THREE.LineBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.18,
+        blending: THREE.AdditiveBlending
+      });
+      const lines = new THREE.LineSegments(lineGeo, lineMat);
+      scene.add(lines);
+      state.threeEdgeLines = lines;
+    }
+
+    // Mouse interaction
+    let hoveredMesh = null;
+
+    addManagedListener(renderer.domElement, "mousemove", (event) => {
+      const canvasRect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - canvasRect.left) / canvasRect.width) * 2 - 1;
+      mouse.y = -((event.clientY - canvasRect.top) / canvasRect.height) * 2 + 1;
+    });
+
+    addManagedListener(renderer.domElement, "click", () => {
+      if (hoveredMesh && hoveredMesh.userData.nodeData) {
+        inspectNode(hoveredMesh.userData.nodeData);
+        highlight3DNeighbors(hoveredMesh.userData.nodeId, THREE);
+        // Fly camera to node
+        const targetPos = hoveredMesh.position.clone();
+        const camTarget = targetPos.clone().add(new THREE.Vector3(0, 0, 80));
+        animateCamera(camera, controls, camTarget, targetPos, 800);
+      }
+    });
+
+    // Animation loop
+    let pulseTime = 0;
+    function animate3D() {
+      if (state.destroyed || !state.is3DMode) return;
+      state.threeAnimFrameId = requestAnimationFrame(animate3D);
+      pulseTime += 0.01;
+
+      // Raycasting for hover
+      raycaster.setFromCamera(mouse, camera);
+      const intersectable = nodeMeshes.filter(m => !m.userData.isGlow);
+      const intersects = raycaster.intersectObjects(intersectable);
+
+      if (intersects.length > 0) {
+        const newHover = intersects[0].object;
+        if (hoveredMesh !== newHover) {
+          // Reset previous
+          if (hoveredMesh) {
+            hoveredMesh.material.emissiveIntensity = 0.6;
+            hoveredMesh.scale.setScalar(1);
+          }
+          hoveredMesh = newHover;
+          hoveredMesh.material.emissiveIntensity = 1.2;
+          hoveredMesh.scale.setScalar(1.5);
+          renderer.domElement.style.cursor = "pointer";
+        }
+      } else {
+        if (hoveredMesh) {
+          hoveredMesh.material.emissiveIntensity = 0.6;
+          hoveredMesh.scale.setScalar(1);
+          hoveredMesh = null;
+          renderer.domElement.style.cursor = "grab";
+        }
+      }
+
+      // Subtle pulse on all nodes
+      nodeMeshes.forEach((mesh, i) => {
+        if (mesh !== hoveredMesh) {
+          const pulse = 1 + Math.sin(pulseTime + i * 0.3) * 0.04;
+          mesh.scale.setScalar(pulse);
+        }
+      });
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate3D();
+    renderer.domElement.style.cursor = "grab";
+  }
+
+  function highlight3DNeighbors(nodeId, THREE) {
+    if (!state.graph || !state.threeNodeMeshes.length) return;
+    const neighbors = new Set(state.graph.neighbors(nodeId));
+    neighbors.add(nodeId);
+
+    state.threeNodeMeshes.forEach((mesh) => {
+      if (!mesh.userData.nodeId) return;
+      const isHighlighted = neighbors.has(mesh.userData.nodeId);
+      const isSelected = mesh.userData.nodeId === nodeId;
+
+      if (isSelected) {
+        mesh.material.emissiveIntensity = 1.5;
+        mesh.material.opacity = 1;
+        mesh.scale.setScalar(1.8);
+      } else if (isHighlighted) {
+        mesh.material.emissiveIntensity = 0.9;
+        mesh.material.opacity = 0.95;
+        mesh.scale.setScalar(1.2);
+      } else {
+        mesh.material.emissiveIntensity = 0.15;
+        mesh.material.opacity = 0.2;
+        mesh.scale.setScalar(0.7);
+      }
+    });
+
+    // Highlight connected edges
+    if (state.threeEdgeLines) {
+      const colorsAttr = state.threeEdgeLines.geometry.getAttribute("color");
+      const edgeList = state.filteredEdges;
+      const highlightColor = new THREE.Color(0xff304c);
+      const dimColor = new THREE.Color(0x1a0a0e);
+
+      let idx = 0;
+      edgeList.forEach((edge) => {
+        const sourceId = edge.sourceId || edge.source;
+        const targetId = edge.targetId || edge.target;
+        const connected = (sourceId === nodeId || targetId === nodeId);
+        const color = connected ? highlightColor : dimColor;
+        if (idx * 2 + 1 < colorsAttr.count) {
+          colorsAttr.setXYZ(idx * 2, color.r, color.g, color.b);
+          colorsAttr.setXYZ(idx * 2 + 1, color.r, color.g, color.b);
+        }
+        idx++;
+      });
+      colorsAttr.needsUpdate = true;
+    }
+  }
+
+  function animateCamera(camera, controls, targetPosition, lookAt, duration) {
+    const startPos = camera.position.clone();
+    const startTarget = controls.target.clone();
+    const startTime = performance.now();
+
+    function step(now) {
+      const elapsed = now - startTime;
+      const t = Math.min(elapsed / duration, 1);
+      const ease = 1 - Math.pow(1 - t, 3); // cubic ease-out
+
+      camera.position.lerpVectors(startPos, targetPosition, ease);
+      controls.target.lerpVectors(startTarget, lookAt, ease);
+      controls.update();
+
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
   }
 
   try {

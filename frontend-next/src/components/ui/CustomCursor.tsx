@@ -21,9 +21,9 @@ export default function CustomCursor() {
     const handleMouseOver = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (
-        target.tagName === "BUTTON" || 
-        target.tagName === "A" || 
-        target.closest("button") || 
+        target.tagName === "BUTTON" ||
+        target.tagName === "A" ||
+        target.closest("button") ||
         target.closest("a") ||
         target.classList.contains("glass-panel") ||
         target.closest(".glass-panel") ||
@@ -46,7 +46,7 @@ export default function CustomCursor() {
 
   return (
     <motion.div
-      className="fixed top-0 left-0 w-4 h-4 bg-primary rounded-full mix-blend-screen pointer-events-none z-[100] hidden md:flex items-center justify-center origin-center"
+      className="fixed top-0 left-0 w-4 h-4 bg-primary rounded-full pointer-events-none z-[9999] hidden md:flex items-center justify-center origin-center"
       style={{
         x: cursorXSpring,
         y: cursorYSpring,

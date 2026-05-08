@@ -33,3 +33,13 @@ def test_api_graph_payload_contract(client):
         assert "kind" not in edge
         assert edge["source"] in node_ids
         assert edge["target"] in node_ids
+
+
+def test_api_graph_sets_security_headers(client):
+    response = client.get("/api/graph")
+
+    assert response.headers["Content-Security-Policy"] == "base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    assert response.headers["Cross-Origin-Opener-Policy"] == "same-origin"
+    assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"

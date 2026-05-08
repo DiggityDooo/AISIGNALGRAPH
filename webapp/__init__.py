@@ -243,8 +243,13 @@ def create_app() -> Flask:
         store, _jobs = require_services()
         try:
             payload = store.get_graph_data()
-            payload["status"] = "ok"
-            return jsonify(payload)
+            response = jsonify({**payload, "status": "ok"})
+            response.set_etag(store.get_graph_etag())
+            response.cache_control.public = True
+            response.cache_control.max_age = 0
+            response.cache_control.must_revalidate = True
+            response.make_conditional(request)
+            return response
         except GraphStoreError as exc:
             app.logger.exception("Falling back to degraded graph payload: %s", exc)
             return jsonify(_degraded_graph_payload(str(exc), store.get_health_report()))

@@ -417,6 +417,7 @@ class GraphStore:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._signature: int | None = None
+        self._graph_data_cache: GraphData | None = None
         self._entities: dict[str, EntityRecord] = {}
         self._stories: dict[str, StoryRecord] = {}
         self._entity_lookup = self._compile_entity_lookup()
@@ -432,6 +433,27 @@ class GraphStore:
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.db_path)
+
+    def _compact_graph_node(self, node: dict[str, Any]) -> dict[str, Any]:
+        compact = {
+            "id": node["id"],
+            "label": node["label"],
+            "node_type": node["node_type"],
+            "type": node["type"],
+            "route": node["route"],
+            "description": node["description"],
+            "importance": node["importance"],
+            "timeline_month": node["timeline_month"],
+            "year": node["year"],
+        }
+        return {key: value for key, value in compact.items() if value not in (None, "")}
+
+    def _compact_graph_edge(self, edge: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "source": edge["source"],
+            "target": edge["target"],
+            "flow_kind": edge["flow_kind"],
+        }
 
     def _table_columns(self, conn: sqlite3.Connection, table_name: str) -> set[str]:
         return {row[1] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
@@ -1070,6 +1092,7 @@ class GraphStore:
             raise GraphStoreError("Failed to rebuild the AI graph database.") from exc
 
         self._signature = None
+        self._graph_data_cache = None
         self._refresh()
 
     def _build_payload_from_master_document(self, cancel_event: Any | None = None) -> dict[str, Any]:
@@ -1762,6 +1785,8 @@ class GraphStore:
         if signature == self._signature:
             return
 
+        self._graph_data_cache = None
+
         try:
             with self._connect() as conn:
                 conn.row_factory = sqlite3.Row
@@ -2028,6 +2053,8 @@ class GraphStore:
 
     def get_graph_data(self) -> GraphData:
         self._refresh()
+        if self._graph_data_cache is not None:
+            return self._graph_data_cache
         story_months = {story.id: timeline_month_key(story.event_date) for story in self._stories.values()}
         known_story_months = sorted((month for month in story_months.values() if month), key=timeline_month_sort_key)
         first_story_month = known_story_months[0] if known_story_months else "2020-01"
@@ -2213,9 +2240,9 @@ class GraphStore:
             node["display_cluster_id"] = display_meta["display_cluster_id"] if display_meta else None
             node["display_cluster_label"] = display_meta["display_cluster_label"] if display_meta else None
 
-        return {
-            "nodes": nodes,
-            "edges": edges,
+        payload = {
+            "nodes": [self._compact_graph_node(node) for node in nodes],
+            "edges": [self._compact_graph_edge(edge) for edge in edges],
             "communities": communities,
             "timeline": {
                 "months": month_range(first_story_month, last_story_month),
@@ -2223,3 +2250,5 @@ class GraphStore:
                 "end": last_story_month,
             },
         }
+        self._graph_data_cache = payload
+        return payload

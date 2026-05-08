@@ -80,6 +80,19 @@ export async function initGephiLite(options = {}) {
     filterCleanupFns = [];
   }
 
+  function getNodeSemanticType(node) {
+    return node?.semanticType || node?.type || node?.node_type || "entity";
+  }
+
+  function getStableDepthOffset(nodeId) {
+    let hash = 0;
+    const value = String(nodeId || "");
+    for (let index = 0; index < value.length; index += 1) {
+      hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+    }
+    return ((Math.abs(hash) % 61) - 30) * 3;
+  }
+
   function addManagedListener(target, eventName, handler, listenerOptions) {
     if (!target || typeof target.addEventListener !== "function") {
       return;
@@ -110,11 +123,7 @@ export async function initGephiLite(options = {}) {
     state.destroyed = true;
     clearSearchTimeout();
     clearFilterListeners();
-
-    if (state.animationFrameId !== null) {
-      window.cancelAnimationFrame(state.animationFrameId);
-      state.animationFrameId = null;
-    }
+    stopAnimationLoop();
 
     // Clean up 3D scene
     destroy3DScene();
@@ -382,7 +391,7 @@ export async function initGephiLite(options = {}) {
         } else {
           state.visibleNodeTypes.delete(type);
         }
-        rebuildFromFilters();
+        void rebuildFromFilters();
       };
 
       checkbox.addEventListener("change", handleChange);
@@ -394,7 +403,7 @@ export async function initGephiLite(options = {}) {
 
   function inspectNode(node) {
     state.selectedNode = node;
-    const nodeType = node.semanticType || node.node_type || "entity";
+    const nodeType = getNodeSemanticType(node);
     const detailUrl = node.route || ((nodeType === "story" || nodeType === "topic")
       ? `/stories/${node.id.split(":").pop()}`
       : `/entities/${node.id.split(":").pop()}`);
@@ -433,7 +442,7 @@ export async function initGephiLite(options = {}) {
     const container = document.getElementById("node-visualizer-container");
     if (!container) return;
 
-    const colorKey = node.semanticType || node.node_type || "entity";
+    const colorKey = getNodeSemanticType(node);
     const color = CONFIG.nodeColors[colorKey] || "#3793ff";
 
     container.style.setProperty("--node-glow-color", color);
@@ -456,7 +465,7 @@ export async function initGephiLite(options = {}) {
   function filteredNodesByState() {
     const query = (refs.search?.value || "").trim().toLowerCase();
     let base = state.nodes.filter((node) => {
-      const nodeType = node.semanticType || node.node_type || node.type;
+      const nodeType = getNodeSemanticType(node);
       if (!state.visibleNodeTypes.has(nodeType)) {
         return false;
       }
@@ -497,10 +506,16 @@ export async function initGephiLite(options = {}) {
     });
   }
 
-  function rebuildFromFilters() {
+  async function rebuildFromFilters() {
     state.filteredNodes = filteredNodesByState();
     const visibleIds = new Set(state.filteredNodes.map((node) => node.id));
     state.filteredEdges = filteredEdgesByNodes(visibleIds);
+    if (state.is3DMode) {
+      buildGraph({ mountRenderer: false });
+      await build3DScene();
+      updateStats({ animate: true });
+      return false;
+    }
     return buildGraph();
   }
 
@@ -517,7 +532,7 @@ export async function initGephiLite(options = {}) {
 
       state.nodes = (data.nodes || []).map((node) => ({
         ...node,
-        semanticType: node.semanticType || node.node_type || node.type || "topic"
+        semanticType: node.semanticType || node.type || node.node_type || "topic"
       }));
       state.edges = data.edges || [];
       state.communities = data.communities || [];
@@ -532,7 +547,8 @@ export async function initGephiLite(options = {}) {
     }
   }
 
-  function buildGraph() {
+  function buildGraph(options = {}) {
+    const { mountRenderer = true } = options;
     console.log("Gephi Lite: Building graph...");
     if (!state.filteredNodes.length) {
       console.warn("Gephi Lite: No nodes to render.");
@@ -545,7 +561,7 @@ export async function initGephiLite(options = {}) {
 
     const graph = new GraphCtor({ multi: true });
     state.filteredNodes.forEach((node) => {
-      const colorKey = node.semanticType || node.node_type || node.type;
+      const colorKey = getNodeSemanticType(node);
       const color = CONFIG.nodeColors[colorKey] || "#3793ff";
       if (!graph.hasNode(node.id)) {
         graph.addNode(node.id, {
@@ -588,6 +604,11 @@ export async function initGephiLite(options = {}) {
     });
 
     state.graph = graph;
+
+    if (!mountRenderer) {
+      updateStats({ animate: true });
+      return false;
+    }
 
     console.log("Gephi Lite: Running ForceAtlas2 layout...");
     const spreadSettings = {
@@ -659,13 +680,13 @@ export async function initGephiLite(options = {}) {
     state.renderer.on("enterNode", ({ node }) => {
       state.hoveredNode = node;
       const hovered = graph.getNodeAttributes(node);
-      const hoverType = hovered.semanticType || hovered.node_type || "entity";
+      const hoverType = getNodeSemanticType(hovered);
       appRoot.style.setProperty("--node-glow-color", CONFIG.nodeColors[hoverType] || "#3793ff");
       state.renderer.refresh();
     });
     state.renderer.on("leaveNode", () => {
       state.hoveredNode = null;
-      const selectedType = state.selectedNode?.semanticType || state.selectedNode?.node_type || "story";
+      const selectedType = getNodeSemanticType(state.selectedNode) || "story";
       appRoot.style.setProperty("--node-glow-color", CONFIG.nodeColors[selectedType] || DEFAULT_GLOW_COLOR);
       state.renderer.refresh();
     });
@@ -740,12 +761,19 @@ export async function initGephiLite(options = {}) {
   }
 
   function startAnimationLoop() {
-    if (!state.renderer || state.animationFrameId !== null) {
+    if (!state.renderer || state.animationFrameId !== null || state.is3DMode) {
       return;
     }
 
     console.log("Gephi Lite: Starting animation loop...");
     animate();
+  }
+
+  function stopAnimationLoop() {
+    if (state.animationFrameId !== null) {
+      window.cancelAnimationFrame(state.animationFrameId);
+      state.animationFrameId = null;
+    }
   }
 
   function syncCanvasSize() {
@@ -866,7 +894,7 @@ export async function initGephiLite(options = {}) {
       if (refs.yearValue) {
         refs.yearValue.textContent = String(state.activeYear);
       }
-      rebuildFromFilters();
+      void rebuildFromFilters();
     });
 
     addManagedListener(refs.signalSpeed, "input", (event) => {
@@ -880,7 +908,7 @@ export async function initGephiLite(options = {}) {
     addManagedListener(refs.rebuild, "click", async () => {
       try {
         await loadGraphData();
-        const hasRenderer = rebuildFromFilters();
+        const hasRenderer = await rebuildFromFilters();
         if (hasRenderer) {
           startAnimationLoop();
         }
@@ -892,11 +920,13 @@ export async function initGephiLite(options = {}) {
 
     addManagedListener(refs.search, "input", () => {
       clearSearchTimeout();
-      searchTimeout = window.setTimeout(() => rebuildFromFilters(), 250);
+      searchTimeout = window.setTimeout(() => {
+        void rebuildFromFilters();
+      }, 250);
     });
 
     addManagedListener(refs.lens, "change", () => {
-      rebuildFromFilters();
+      void rebuildFromFilters();
     });
 
     addManagedListener(window, "resize", () => {
@@ -909,8 +939,13 @@ export async function initGephiLite(options = {}) {
       }
     });
 
-    addManagedListener(refs.toggle3d, "click", () => {
-      toggle3DMode();
+    addManagedListener(refs.toggle3d, "click", async () => {
+      try {
+        await toggle3DMode();
+      } catch (error) {
+        state.is3DMode = false;
+        emitRuntimeError(error, "3D mode error");
+      }
     });
   }
 
@@ -927,7 +962,10 @@ export async function initGephiLite(options = {}) {
     }
 
     if (state.is3DMode) {
-      // Hide 2D, show 3D
+      stopAnimationLoop();
+      state.activeSignals = [];
+      destroyRenderer();
+
       if (refs.rendererHost) refs.rendererHost.style.display = "none";
       if (refs.canvas) refs.canvas.style.display = "none";
       if (refs.threeContainer) refs.threeContainer.style.display = "block";
@@ -936,14 +974,16 @@ export async function initGephiLite(options = {}) {
 
       await build3DScene();
     } else {
-      // Hide 3D, show 2D
       destroy3DScene();
       if (refs.rendererHost) refs.rendererHost.style.display = "";
       if (refs.canvas) refs.canvas.style.display = "";
       if (refs.threeContainer) refs.threeContainer.style.display = "none";
       const visualizer = document.getElementById("node-visualizer-container");
       if (visualizer) visualizer.style.display = "";
-      state.renderer?.refresh();
+      const hasRenderer = await rebuildFromFilters();
+      if (hasRenderer) {
+        startAnimationLoop();
+      }
     }
   }
 
@@ -959,6 +999,17 @@ export async function initGephiLite(options = {}) {
     if (state.threeRenderer) {
       state.threeRenderer.dispose();
       state.threeRenderer = null;
+    }
+    if (state.threeScene) {
+      state.threeScene.traverse((object) => {
+        if (object.geometry) {
+          object.geometry.dispose?.();
+        }
+        if (object.material) {
+          const materials = Array.isArray(object.material) ? object.material : [object.material];
+          materials.forEach((material) => material?.dispose?.());
+        }
+      });
     }
     if (refs.threeContainer) {
       refs.threeContainer.innerHTML = "";
@@ -1026,26 +1077,30 @@ export async function initGephiLite(options = {}) {
     pointLight.position.set(0, 100, 200);
     scene.add(pointLight);
 
-    // Build node positions using ForceAtlas2 data
-    const nodes = state.filteredNodes;
-    const edges = state.filteredEdges;
+    const graph = state.graph;
+    if (!graph || graph.order === 0) return;
+
+    const nodes = [];
+    graph.forEachNode((nodeId, attrs) => {
+      nodes.push({ id: nodeId, ...attrs });
+    });
     if (!nodes.length) return;
 
-    // Compute positions - use graph layout positions if available, else random
+    const monthIndexes = nodes
+      .map((node) => Number(node.month_index))
+      .filter((value) => Number.isFinite(value));
+    const timelineCenter = monthIndexes.length
+      ? (Math.min(...monthIndexes) + Math.max(...monthIndexes)) / 2
+      : 0;
+
     const nodePositions = new Map();
-    const spreadFactor = 2.5;
     nodes.forEach((node) => {
-      let x, y, z;
-      if (state.graph && state.graph.hasNode(node.id)) {
-        const attrs = state.graph.getNodeAttributes(node.id);
-        x = (attrs.x || 0) * spreadFactor;
-        y = -(attrs.y || 0) * spreadFactor;
-        z = (Math.random() - 0.5) * 120;
-      } else {
-        x = (Math.random() - 0.5) * 600;
-        y = (Math.random() - 0.5) * 600;
-        z = (Math.random() - 0.5) * 200;
-      }
+      const monthIndex = Number(node.month_index);
+      const x = Number(node.x || 0);
+      const y = Number(node.y || 0);
+      const z = Number.isFinite(monthIndex)
+        ? (monthIndex - timelineCenter) * 10 + getStableDepthOffset(node.id)
+        : getStableDepthOffset(node.id);
       nodePositions.set(node.id, { x, y, z });
     });
 
@@ -1055,7 +1110,7 @@ export async function initGephiLite(options = {}) {
 
     nodes.forEach((node) => {
       const pos = nodePositions.get(node.id);
-      const colorKey = node.semanticType || node.node_type || node.type;
+      const colorKey = getNodeSemanticType(node);
       const colorHex = CONFIG.nodeColors[colorKey] || "#3793ff";
       const color = new THREE.Color(colorHex);
       const baseSize = Math.sqrt(node.importance || 1) * 1.2 + 1.0;
@@ -1098,9 +1153,7 @@ export async function initGephiLite(options = {}) {
     const edgeColors = [];
     const edgeColor = new THREE.Color(0x5c363a);
 
-    edges.forEach((edge) => {
-      const sourceId = edge.sourceId || edge.source;
-      const targetId = edge.targetId || edge.target;
+    graph.forEachEdge((_edgeId, _attrs, sourceId, targetId) => {
       const srcPos = nodePositions.get(sourceId);
       const tgtPos = nodePositions.get(targetId);
       if (srcPos && tgtPos) {

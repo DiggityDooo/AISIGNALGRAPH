@@ -20,7 +20,7 @@ from .types import GraphData, HealthReport
 
 
 LEGACY_MASTER_DOCUMENT_PATH = Path("/home/seanb/Documents/New Folder/AI_Master_Document_2020_2026.md")
-DATASET_VERSION = "master-doc-v2"
+DATASET_VERSION = "master-doc-v3"
 SCHEMA_VERSION = "1"
 DISPLAY_CLUSTER_REFINEMENT_THRESHOLD = 120
 DISPLAY_CLUSTER_TARGET_SIZE = 12
@@ -87,6 +87,9 @@ ENTITY_DEFINITIONS = [
     {"id": "google", "name": "Google", "type": "company", "group": "Platforms", "description": "Search and platform giant reshaping its stack around Gemini and AI products.", "importance": 4, "aliases": ["google", "bard", "workspace duet ai"]},
     {"id": "tesla", "name": "Tesla", "type": "company", "group": "Robotics", "description": "EV and autonomy company central to AI labor and robotics speculation.", "importance": 2, "aliases": ["tesla", "fsd", "autopilot", "optimus"]},
     {"id": "moonshot-ai", "name": "Moonshot AI", "type": "company", "group": "Labs", "description": "Chinese lab behind the Kimi model line and agent-focused releases.", "importance": 3, "aliases": ["moonshot ai", "moonshot", "kimi"]},
+    {"id": "alibaba", "name": "Alibaba / Qwen Team", "type": "company", "group": "Platforms", "description": "Alibaba's model organization behind the Qwen family and large open-weight distribution.", "importance": 4, "aliases": ["alibaba", "alibaba cloud", "tongyi qianwen", "qwen team"]},
+    {"id": "perplexity", "name": "Perplexity", "type": "company", "group": "Consumer", "description": "AI-native answer engine blending retrieval search with fast model routing.", "importance": 3, "aliases": ["perplexity", "perplexity ai", "answer engine"]},
+    {"id": "figure-ai", "name": "Figure AI", "type": "company", "group": "Robotics", "description": "Humanoid robotics company linked to AI-native labor automation experiments.", "importance": 3, "aliases": ["figure ai", "figure robotics", "figure 01", "figure 02"]},
     {"id": "gpt-family", "name": "GPT Family", "type": "model", "group": "Models", "description": "OpenAI's flagship model line spanning GPT-3 through GPT-5 and the o-series adjacency.", "importance": 5, "aliases": ["gpt-3", "gpt-3.5", "gpt-4", "gpt-4 turbo", "gpt-4o", "gpt-4.5", "gpt-5"]},
     {"id": "o-series", "name": "OpenAI o-Series", "type": "model", "group": "Models", "description": "Reasoning-focused OpenAI model line built around inference-time compute.", "importance": 5, "aliases": ["o1", "o3", "o4-mini", "strawberry"]},
     {"id": "claude-family", "name": "Claude Family", "type": "model", "group": "Models", "description": "Anthropic's model family centered on long context, coding quality, and agentic workflows.", "importance": 5, "aliases": ["claude 1", "claude 2", "claude 2.1", "claude 3", "claude 3.5", "claude 3.7", "claude 4.5", "claude opus", "claude sonnet", "claude haiku"]},
@@ -152,6 +155,11 @@ ENTITY_DEFINITIONS = [
     {"id": "deepseek-r1-model", "name": "DeepSeek R1", "type": "model", "group": "DeepSeek Models", "description": "Reasoning release tied to the 2025 Sputnik moment.", "importance": 5, "aliases": ["deepseek r1"]},
     {"id": "deepseek-v4-pro-model", "name": "DeepSeek V4 Pro", "type": "model", "group": "DeepSeek Models", "description": "Long-context 2026 DeepSeek release.", "importance": 5, "aliases": ["deepseek-v4-pro", "deepseek v4 pro"]},
     {"id": "deepseek-v4-flash-model", "name": "DeepSeek V4 Flash", "type": "model", "group": "DeepSeek Models", "description": "Fast DeepSeek V4 deployment line.", "importance": 4, "aliases": ["deepseek-v4-flash", "deepseek v4 flash"]},
+    {"id": "qwen-family", "name": "Qwen Family", "type": "model", "group": "Qwen Models", "description": "Alibaba's open and commercial model family spanning chat, coding, and reasoning variants.", "importance": 4, "aliases": ["qwen", "tongyi qianwen", "qwen family"]},
+    {"id": "qwen-2-5-model", "name": "Qwen 2.5", "type": "model", "group": "Qwen Models", "description": "Widely deployed Qwen generation for coding and multilingual use.", "importance": 4, "aliases": ["qwen 2.5", "qwen2.5"]},
+    {"id": "qwen-3-model", "name": "Qwen 3", "type": "model", "group": "Qwen Models", "description": "Successor Qwen generation emphasizing stronger reasoning and enterprise deployment.", "importance": 4, "aliases": ["qwen 3", "qwen3"]},
+    {"id": "grok-family", "name": "Grok Family", "type": "model", "group": "xAI Models", "description": "xAI's Grok line integrated with social-native and realtime distribution channels.", "importance": 3, "aliases": ["grok", "grok family"]},
+    {"id": "grok-3-model", "name": "Grok 3", "type": "model", "group": "xAI Models", "description": "Grok generation tied to xAI's large-scale compute expansion and benchmark campaigns.", "importance": 3, "aliases": ["grok 3", "grok3"]},
     {"id": "kimi-family", "name": "Kimi Family", "type": "model", "group": "Kimi Models", "description": "Moonshot AI's Kimi line spanning long-context, reasoning, and agentic releases.", "importance": 4, "aliases": ["kimi family", "kimi"]},
     {"id": "kimi-model", "name": "Kimi", "type": "model", "group": "Kimi Models", "description": "Moonshot AI's original Kimi assistant line.", "importance": 3, "aliases": ["kimi assistant", "kimi"]},
     {"id": "kimi-k1-5-model", "name": "Kimi K1.5", "type": "model", "group": "Kimi Models", "description": "Early long-context Kimi release.", "importance": 3, "aliases": ["kimi k1.5", "kimi k1-5"]},
@@ -180,6 +188,7 @@ ENTITY_DEFINITIONS = [
     {"id": "education", "name": "Education Shift", "type": "keyword", "group": "Impact", "description": "Academic integrity shocks, tutors, and workflow changes in education.", "importance": 3, "aliases": ["universities", "academic", "khanmigo", "duolingo", "education", "bootcamp"]},
     {"id": "creative", "name": "Creative Industry Disruption", "type": "keyword", "group": "Impact", "description": "AI art, music, writing, and video altering media production and labor.", "importance": 4, "aliases": ["ai art", "midjourney art", "wga", "sag-aftra", "music industry", "deep fake", "pornography", "video generation"]},
     {"id": "science", "name": "Science Acceleration", "type": "keyword", "group": "Science", "description": "Scientific progress accelerated by AI systems in biology, chemistry, and medicine.", "importance": 4, "aliases": ["science", "healthcare", "diagnostic", "protein", "drug", "olympiad"]},
+    {"id": "search", "name": "AI Search Shift", "type": "keyword", "group": "Consumer", "description": "Migration from classical search links to answer-engine style AI interaction.", "importance": 3, "aliases": ["ai search", "answer engine", "search disruption", "search replacement"]},
     {"id": "sam-altman", "name": "Sam Altman", "type": "person", "group": "People", "description": "OpenAI chief executive and central operator in the commercialization of frontier AI.", "importance": 4, "aliases": ["sam altman", "altman"]},
     {"id": "dario-amodei", "name": "Dario Amodei", "type": "person", "group": "People", "description": "Anthropic CEO and major advocate of safety-constrained frontier deployment.", "importance": 3, "aliases": ["dario amodei"]},
     {"id": "ilya-sutskever", "name": "Ilya Sutskever", "type": "person", "group": "People", "description": "Key researcher in deep learning and OpenAI board crisis participant later founding SSI.", "importance": 3, "aliases": ["ilya sutskever", "ssi", "safe superintelligence"]},
@@ -417,6 +426,7 @@ class GraphStore:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._signature: int | None = None
+        self._graph_data_cache: GraphData | None = None
         self._entities: dict[str, EntityRecord] = {}
         self._stories: dict[str, StoryRecord] = {}
         self._entity_lookup = self._compile_entity_lookup()
@@ -432,6 +442,31 @@ class GraphStore:
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.db_path)
+
+    def get_graph_etag(self) -> str:
+        self._refresh()
+        return f"graph-{self._signature or 0}"
+
+    def _compact_graph_node(self, node: dict[str, Any]) -> dict[str, Any]:
+        compact = {
+            "id": node["id"],
+            "label": node["label"],
+            "node_type": node["node_type"],
+            "type": node["type"],
+            "route": node["route"],
+            "description": node["description"],
+            "importance": node["importance"],
+            "timeline_month": node["timeline_month"],
+            "year": node["year"],
+        }
+        return {key: value for key, value in compact.items() if value not in (None, "")}
+
+    def _compact_graph_edge(self, edge: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "source": edge["source"],
+            "target": edge["target"],
+            "flow_kind": edge["flow_kind"],
+        }
 
     def _table_columns(self, conn: sqlite3.Connection, table_name: str) -> set[str]:
         return {row[1] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
@@ -1070,6 +1105,7 @@ class GraphStore:
             raise GraphStoreError("Failed to rebuild the AI graph database.") from exc
 
         self._signature = None
+        self._graph_data_cache = None
         self._refresh()
 
     def _build_payload_from_master_document(self, cancel_event: Any | None = None) -> dict[str, Any]:
@@ -1236,6 +1272,114 @@ class GraphStore:
                 "importance": 4,
                 "tags": ["model-release", "kimi", "moonshot", "visual", "agents", "2026"],
                 "entity_ids": ["moonshot-ai", "kimi-family", "kimi-k2-6-model", "agents", "multimodal", "china", "year-2026"],
+            },
+            {
+                "id": "2025-01-deepseek-r1-reasoning-shock",
+                "title": "DeepSeek R1 accelerated open reasoning adoption across the industry",
+                "kind": "model-release",
+                "status": "active",
+                "date": "2025-01",
+                "summary": "DeepSeek R1 strengthened the case that open reasoning models could pressure closed labs on quality-per-dollar and distribution speed.",
+                "details": "## Detail\n\nDeepSeek R1 became a reference point for open reasoning economics and intensified benchmark competition across frontier labs.",
+                "importance": 5,
+                "tags": ["model-release", "deepseek", "reasoning", "open-source", "2025"],
+                "entity_ids": ["deepseek", "deepseek-r1-model", "reasoning", "open-source", "china", "year-2025"],
+            },
+            {
+                "id": "2025-04-llama-4-open-weight-cycle",
+                "title": "Llama 4 sustained Meta's open-weight strategy in the frontier race",
+                "kind": "strategy",
+                "status": "active",
+                "date": "2025-04",
+                "summary": "Meta's Llama 4 cycle reinforced the open-weight distribution strategy and kept pressure on API-gated deployment models.",
+                "details": "## Detail\n\nLlama 4 continued Meta's positioning around open ecosystem leverage, downstream fine-tuning, and enterprise self-hosting demand.",
+                "importance": 4,
+                "tags": ["strategy", "llama", "meta", "open-source", "2025"],
+                "entity_ids": ["meta", "llama-family", "open-source", "coding-agents", "year-2025"],
+            },
+            {
+                "id": "2025-06-qwen-2-5-enterprise-coding",
+                "title": "Qwen 2.5 expanded Alibaba's enterprise coding and multilingual footprint",
+                "kind": "model-release",
+                "status": "active",
+                "date": "2025-06",
+                "summary": "Qwen 2.5 strengthened Alibaba's position in multilingual enterprise workloads and practical coding pipelines.",
+                "details": "## Detail\n\nAlibaba's Qwen 2.5 line improved adoption in Asia-focused enterprise deployments and contributed to broader open-model competition.",
+                "importance": 4,
+                "tags": ["model-release", "qwen", "alibaba", "coding", "2025"],
+                "entity_ids": ["alibaba", "qwen-family", "qwen-2-5-model", "coding-agents", "open-source", "china", "year-2025"],
+            },
+            {
+                "id": "2025-09-grok-3-social-distribution",
+                "title": "Grok 3 pushed xAI's social-native distribution strategy",
+                "kind": "model-release",
+                "status": "active",
+                "date": "2025-09",
+                "summary": "Grok 3 tied model iteration to social platform distribution and large public benchmark messaging.",
+                "details": "## Detail\n\nxAI used Grok 3 to emphasize realtime social deployment, larger training clusters, and faster public iteration loops.",
+                "importance": 3,
+                "tags": ["model-release", "grok", "xai", "distribution", "2025"],
+                "entity_ids": ["xai", "grok-family", "grok-3-model", "multimodal", "year-2025"],
+            },
+            {
+                "id": "2026-01-qwen-3-reasoning-wave",
+                "title": "Qwen 3 intensified Chinese reasoning-model competition",
+                "kind": "model-release",
+                "status": "active",
+                "date": "2026-01",
+                "summary": "Qwen 3 reinforced Alibaba's frontier relevance and deepened competition around reasoning quality, cost, and deployment flexibility.",
+                "details": "## Detail\n\nQwen 3 marked a stronger reasoning push from Alibaba and expanded the set of viable non-US frontier model suppliers.",
+                "importance": 4,
+                "tags": ["model-release", "qwen", "reasoning", "china", "2026"],
+                "entity_ids": ["alibaba", "qwen-family", "qwen-3-model", "reasoning", "open-source", "china", "year-2026"],
+            },
+            {
+                "id": "2026-02-perplexity-answer-engine-enterprise",
+                "title": "Perplexity scaled answer-engine usage in consumer and enterprise workflows",
+                "kind": "business",
+                "status": "active",
+                "date": "2026-02",
+                "summary": "Perplexity's growth highlighted demand for retrieval-grounded answer interfaces beyond classic search listings.",
+                "details": "## Detail\n\nPerplexity's expansion reflected a broader shift toward conversational answer engines, model routing, and citation-first UX patterns.",
+                "importance": 3,
+                "tags": ["business", "perplexity", "search", "consumer", "2026"],
+                "entity_ids": ["perplexity", "search", "openai", "anthropic", "year-2026"],
+            },
+            {
+                "id": "2026-03-blackwell-capacity-ramp",
+                "title": "NVIDIA Blackwell ramp reinforced compute concentration pressure",
+                "kind": "infrastructure",
+                "status": "active",
+                "date": "2026-03",
+                "summary": "Blackwell deployment scale tightened the connection between capital access and frontier model competitiveness.",
+                "details": "## Detail\n\nThe Blackwell ramp amplified infrastructure concentration and increased the strategic importance of long-term GPU allocation agreements.",
+                "importance": 5,
+                "tags": ["infrastructure", "nvidia", "blackwell", "chips", "2026"],
+                "entity_ids": ["nvidia", "chips", "investment", "year-2026"],
+            },
+            {
+                "id": "2026-04-stargate-capex-commitments",
+                "title": "Stargate-style capex commitments signaled a new infrastructure financing phase",
+                "kind": "infrastructure",
+                "status": "active",
+                "date": "2026-04",
+                "summary": "Large multi-partner compute projects linked OpenAI-scale training ambitions to utility-grade capital and power planning.",
+                "details": "## Detail\n\nStargate-era commitments demonstrated that future frontier gains depend as much on infrastructure finance and energy coordination as on model architecture.",
+                "importance": 5,
+                "tags": ["infrastructure", "stargate", "capex", "2026"],
+                "entity_ids": ["openai", "oracle", "softbank", "chips", "investment", "year-2026"],
+            },
+            {
+                "id": "2026-04-figure-embodied-ai-pilots",
+                "title": "Figure AI pilot deployments expanded embodied AI into production discussions",
+                "kind": "impact",
+                "status": "active",
+                "date": "2026-04",
+                "summary": "Humanoid pilot programs pushed embodied AI from demo narratives toward measurable labor and workflow experiments.",
+                "details": "## Detail\n\nFigure AI deployment pilots highlighted how robotics, foundation models, and labor economics are converging into a single product frontier.",
+                "importance": 3,
+                "tags": ["impact", "robotics", "figure", "labor", "2026"],
+                "entity_ids": ["figure-ai", "robotics", "labor", "year-2026"],
             },
         ]
 
@@ -1762,6 +1906,8 @@ class GraphStore:
         if signature == self._signature:
             return
 
+        self._graph_data_cache = None
+
         try:
             with self._connect() as conn:
                 conn.row_factory = sqlite3.Row
@@ -2028,6 +2174,8 @@ class GraphStore:
 
     def get_graph_data(self) -> GraphData:
         self._refresh()
+        if self._graph_data_cache is not None:
+            return self._graph_data_cache
         story_months = {story.id: timeline_month_key(story.event_date) for story in self._stories.values()}
         known_story_months = sorted((month for month in story_months.values() if month), key=timeline_month_sort_key)
         first_story_month = known_story_months[0] if known_story_months else "2020-01"
@@ -2213,9 +2361,9 @@ class GraphStore:
             node["display_cluster_id"] = display_meta["display_cluster_id"] if display_meta else None
             node["display_cluster_label"] = display_meta["display_cluster_label"] if display_meta else None
 
-        return {
-            "nodes": nodes,
-            "edges": edges,
+        payload = {
+            "nodes": [self._compact_graph_node(node) for node in nodes],
+            "edges": [self._compact_graph_edge(edge) for edge in edges],
             "communities": communities,
             "timeline": {
                 "months": month_range(first_story_month, last_story_month),
@@ -2223,3 +2371,5 @@ class GraphStore:
                 "end": last_story_month,
             },
         }
+        self._graph_data_cache = payload
+        return payload

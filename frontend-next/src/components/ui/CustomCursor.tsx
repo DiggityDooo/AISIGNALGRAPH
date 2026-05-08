@@ -1,46 +1,89 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, useMotionValue, useSpring } from "framer-motion";
 
 export default function CustomCursor() {
   const [isHovering, setIsHovering] = useState(false);
   const cursorX = useMotionValue(-100);
   const cursorY = useMotionValue(-100);
+  const rafIdRef = useRef<number | null>(null);
+  const hoverStateRef = useRef(false);
 
   const springConfig = { damping: 25, stiffness: 250 };
   const cursorXSpring = useSpring(cursorX, springConfig);
   const cursorYSpring = useSpring(cursorY, springConfig);
 
   useEffect(() => {
-    const updateMousePosition = (e: MouseEvent) => {
-      cursorX.set(e.clientX);
-      cursorY.set(e.clientY);
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const finePointerQuery = window.matchMedia("(pointer: fine)");
+    if (!finePointerQuery.matches) {
+      return undefined;
+    }
+
+    let latestX = -100;
+    let latestY = -100;
+
+    const flushPointerPosition = () => {
+      rafIdRef.current = null;
+      cursorX.set(latestX);
+      cursorY.set(latestY);
     };
 
-    const handleMouseOver = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === "BUTTON" ||
-        target.tagName === "A" ||
-        target.closest("button") ||
-        target.closest("a") ||
-        target.classList.contains("glass-panel") ||
-        target.closest(".glass-panel") ||
-        target.getAttribute('data-pointer-reactive')
-      ) {
-        setIsHovering(true);
-      } else {
-        setIsHovering(false);
+    const queuePointerPosition = (x: number, y: number) => {
+      latestX = x;
+      latestY = y;
+      if (rafIdRef.current === null) {
+        rafIdRef.current = window.requestAnimationFrame(flushPointerPosition);
       }
     };
 
-    window.addEventListener("mousemove", updateMousePosition, { passive: true });
-    window.addEventListener("mouseover", handleMouseOver, { passive: true });
+    const updateHoverState = (nextHovering: boolean) => {
+      if (hoverStateRef.current === nextHovering) {
+        return;
+      }
+      hoverStateRef.current = nextHovering;
+      setIsHovering(nextHovering);
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse") {
+        return;
+      }
+      queuePointerPosition(event.clientX, event.clientY);
+    };
+
+    const handlePointerOver = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse") {
+        return;
+      }
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const isInteractive = Boolean(
+        target?.closest("button, a, .glass-panel, [data-pointer-reactive], [role='button'], input, select, textarea")
+      );
+      updateHoverState(isInteractive);
+    };
+
+    const handlePointerLeave = () => {
+      updateHoverState(false);
+      queuePointerPosition(-100, -100);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    window.addEventListener("pointerover", handlePointerOver, { passive: true });
+    window.addEventListener("blur", handlePointerLeave, { passive: true });
 
     return () => {
-      window.removeEventListener("mousemove", updateMousePosition);
-      window.removeEventListener("mouseover", handleMouseOver);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerover", handlePointerOver);
+      window.removeEventListener("blur", handlePointerLeave);
+      if (rafIdRef.current !== null) {
+        window.cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
     };
   }, [cursorX, cursorY]);
 

@@ -1340,7 +1340,7 @@ export async function initGephiLite(options = {}) {
     initBackgroundFlow();
 
     await loadGraphData();
-    const hasRenderer = rebuildFromFilters();
+    const hasRenderer = await rebuildFromFilters();
     if (hasRenderer) {
       startAnimationLoop();
     }

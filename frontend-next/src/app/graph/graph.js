@@ -8,21 +8,24 @@ const FALLBACK_X_SPREAD = 2.5;
 const FALLBACK_Y_SPREAD = 1.5;
 const TIMELINE_Z_SCALE = 10;
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
 function renderErrorMessage(error) {
   if (error instanceof Error) {
     return error.message;
   }
 
   return String(error);
+}
+
+function safeInternalRoute(candidate, fallback) {
+  if (typeof candidate !== "string") {
+    return fallback;
+  }
+
+  if (!candidate.startsWith("/") || candidate.startsWith("//") || candidate.includes("\0")) {
+    return fallback;
+  }
+
+  return candidate;
 }
 
 export async function initGephiLite(options = {}) {
@@ -170,7 +173,7 @@ export async function initGephiLite(options = {}) {
     const detailSubtitle = refs?.detailSubtitle || document.getElementById("detail-subtitle");
     const detailContent = refs?.detailContent || document.getElementById("detail-content");
     const detailPane = refs?.detailPane || document.getElementById("detail-pane");
-    const message = escapeHtml(renderErrorMessage(error));
+    const message = renderErrorMessage(error);
 
     if (detailTitle) {
       detailTitle.textContent = "Graph initialization failed";
@@ -179,7 +182,11 @@ export async function initGephiLite(options = {}) {
       detailSubtitle.textContent = subtitle;
     }
     if (detailContent) {
-      detailContent.innerHTML = `<div class="detail-section">${message}</div>`;
+      detailContent.textContent = "";
+      const errorSection = document.createElement("div");
+      errorSection.className = "detail-section";
+      errorSection.textContent = message;
+      detailContent.appendChild(errorSection);
     }
     detailPane?.classList.add("is-active");
   }
@@ -423,35 +430,69 @@ export async function initGephiLite(options = {}) {
   function inspectNode(node) {
     state.selectedNode = node;
     const nodeType = getNodeSemanticType(node);
-    const detailUrl = node.route || ((nodeType === "story" || nodeType === "topic")
-      ? `/stories/${node.id.split(":").pop()}`
-      : `/entities/${node.id.split(":").pop()}`);
+    const fallbackRoute = (nodeType === "story" || nodeType === "topic")
+      ? `/stories/${encodeURIComponent(String(node.id || "").split(":").pop() || "")}`
+      : `/entities/${encodeURIComponent(String(node.id || "").split(":").pop() || "")}`;
+    const detailUrl = safeInternalRoute(node.route, fallbackRoute);
 
-    refs.detailTitle.innerHTML = `<a href="${detailUrl}" class="detail-title-link" title="Open full dossier">${node.label || node.id}</a>`;
+    refs.detailTitle.textContent = "";
+    const detailLink = document.createElement("a");
+    detailLink.href = detailUrl;
+    detailLink.className = "detail-title-link";
+    detailLink.title = "Open full dossier";
+    detailLink.textContent = String(node.label || node.id || "Untitled node");
+    refs.detailTitle.appendChild(detailLink);
     refs.detailSubtitle.textContent = nodeType.toUpperCase();
     const neighbors = state.graph ? state.graph.neighbors(node.id) : [];
-    const neighborLinks = neighbors.map((neighborId) => {
-      const neighbor = state.graph.getNodeAttributes(neighborId);
-      return `<button class="neighbor-chip" onclick="window.gephiLite.selectNode('${neighborId}')">${neighbor.label || neighborId}</button>`;
-    }).join("");
+    const neighborsList = document.createElement("div");
+    neighborsList.className = "detail-neighbors-list";
+    if (neighbors.length) {
+      neighbors.forEach((neighborId) => {
+        const neighbor = state.graph.getNodeAttributes(neighborId);
+        const button = document.createElement("button");
+        button.className = "neighbor-chip";
+        button.type = "button";
+        button.textContent = String(neighbor.label || neighborId);
+        button.addEventListener("click", () => {
+          selectNodeById(neighborId);
+        });
+        neighborsList.appendChild(button);
+      });
+    } else {
+      const emptyState = document.createElement("span");
+      emptyState.style.color = "#666";
+      emptyState.textContent = "No direct connections";
+      neighborsList.appendChild(emptyState);
+    }
 
-    refs.detailContent.innerHTML = `
-      <div class="detail-section">
-        ${node.summary || node.description || "No further intelligence available for this node."}
-      </div>
-      <div class="detail-community">
-        <label class="detail-community-label">COMMUNITY</label>
-        <div class="detail-community-value">
-          ${node.community_name || "Global Cluster"}
-        </div>
-      </div>
-      <div class="detail-section" style="margin-top:20px;">
-        <label class="detail-community-label">CONNECTED INTELLIGENCE</label>
-        <div class="detail-neighbors-list">
-          ${neighborLinks || '<span style="color:#666">No direct connections</span>'}
-        </div>
-      </div>
-    `;
+    refs.detailContent.textContent = "";
+
+    const descriptionSection = document.createElement("div");
+    descriptionSection.className = "detail-section";
+    descriptionSection.textContent = String(node.summary || node.description || "No further intelligence available for this node.");
+    refs.detailContent.appendChild(descriptionSection);
+
+    const communitySection = document.createElement("div");
+    communitySection.className = "detail-community";
+    const communityLabel = document.createElement("label");
+    communityLabel.className = "detail-community-label";
+    communityLabel.textContent = "COMMUNITY";
+    const communityValue = document.createElement("div");
+    communityValue.className = "detail-community-value";
+    communityValue.textContent = String(node.community_name || "Global Cluster");
+    communitySection.appendChild(communityLabel);
+    communitySection.appendChild(communityValue);
+    refs.detailContent.appendChild(communitySection);
+
+    const relatedSection = document.createElement("div");
+    relatedSection.className = "detail-section";
+    relatedSection.style.marginTop = "20px";
+    const relatedLabel = document.createElement("label");
+    relatedLabel.className = "detail-community-label";
+    relatedLabel.textContent = "CONNECTED INTELLIGENCE";
+    relatedSection.appendChild(relatedLabel);
+    relatedSection.appendChild(neighborsList);
+    refs.detailContent.appendChild(relatedSection);
     refs.detailPane?.classList.add("is-active");
     updateVisualizer(node);
     state.renderer?.refresh();

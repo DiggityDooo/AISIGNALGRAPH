@@ -4,6 +4,9 @@ const READY_CHECK_INTERVAL_MS = 100;
 const READY_CHECK_ATTEMPTS = 20;
 const DEFAULT_ACTIVE_YEAR = 2026;
 const DEFAULT_GLOW_COLOR = "#ff3148";
+const FALLBACK_X_SPREAD = 2.5;
+const FALLBACK_Y_SPREAD = 1.5;
+const TIMELINE_Z_SCALE = 10;
 
 function escapeHtml(value) {
   return String(value)
@@ -549,7 +552,7 @@ export async function initGephiLite(options = {}) {
 
       state.nodes = (data.nodes || []).map((node) => ({
         ...node,
-        semanticType: node.semanticType || node.type || node.node_type || "topic"
+        semanticType: getNodeSemanticType(node)
       }));
       state.edges = data.edges || [];
       state.communities = data.communities || [];
@@ -1115,10 +1118,10 @@ export async function initGephiLite(options = {}) {
       const monthIndex = getNodeMonthIndex(node);
       const rawX = Number(node.x);
       const rawY = Number(node.y);
-      const x = Number.isFinite(rawX) ? rawX : getStableDepthOffset(`${node.id}:x`) * 2.5;
-      const y = Number.isFinite(rawY) ? rawY : getStableDepthOffset(`${node.id}:y`) * 1.5;
+      const x = Number.isFinite(rawX) ? rawX : getStableDepthOffset(`${node.id}:x`) * FALLBACK_X_SPREAD;
+      const y = Number.isFinite(rawY) ? rawY : getStableDepthOffset(`${node.id}:y`) * FALLBACK_Y_SPREAD;
       const z = Number.isFinite(monthIndex)
-        ? (monthIndex - timelineCenter) * 10 + getStableDepthOffset(node.id)
+        ? (monthIndex - timelineCenter) * TIMELINE_Z_SCALE + getStableDepthOffset(node.id)
         : getStableDepthOffset(node.id);
       nodePositions.set(node.id, { x, y, z });
     });

@@ -58,6 +58,43 @@ class SignalPulse {
   }
 }
 
+function safeInternalRoute(candidate, fallback) {
+  if (typeof candidate !== "string") {
+    return fallback;
+  }
+
+  if (!candidate.startsWith("/") || candidate.startsWith("//") || candidate.includes("\0")) {
+    return fallback;
+  }
+
+  return candidate;
+}
+
+function clearChildren(element) {
+  element.replaceChildren();
+}
+
+function appendMetaItem(container, label, value) {
+  const wrapper = document.createElement("div");
+  const title = document.createElement("span");
+  title.className = "label";
+  title.textContent = label;
+  const content = document.createElement("div");
+  content.textContent = String(value);
+  wrapper.appendChild(title);
+  wrapper.appendChild(content);
+  container.appendChild(wrapper);
+}
+
+function appendBadge(container, label, borderColor, color) {
+  const badge = document.createElement("span");
+  badge.className = "hud-badge";
+  badge.style.borderColor = borderColor;
+  badge.style.color = color;
+  badge.textContent = String(label);
+  container.appendChild(badge);
+}
+
 export function createController(state, render2d, simulation2d, bridge3d) {
   const controller = {
     async loadGraph() {
@@ -274,10 +311,10 @@ export function createController(state, render2d, simulation2d, bridge3d) {
       refs.detailTitle.textContent = "AI Signal Graph";
       refs.detailSubtitle.textContent = "Select a node to inspect it.";
       refs.detailCopy.textContent = "The graph reads as communities, directed signal flow, and a navigable timeline of stories and entities.";
-      refs.detailMeta.innerHTML = "";
-      refs.detailTags.innerHTML = "";
-      refs.detailEntities.innerHTML = "";
-      refs.detailRelated.innerHTML = "";
+      clearChildren(refs.detailMeta);
+      clearChildren(refs.detailTags);
+      clearChildren(refs.detailEntities);
+      clearChildren(refs.detailRelated);
       refs.detailLink.href = "/stories";
       refs.detailLink.textContent = "OPEN RECORD";
     },
@@ -296,55 +333,76 @@ export function createController(state, render2d, simulation2d, bridge3d) {
         refs.detailTitle.textContent = community?.label || node.label || "Community";
         refs.detailSubtitle.textContent = `${node.story_count || 0} stories · ${node.entity_count || 0} entities`;
         refs.detailCopy.textContent = "Collapsed region of the graph. Pinning it expands member nodes while preserving surrounding context.";
-        refs.detailMeta.innerHTML = `
-          <div><span class="label">Nodes</span><div>${node.member_count || 0}</div></div>
-          <div><span class="label">Stories</span><div>${node.story_count || 0}</div></div>
-          <div><span class="label">Entities</span><div>${node.entity_count || 0}</div></div>
-        `;
-        refs.detailTags.innerHTML = (community?.dominant_types || []).map((name) =>
-          `<span class="hud-badge" style="border-color:${hexToRgba(node.community_color, 0.34)}; color:${node.community_color};">${name}</span>`
-        ).join("");
-        refs.detailEntities.innerHTML = "";
-        refs.detailRelated.innerHTML = "";
-        refs.detailLink.href = node.route || "/stories";
+        clearChildren(refs.detailMeta);
+        appendMetaItem(refs.detailMeta, "Nodes", node.member_count || 0);
+        appendMetaItem(refs.detailMeta, "Stories", node.story_count || 0);
+        appendMetaItem(refs.detailMeta, "Entities", node.entity_count || 0);
+        clearChildren(refs.detailTags);
+        (community?.dominant_types || []).forEach((name) => {
+          appendBadge(refs.detailTags, name, hexToRgba(node.community_color, 0.34), node.community_color);
+        });
+        clearChildren(refs.detailEntities);
+        clearChildren(refs.detailRelated);
+        refs.detailLink.href = safeInternalRoute(node.route, "/stories");
         refs.detailLink.textContent = "OPEN ANCHOR";
       } else {
         refs.detailBadge.textContent = (node.type || "node").toUpperCase();
         refs.detailTitle.textContent = node.label || "Node";
         refs.detailSubtitle.textContent = node.subtitle || "";
-        refs.detailCopy.innerHTML = node.details_html || node.description || "";
-        refs.detailMeta.innerHTML = `
-          <div><span class="label">Type</span><div>${node.type || "unknown"}</div></div>
-          <div><span class="label">Cluster</span><div>${node.cluster_id != null ? `C${node.cluster_id + 1}` : "Timeline"}</div></div>
-          <div><span class="label">Outflow</span><div>${node.out_degree || 0}</div></div>
-        `;
-        refs.detailTags.innerHTML = `
-          <span class="hud-badge" style="border-color:${hexToRgba(node.community_color || node.color, 0.35)}; color:${node.community_color || node.color};">${node.group || node.type}</span>
-        `;
-        refs.detailEntities.innerHTML = "";
+        if (node.node_type === "story" && node.details_html) {
+          refs.detailCopy.innerHTML = node.details_html;
+        } else {
+          refs.detailCopy.textContent = node.description || "";
+        }
+        clearChildren(refs.detailMeta);
+        appendMetaItem(refs.detailMeta, "Type", node.type || "unknown");
+        appendMetaItem(refs.detailMeta, "Cluster", node.cluster_id != null ? `C${node.cluster_id + 1}` : "Timeline");
+        appendMetaItem(refs.detailMeta, "Outflow", node.out_degree || 0);
+        clearChildren(refs.detailTags);
+        appendBadge(
+          refs.detailTags,
+          node.group || node.type || "unknown",
+          hexToRgba(node.community_color || node.color, 0.35),
+          node.community_color || node.color || "#ffffff"
+        );
+        clearChildren(refs.detailEntities);
         const related = state.edges
           .filter((edge) => edge.sourceId === node.id || edge.targetId === node.id)
           .slice(0, 10)
           .map((edge) => {
             const otherId = edge.sourceId === node.id ? edge.targetId : edge.sourceId;
             const other = state.nodeById.get(otherId);
-            if (!other) return "";
-            return `<a href="#" data-node-id="${other.id}">${other.label}</a>`;
+            if (!other) return null;
+            return other;
           })
           .filter(Boolean);
-        refs.detailRelated.innerHTML = related.length
-          ? `<div class="label">Visible links</div>${related.join("")}`
-          : `<div class="graph-empty">No visible links in the active lens.</div>`;
-        refs.detailRelated.querySelectorAll("[data-node-id]").forEach((link) => {
-          link.addEventListener("click", (event) => {
-            event.preventDefault();
-            const nextNode = state.nodeById.get(link.dataset.nodeId);
-            if (nextNode) {
-              this.onNodeClick(nextNode);
-            }
+        clearChildren(refs.detailRelated);
+        if (related.length) {
+          const label = document.createElement("div");
+          label.className = "label";
+          label.textContent = "Visible links";
+          refs.detailRelated.appendChild(label);
+          related.forEach((other) => {
+            const link = document.createElement("a");
+            link.href = "#";
+            link.dataset.nodeId = other.id;
+            link.textContent = other.label || other.id;
+            link.addEventListener("click", (event) => {
+              event.preventDefault();
+              const nextNode = state.nodeById.get(link.dataset.nodeId);
+              if (nextNode) {
+                this.onNodeClick(nextNode);
+              }
+            });
+            refs.detailRelated.appendChild(link);
           });
-        });
-        refs.detailLink.href = node.route || "/entities";
+        } else {
+          const emptyState = document.createElement("div");
+          emptyState.className = "graph-empty";
+          emptyState.textContent = "No visible links in the active lens.";
+          refs.detailRelated.appendChild(emptyState);
+        }
+        refs.detailLink.href = safeInternalRoute(node.route, "/entities");
         refs.detailLink.textContent = node.node_type === "story" ? "OPEN STORY" : "OPEN RECORD";
       }
 

@@ -706,8 +706,8 @@ export async function initGephiLite(options = {}) {
     });
     state.renderer.on("leaveNode", () => {
       state.hoveredNode = null;
-      const selectedType = getNodeSemanticType(state.selectedNode);
-      appRoot.style.setProperty("--node-glow-color", CONFIG.nodeColors[selectedType] || DEFAULT_GLOW_COLOR);
+      const selectedType = state.selectedNode ? getNodeSemanticType(state.selectedNode) : null;
+      appRoot.style.setProperty("--node-glow-color", (selectedType && CONFIG.nodeColors[selectedType]) || DEFAULT_GLOW_COLOR);
       state.renderer.refresh();
     });
     state.renderer.on("clickNode", ({ node }) => inspectNode(graph.getNodeAttributes(node)));

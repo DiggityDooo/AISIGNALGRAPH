@@ -26,6 +26,7 @@ def test_api_graph_payload_contract(client):
     assert all("details_html" not in node for node in nodes)
 
     for edge in edges:
+        assert set(edge) == {"source", "target", "flow_kind"}
         assert "source" in edge
         assert "target" in edge
         assert "flow_kind" in edge

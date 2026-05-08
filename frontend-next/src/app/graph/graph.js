@@ -93,6 +93,22 @@ export async function initGephiLite(options = {}) {
     return ((Math.abs(hash) % 61) - 30) * 3;
   }
 
+  function getNodeMonthIndex(node) {
+    const explicitIndex = Number(node?.month_index);
+    if (Number.isFinite(explicitIndex)) {
+      return explicitIndex;
+    }
+
+    const [yearText, monthText = "01"] = String(node?.timeline_month || "").split("-");
+    const year = Number.parseInt(yearText, 10);
+    const month = Number.parseInt(monthText, 10);
+    if (!Number.isFinite(year) || !Number.isFinite(month)) {
+      return null;
+    }
+
+    return year * 12 + month;
+  }
+
   function addManagedListener(target, eventName, handler, listenerOptions) {
     if (!target || typeof target.addEventListener !== "function") {
       return;
@@ -511,6 +527,7 @@ export async function initGephiLite(options = {}) {
     const visibleIds = new Set(state.filteredNodes.map((node) => node.id));
     state.filteredEdges = filteredEdgesByNodes(visibleIds);
     if (state.is3DMode) {
+      // Rebuild the filtered graph data without remounting Sigma so the 3D scene stays in sync.
       buildGraph({ mountRenderer: false });
       await build3DScene();
       updateStats({ animate: true });
@@ -686,7 +703,7 @@ export async function initGephiLite(options = {}) {
     });
     state.renderer.on("leaveNode", () => {
       state.hoveredNode = null;
-      const selectedType = getNodeSemanticType(state.selectedNode) || "story";
+      const selectedType = getNodeSemanticType(state.selectedNode);
       appRoot.style.setProperty("--node-glow-color", CONFIG.nodeColors[selectedType] || DEFAULT_GLOW_COLOR);
       state.renderer.refresh();
     });
@@ -1087,7 +1104,7 @@ export async function initGephiLite(options = {}) {
     if (!nodes.length) return;
 
     const monthIndexes = nodes
-      .map((node) => Number(node.month_index))
+      .map((node) => getNodeMonthIndex(node))
       .filter((value) => Number.isFinite(value));
     const timelineCenter = monthIndexes.length
       ? (Math.min(...monthIndexes) + Math.max(...monthIndexes)) / 2
@@ -1095,9 +1112,11 @@ export async function initGephiLite(options = {}) {
 
     const nodePositions = new Map();
     nodes.forEach((node) => {
-      const monthIndex = Number(node.month_index);
-      const x = Number(node.x || 0);
-      const y = Number(node.y || 0);
+      const monthIndex = getNodeMonthIndex(node);
+      const rawX = Number(node.x);
+      const rawY = Number(node.y);
+      const x = Number.isFinite(rawX) ? rawX : getStableDepthOffset(`${node.id}:x`) * 2.5;
+      const y = Number.isFinite(rawY) ? rawY : getStableDepthOffset(`${node.id}:y`) * 1.5;
       const z = Number.isFinite(monthIndex)
         ? (monthIndex - timelineCenter) * 10 + getStableDepthOffset(node.id)
         : getStableDepthOffset(node.id);

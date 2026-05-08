@@ -434,6 +434,10 @@ class GraphStore:
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.db_path)
 
+    def get_graph_etag(self) -> str:
+        self._refresh()
+        return f"graph-{self._signature or 0}"
+
     def _compact_graph_node(self, node: dict[str, Any]) -> dict[str, Any]:
         compact = {
             "id": node["id"],

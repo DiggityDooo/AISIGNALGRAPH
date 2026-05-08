@@ -8,7 +8,8 @@ def test_api_health(client):
 def test_api_graph_payload_contract(client):
     response = client.get("/api/graph")
     assert response.status_code == 200
-    assert "max-age=300" in response.headers.get("Cache-Control", "")
+    assert "max-age=0" in response.headers.get("Cache-Control", "")
+    assert response.headers.get("ETag")
     payload = response.get_json()
 
     assert isinstance(payload, dict)

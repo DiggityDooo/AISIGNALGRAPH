@@ -244,8 +244,11 @@ def create_app() -> Flask:
         try:
             payload = store.get_graph_data()
             response = jsonify({**payload, "status": "ok"})
+            response.set_etag(store.get_graph_etag())
             response.cache_control.public = True
-            response.cache_control.max_age = 300
+            response.cache_control.max_age = 0
+            response.cache_control.must_revalidate = True
+            response.make_conditional(request)
             return response
         except GraphStoreError as exc:
             app.logger.exception("Falling back to degraded graph payload: %s", exc)

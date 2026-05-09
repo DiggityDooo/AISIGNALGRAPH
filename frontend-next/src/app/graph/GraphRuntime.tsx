@@ -10,9 +10,15 @@ type GraphStats = {
   edges: number;
 };
 
+type GraphProgress = {
+  status: string;
+  progress: number;
+};
+
 type GraphRuntimeProps = {
   onReady?: (stats: GraphStats) => void;
   onError?: (error: unknown) => void;
+  onProgress?: (info: GraphProgress) => void;
 };
 
 type RuntimeWindow = Window &
@@ -24,13 +30,17 @@ type RuntimeWindow = Window &
     gephiLite?: { selectNode?: (id: string) => void };
   };
 
-export default function GraphRuntime({ onReady, onError }: GraphRuntimeProps) {
+export default function GraphRuntime({ onReady, onError, onProgress }: GraphRuntimeProps) {
   const emitReady = useEffectEvent((stats: GraphStats) => {
     onReady?.(stats);
   });
 
   const emitError = useEffectEvent((error: unknown) => {
     onError?.(error);
+  });
+
+  const emitProgress = useEffectEvent((info: GraphProgress) => {
+    onProgress?.(info);
   });
 
   useEffect(() => {
@@ -57,6 +67,7 @@ export default function GraphRuntime({ onReady, onError }: GraphRuntimeProps) {
           forceAtlas2,
           onReady: (stats: GraphStats) => emitReady(stats),
           onError: (error: unknown) => emitError(error),
+          onProgress: (info: GraphProgress) => emitProgress(info),
         });
 
         if (disposed) {

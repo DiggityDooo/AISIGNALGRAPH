@@ -17,24 +17,17 @@ export default function GraphPage() {
   const loadingTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (isLoaded) {
-      return undefined;
-    }
-
-    const timer = window.setInterval(() => {
-      setProgress((prev) => (prev < 90 ? prev + 1 : prev));
-    }, 30);
-
-    return () => window.clearInterval(timer);
-  }, [isLoaded]);
-
-  useEffect(() => {
     return () => {
       if (loadingTimeoutRef.current !== null) {
         window.clearTimeout(loadingTimeoutRef.current);
       }
     };
   }, []);
+
+  const handleProgress = ({ status: nextStatus, progress: nextProgress }: { status: string; progress: number }) => {
+    setStatus(nextStatus);
+    setProgress(nextProgress);
+  };
 
   const settleOverlay = () => {
     if (loadingTimeoutRef.current !== null) {
@@ -63,7 +56,7 @@ export default function GraphPage() {
   return (
     <div id="app-root" className="relative w-full h-screen bg-black overflow-hidden">
       <link rel="stylesheet" href="/gephi_lite.css" />
-      <GraphRuntime onReady={handleReady} onError={handleError} />
+      <GraphRuntime onReady={handleReady} onError={handleError} onProgress={handleProgress} />
 
       <TopNav />
 

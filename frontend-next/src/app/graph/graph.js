@@ -36,6 +36,15 @@ export async function initGephiLite(options = {}) {
   const forceAtlas2 = options.forceAtlas2 || window.forceAtlas2;
   const onReady = typeof options.onReady === "function" ? options.onReady : null;
   const onError = typeof options.onError === "function" ? options.onError : null;
+  const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+
+  function emitProgress(status, progress) {
+    try {
+      onProgress?.({ status, progress });
+    } catch (_err) {
+      // never let a progress callback crash the runtime
+    }
+  }
 
   const CONFIG = {
     nodeColors: {
@@ -584,6 +593,7 @@ export async function initGephiLite(options = {}) {
   async function loadGraphData() {
     const dataset = appRoot.dataset.datasetName || "";
     console.log(`Gephi Lite: Fetching graph data for dataset: ${dataset}`);
+    emitProgress("Fetching Intelligence Matrix...", 25);
 
     try {
       const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:8080' : '';
@@ -672,6 +682,7 @@ export async function initGephiLite(options = {}) {
     }
 
     console.log("Gephi Lite: Running ForceAtlas2 layout...");
+    emitProgress("Running Force Atlas Layout...", 68);
     const spreadSettings = {
       ...forceAtlas2.inferSettings(graph),
       gravity: 0.0005,
@@ -694,6 +705,7 @@ export async function initGephiLite(options = {}) {
     });
 
     console.log("Gephi Lite: Initializing Sigma renderer...");
+    emitProgress("Activating Neural Renderer...", 82);
     state.renderer = new SigmaLib(graph, ensureRendererHost(), {
       renderLabels: true,
       labelSize: 11,
@@ -1380,6 +1392,7 @@ export async function initGephiLite(options = {}) {
   }
 
   try {
+    emitProgress("Calibrating Neural Runtime...", 5);
     const runtime = await waitForGraphRuntime();
 
     if (state.destroyed) {
@@ -1395,6 +1408,7 @@ export async function initGephiLite(options = {}) {
       throw new Error("Gephi Lite: Required render elements are missing.");
     }
 
+    emitProgress("Runtime Engaged. Requesting Intel...", 15);
     appRoot.style.setProperty("--node-glow-color", DEFAULT_GLOW_COLOR);
     window.gephiLite = { selectNode: selectNodeById };
 
@@ -1403,8 +1417,10 @@ export async function initGephiLite(options = {}) {
     initBackgroundFlow();
 
     await loadGraphData();
+    emitProgress("Mapping Neural Connections...", 55);
     const hasRenderer = await rebuildFromFilters();
     if (hasRenderer) {
+      emitProgress("Signal Flow Activated.", 90);
       startAnimationLoop();
     }
     onReady?.({ nodes: state.nodes.length, edges: state.edges.length });

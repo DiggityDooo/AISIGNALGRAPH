@@ -4,6 +4,8 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
+const SHELL_EFFECTS_DELAY_MS = 800;
+
 const GlobalCanvas = dynamic(() => import("@/components/webgl/GlobalCanvas"), {
   ssr: false,
 });
@@ -17,12 +19,16 @@ export default function ClientShellEffects() {
   const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
+    if (pathname !== "/") {
+      return undefined;
+    }
+
     const timer = window.setTimeout(() => {
       setEnabled(true);
-    }, 800);
+    }, SHELL_EFFECTS_DELAY_MS);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [pathname]);
 
   if (!enabled || pathname !== "/") {
     return null;

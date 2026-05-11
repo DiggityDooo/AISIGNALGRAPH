@@ -16,28 +16,17 @@ const CustomCursor = dynamic(() => import("@/components/ui/CustomCursor"), {
 
 export default function ClientShellEffects() {
   const pathname = usePathname();
-  const [enabled, setEnabled] = useState(false);
+  const [activePath, setActivePath] = useState<string | null>(null);
 
   useEffect(() => {
-    if (pathname !== "/") {
-      const resetTimer = window.setTimeout(() => {
-        setEnabled(false);
-      }, 0);
-      return () => window.clearTimeout(resetTimer);
-    }
-
-    if (enabled) {
-      return;
-    }
-
     const timer = window.setTimeout(() => {
-      setEnabled(true);
-    }, SHELL_EFFECTS_DELAY_MS);
+      setActivePath(pathname === "/" ? "/" : null);
+    }, pathname === "/" ? SHELL_EFFECTS_DELAY_MS : 0);
 
     return () => window.clearTimeout(timer);
-  }, [enabled, pathname]);
+  }, [pathname]);
 
-  if (!enabled) {
+  if (activePath !== "/") {
     return null;
   }
 

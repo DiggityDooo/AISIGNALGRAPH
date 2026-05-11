@@ -1,53 +1,20 @@
-"use client";
-
-import { motion } from "framer-motion";
-
-const container = {
-  hidden: { opacity: 0 },
-  visible: (i = 1) => ({
-    opacity: 1,
-    transition: { staggerChildren: 0.05, delayChildren: 0.1 * i },
-  }),
-};
-
-const child = {
-  visible: {
-    opacity: 1,
-    y: 0,
-    filter: "blur(0px)",
-    transition: {
-      type: "spring",
-      damping: 12,
-      stiffness: 100,
-    },
-  },
-  hidden: {
-    opacity: 0,
-    y: 20,
-    filter: "blur(10px)",
-  },
-};
-
 export default function KineticText({ text }: { text: string }) {
-  const words = text.split(" ");
+  const words = text.split(" ").filter(Boolean);
 
   return (
-    <motion.div
-      className="flex flex-wrap justify-center overflow-hidden"
-      variants={container}
-      initial="hidden"
-      animate="visible"
-    >
+    <span className="hero-kinetic-text flex flex-wrap justify-center overflow-hidden">
       {words.map((word, index) => (
-        <motion.span
-          variants={child}
-          style={{ marginRight: "0.25em" }}
+        <span
           key={index}
-          className="inline-block"
+          className="inline-block animate-hero-fade will-change-transform [transform:translate3d(0,0,0)]"
+          style={{
+            marginRight: "0.25em",
+            animationDelay: `${index * 70}ms`,
+          }}
         >
           {word}
-        </motion.span>
+        </span>
       ))}
-    </motion.div>
+    </span>
   );
 }

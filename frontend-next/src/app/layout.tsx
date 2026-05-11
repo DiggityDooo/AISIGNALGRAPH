@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Syne, JetBrains_Mono } from "next/font/google";
+import { ReactLenis } from "lenis/react";
 import ClientShellEffects from "@/components/ui/ClientShellEffects";
 import "./globals.css";
 
@@ -30,7 +31,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-background text-foreground font-mono overflow-x-hidden">
         <ClientShellEffects />
-        {children}
+        <ReactLenis root>{children}</ReactLenis>
       </body>
     </html>
   );

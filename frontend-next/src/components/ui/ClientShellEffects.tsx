@@ -20,7 +20,7 @@ export default function ClientShellEffects() {
 
   useEffect(() => {
     if (pathname !== "/") {
-      return undefined;
+      return;
     }
 
     const timer = window.setTimeout(() => {

@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Syne, JetBrains_Mono } from "next/font/google";
 import { ReactLenis } from "lenis/react";
-import GlobalCanvas from "@/components/webgl/GlobalCanvas";
-import CustomCursor from "@/components/ui/CustomCursor";
+import ClientShellEffects from "@/components/ui/ClientShellEffects";
 import "./globals.css";
 
 const syne = Syne({
@@ -33,11 +32,8 @@ export default function RootLayout({
       className={`${syne.variable} ${jetbrainsMono.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground font-mono overflow-x-hidden">
-        <GlobalCanvas />
-        <CustomCursor />
-        <ReactLenis root>
-          {children}
-        </ReactLenis>
+        <ClientShellEffects />
+        <ReactLenis root>{children}</ReactLenis>
       </body>
     </html>
   );

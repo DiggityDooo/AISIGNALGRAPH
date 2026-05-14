@@ -1,0 +1,30 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/aisignalgraph:$COMMIT_SHA', '.']
+
+  # Push the container image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/aisignalgraph:$COMMIT_SHA']
+
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'aisignalgraph'
+      - '--image'
+      - 'us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/aisignalgraph:$COMMIT_SHA'
+      - '--region'
+      - 'us-west1'
+      - '--platform'
+      - 'managed'
+      - '--set-secrets'
+      - 'FLASK_SECRET_KEY=flask-secret-key:latest'
+
+images:
+  - 'us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/aisignalgraph:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

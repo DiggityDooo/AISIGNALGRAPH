@@ -26,7 +26,7 @@ COPY --from=frontend-builder /build/out /app/webapp/static/hub
 # Pre-initialize the database to avoid startup timeouts in Cloud Run
 RUN python3 -c "from webapp import create_app; create_app()"
 
-ENV FLASK_SECRET_KEY=REDACTED_SECRET
+ENV FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
 ENV PORT=8080
 
 EXPOSE 8080

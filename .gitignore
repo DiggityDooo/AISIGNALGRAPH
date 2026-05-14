@@ -113,4 +113,21 @@ vscode-copilot-chat/
 scripts/
 tests/
 __init__.py
-tests/
+skills/
+skills-lock.json
+
+# Documentation & Screenshots (Personal/Irrelevant)
+*.png
+AGENTCODEXCLOUD.md
+AISIGNALGRAPH_Implementation_Guide.md
+AISIGNALGRAPH_NodeVisualizer_Plan.md
+AISIGNALGRAPH_Technical_Documentation.md
+COLLABORATION.md
+FRONTEND_CHECKLIST.md
+GEMINI_HANDOFF.md
+GITHUB_UPDATE_v1.1.0.md
+LINKEDIN_ANNOUNCEMENT.md
+MIGRATION_GUIDE.md
+expressions.txt
+server.log
+server_start.log

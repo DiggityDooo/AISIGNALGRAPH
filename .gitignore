@@ -141,5 +141,5 @@ LINKEDIN_ANNOUNCEMENT.md
 MIGRATION_GUIDE.md
 expressions.txt
 
-# Legacy / unused at repo root
-__init__.py
+# Legacy / unused at repo root only (do not ignore package __init__.py under webapp/, etc.)
+/__init__.py

@@ -5,8 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:hub": "next build && rsync -a --delete out/ ../webapp/static/hub/",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "analyze": "playwright test e2e/hub-analysis.spec.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
@@ -24,6 +26,7 @@
     "three": "^0.184.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.51.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^22",
     "@types/react": "^19",

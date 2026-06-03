@@ -21,6 +21,8 @@ The application loads its master intelligence from the first valid source in thi
 
 The generated graph database lives at `data/ai_graph.db`.
 
+Non-essential files (screenshots, handoff docs, large reference clones) are stored outside the repo in [`December-2023-stash`](../December-2023-stash/) — see [STASH.md](STASH.md).
+
 ## 🛠️ Getting Started
 
 ### Prerequisites
@@ -36,6 +38,20 @@ export AI_MASTER_DOC_PATH="/absolute/path/to/ai_master.md"
 ```
 
 Open `http://127.0.0.1:5000` to access the hub.
+
+### Home hero (Spline)
+
+The landing page uses an Eternal ARC Spline scene as a full-screen background (poster fallback: `spline_preview.jpg`). Set `sceneUrl` in `webapp/static/spline-scene.json` when running Flask (served at `/static/spline-scene.json`; no rebuild; restart Flask). For `next dev`, use `frontend-next/public/spline-scene.json` (served at `/spline-scene.json`):
+
+- `https://my.spline.design/.../` — public link (iframe embed, local mouse events in scene)
+- `https://prod.spline.design/.../scene.splinecode` — Viewer export (`events-target="global"` for full-page cursor Look At / Follow)
+
+Or use `NEXT_PUBLIC_SPLINE_SCENE_URL` in `frontend-next/.env.local`, then rebuild:
+
+```bash
+cd frontend-next
+npm run build:hub
+```
 
 ## 🔄 Dataset Management
 

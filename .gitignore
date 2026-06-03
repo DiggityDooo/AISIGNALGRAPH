@@ -1,3 +1,6 @@
+# External stash (sibling folder — see STASH.md)
+# /home/seanb/Documents/December-2023-stash/
+
 # Environments
 venv/
 .venv/
@@ -30,12 +33,14 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+.pytest_cache/
 
 # Node / Frontend
 node_modules/
 **/node_modules/
 .next/
 out/
+frontend-next/out/
 build/
 dist/
 .cache/
@@ -46,6 +51,7 @@ dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+lint_output.txt
 
 # Database & Data
 data/*.db
@@ -69,13 +75,12 @@ Thumbs.db
 .pydevproject
 .settings/
 
-# AI Agent / Tool Metadata (Personal/Irrelevant)
+# AI Agent / Tool Metadata (re-stash to ../December-2023-stash/tool-dotdirs/)
 .adal/
 .agents/
 .aider*/
 .augment/
 .bob/
-.claude/
 .code*/
 .continue/
 .cortex/
@@ -105,19 +110,25 @@ Thumbs.db
 .windsurf/
 .zencoder/
 .aider-desk/
-.augment/
 
-# Local/Temp
+# Keep project agent skills local only (optional commit: remove next line)
+.claude/
+
+# Reference clones & duplicate trees (see ../December-2023-stash/reference-clones/)
 gephi-lite/
 vscode-copilot-chat/
-scripts/
-tests/
-__init__.py
+
+# Repo-root skills duplicate (.claude/skills/ is canonical for this project)
 skills/
 skills-lock.json
 
-# Documentation & Screenshots (Personal/Irrelevant)
-*.png
+# Root screenshots & stray media (canonical copies under frontend-next/public or webapp/static/hub)
+/*.png
+/*.jpg
+/*.jpeg
+/spline_preview.jpg
+
+# Personal / handoff docs (see ../December-2023-stash/docs/)
 AGENTCODEXCLOUD.md
 AISIGNALGRAPH_Implementation_Guide.md
 AISIGNALGRAPH_NodeVisualizer_Plan.md
@@ -129,5 +140,6 @@ GITHUB_UPDATE_v1.1.0.md
 LINKEDIN_ANNOUNCEMENT.md
 MIGRATION_GUIDE.md
 expressions.txt
-server.log
-server_start.log
+
+# Legacy / unused at repo root
+__init__.py

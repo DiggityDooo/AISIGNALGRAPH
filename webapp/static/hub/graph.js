@@ -1,21 +1,21 @@
 "use strict";
 
 (function bootstrapGephiLite() {
-  console.log("AISIGNALGRAPH: Initializing...");
+  console.log("Gephi Lite: Initializing...");
   const appRoot = document.getElementById("app-root");
   const SigmaLib = window.Sigma || window.sigma?.Sigma || window.sigma;
   const GraphologyLib = window.graphology;
 
   if (!appRoot) {
-    console.error("AISIGNALGRAPH: #app-root not found.");
+    console.error("Gephi Lite: #app-root not found.");
     return;
   }
   if (!SigmaLib || typeof SigmaLib !== "function") {
-    console.error("AISIGNALGRAPH: Sigma library not found.");
+    console.error("Gephi Lite: Sigma library not found.");
     return;
   }
   if (!GraphologyLib) {
-    console.error("AISIGNALGRAPH: Graphology library not found.");
+    console.error("Gephi Lite: Graphology library not found.");
     return;
   }
 
@@ -59,7 +59,7 @@
   const ctx = refs.canvas?.getContext("2d");
   const bgCtx = refs.bgCanvas?.getContext("2d");
   if (!refs.container || !refs.canvas || !ctx) {
-    console.error("AISIGNALGRAPH: Required render elements are missing.");
+    console.error("Gephi Lite: Required render elements are missing.");
     return;
   }
 
@@ -273,7 +273,7 @@
       state.renderer.getCamera().animate({ x: attrs.x, y: attrs.y, ratio: 0.15 }, { duration: 500 });
     }
   }
-  window.aisignalgraph = { selectNode: selectNodeById };
+  window.gephiLite = { selectNode: selectNodeById };
 
   function filteredNodesByState() {
     const query = (refs.search?.value || "").trim().toLowerCase();
@@ -330,7 +330,7 @@
   async function loadGraphData() {
     try {
       const dataset = appRoot.dataset.datasetName || "";
-      console.log(`AISIGNALGRAPH: Fetching graph data for dataset: ${dataset}`);
+      console.log(`Gephi Lite: Fetching graph data for dataset: ${dataset}`);
       const response = await fetch(`/api/graph?dataset=${dataset}`);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
@@ -344,18 +344,18 @@
 
       state.filteredNodes = [...state.nodes];
       state.filteredEdges = [...state.edges];
-      console.log(`AISIGNALGRAPH: Data loaded. Nodes: ${state.nodes.length}, Edges: ${state.edges.length}`);
+      console.log(`Gephi Lite: Data loaded. Nodes: ${state.nodes.length}, Edges: ${state.edges.length}`);
       return data;
     } catch (err) {
-      console.error("AISIGNALGRAPH: Failed to load graph data:", err);
+      console.error("Gephi Lite: Failed to load graph data:", err);
       return { nodes: [], edges: [] };
     }
   }
 
   function buildGraph() {
-    console.log("AISIGNALGRAPH: Building graph...");
+    console.log("Gephi Lite: Building graph...");
     if (!state.filteredNodes.length) {
-      console.warn("AISIGNALGRAPH: No nodes to render.");
+      console.warn("Gephi Lite: No nodes to render.");
       if (state.renderer) {
         state.renderer.kill();
         refs.container.innerHTML = "";
@@ -413,7 +413,7 @@
 
     try {
       // Layout
-      console.log("AISIGNALGRAPH: Running ForceAtlas2 layout...");
+      console.log("Gephi Lite: Running ForceAtlas2 layout...");
       const spreadSettings = {
         ...window.forceAtlas2.inferSettings(graph),
         gravity: 0.0005,
@@ -437,7 +437,7 @@
       });
 
       // Render
-      console.log("AISIGNALGRAPH: Initializing Sigma renderer...");
+      console.log("Gephi Lite: Initializing Sigma renderer...");
       state.renderer = new SigmaLib(graph, refs.container, {
         renderLabels: true,
         labelSize: 11,
@@ -497,7 +497,7 @@
         state.renderer.refresh();
       });
     } catch (error) {
-      console.error("AISIGNALGRAPH: Failed to initialize layout/renderer:", error);
+      console.error("Gephi Lite: Failed to initialize layout/renderer:", error);
       refs.detailTitle.textContent = "Graph initialization failed";
       refs.detailSubtitle.textContent = "Renderer error";
       refs.detailContent.textContent = "";
@@ -521,7 +521,7 @@
       state.renderer.getCamera().animatedReset();
     });
 
-    console.log("AISIGNALGRAPH: Build complete.");
+    console.log("Gephi Lite: Build complete.");
     syncCanvasSize();
     updateStats({ animate: true });
   }
@@ -687,7 +687,7 @@
   renderFilters();
   initBackgroundFlow();
   loadGraphData().then(rebuildFromFilters).then(() => {
-    console.log("AISIGNALGRAPH: Starting animation loop...");
+    console.log("Gephi Lite: Starting animation loop...");
     animate();
   });
 })();

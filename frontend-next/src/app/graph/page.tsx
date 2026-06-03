@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import TopNav from "@/components/ui/TopNav";
 import KineticText from "@/components/ui/KineticText";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
@@ -61,11 +60,9 @@ export default function GraphPage() {
   };
 
   return (
-    <div id="app-root" className="relative w-full h-screen bg-black overflow-hidden">
+    <div id="app-root" className="relative w-full h-screen bg-transparent overflow-hidden pointer-events-auto">
       <link rel="stylesheet" href="/gephi_lite.css" />
       <GraphRuntime onReady={handleReady} onError={handleError} />
-
-      <TopNav />
 
       {/* Cinematic Loading Overlay */}
       <AnimatePresence>
@@ -73,7 +70,7 @@ export default function GraphPage() {
           <motion.div 
             initial={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 bg-[#050202] flex flex-col items-center justify-center p-8"
+            className="absolute inset-0 z-[60] bg-[#050202] flex flex-col items-center justify-center p-8"
           >
             <div className="max-w-xl w-full flex flex-col items-center gap-12">
               <div className="relative w-48 h-48">

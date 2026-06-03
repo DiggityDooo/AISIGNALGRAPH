@@ -43,8 +43,410 @@ export async function initGephiLite(options = {}) {
       risk: "#ff1e3a", year: "#9c6c71", topic: "#ff9f8a", product: "#ffb38e", community: "#ff304c"
     },
     communityPalette: ["#ff304c", "#ff5a48", "#ff7756", "#ff5469", "#ff8f73", "#ff6b5a", "#ff4670", "#ff9b63"],
-    maxSignals: 50
+    maxSignals: 0
   };
+
+  const OBSIDIAN_GRAPH = {
+    defaultNode: "#8a8a8a",
+    nodeColors: {
+      story: "#a6adc8",
+      lab: "#89b4fa",
+      model: "#cba6f7",
+      person: "#f9e2af",
+      risk: "#f38ba8",
+      year: "#6c7086",
+      topic: "#94e2d5",
+      product: "#fab387",
+      community: "#b4befe",
+      entity: "#8a8a8a"
+    },
+    edgeColor: "rgba(140, 140, 140, 0.18)",
+    edgeSize: 0.35,
+    labelColor: "#dcddde",
+    labelSize: 10,
+    labelDensity: 0.08,
+    labelGridCellSize: 120,
+    labelRenderedSizeThreshold: 10,
+    minEdgeThickness: 0.4,
+    labelFont: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    unfocusedNodeColor: "rgba(120, 120, 120, 0.12)",
+    focusedEdgeColor: "rgba(180, 180, 180, 0.45)",
+    focusedEdgeSize: 1.2
+  };
+
+  const BUBBLE_PHYSICS = {
+    springStrength: 0.008,
+    springRestLengthFactor: 2.8,
+    repulsionStrength: 25,
+    repulsionMinDist: 1.5,
+    collisionStrength: 2.5,
+    collisionPadding: 1,
+    centerGravity: 0.0006,
+    damping: 0.94,
+    maxVelocity: 1.2,
+    sleepThreshold: 0.02,
+    hoverDrag: 0.35,
+    displayLerp: 0.12,
+    warmUpSeconds: 2,
+    fixedDt: 1 / 60,
+    maxSubsteps: 1,
+    maxAccumulator: 0.05,
+    cellSize: 26,
+    displayEpsilon: 0.04,
+    bgFlowInterval: 2,
+    statsInterval: 12
+  };
+
+  function getCanvasNodeColor(node) {
+    const colorKey = getNodeSemanticType(node);
+    return OBSIDIAN_GRAPH.nodeColors[colorKey] || OBSIDIAN_GRAPH.defaultNode;
+  }
+
+  function applyDegreeBasedNodeSizes(graph) {
+    graph.forEachNode((nodeId) => {
+      const degree = graph.degree(nodeId) || 1;
+      const size = Math.min(8, Math.max(2, 1.2 + Math.sqrt(degree) * 0.85));
+      graph.setNodeAttribute(nodeId, "size", size);
+      const body = state.physicsVelocities?.get(nodeId);
+      if (body) {
+        body.radius = getNodeRadius({ size });
+      }
+    });
+  }
+
+  function getNodeRadius(attrs) {
+    return Math.max(1.5, Number(attrs?.size) || 2);
+  }
+
+  function resetBubblePhysics(graph) {
+    const velocities = new Map();
+    graph.forEachNode((nodeId, attrs) => {
+      velocities.set(nodeId, {
+        vx: 0,
+        vy: 0,
+        px: attrs.x,
+        py: attrs.y,
+        displayX: attrs.x,
+        displayY: attrs.y,
+        radius: getNodeRadius(attrs)
+      });
+    });
+    state.physicsVelocities = velocities;
+    state.physicsNodeIds = graph.nodes();
+    state.physicsAccumulator = 0;
+    state.physicsStartedAt = performance.now();
+    state.physicsLastTime = performance.now();
+    state.physicsSleeping = false;
+    state.physicsPositionsDirty = true;
+  }
+
+  function wakePhysics() {
+    state.physicsSleeping = false;
+    state.physicsPositionsDirty = true;
+  }
+
+  function updateFocusContext() {
+    const activeId = state.hoveredNode || state.selectedNode?.id;
+    if (!activeId || !state.graph) {
+      state.focusActiveId = null;
+      state.focusNeighborIds = null;
+      return;
+    }
+    state.focusActiveId = activeId;
+    state.focusNeighborIds = new Set(state.graph.neighbors(activeId));
+  }
+
+  function getPhysicsWarmupMultiplier() {
+    if (!state.physicsStartedAt) {
+      return 1;
+    }
+    const elapsed = (performance.now() - state.physicsStartedAt) / 1000;
+    return Math.min(1, elapsed / BUBBLE_PHYSICS.warmUpSeconds);
+  }
+
+  function getSoftDragNodes() {
+    const dragged = new Set();
+    if (state.hoveredNode) {
+      dragged.add(state.hoveredNode);
+    }
+    if (state.selectedNode?.id) {
+      dragged.add(state.selectedNode.id);
+    }
+    return dragged;
+  }
+
+  function stepBubblePhysics(graph, dt) {
+    if (!state.physicsVelocities || !state.physicsEnabled || dt <= 0) {
+      return false;
+    }
+
+    const nodeIds = state.physicsNodeIds || graph.nodes();
+    const nodeCount = nodeIds.length;
+    if (nodeCount === 0) {
+      return false;
+    }
+
+    const softDrag = getSoftDragNodes();
+    const forceScale = getPhysicsWarmupMultiplier();
+    const scratch = state.physicsScratch;
+    const forces = scratch.forces;
+    const simPositions = scratch.simPositions;
+    const grid = scratch.grid;
+    forces.clear();
+    simPositions.clear();
+    grid.forEach((bucket) => {
+      bucket.length = 0;
+      scratch.gridBuckets.push(bucket);
+    });
+    grid.clear();
+
+    nodeIds.forEach((nodeId) => {
+      const body = state.physicsVelocities.get(nodeId);
+      if (!body) {
+        return;
+      }
+      forces.set(nodeId, { fx: 0, fy: 0 });
+      simPositions.set(nodeId, { x: body.px, y: body.py, size: body.radius });
+    });
+
+    graph.forEachEdge((_edgeId, _attrs, source, target) => {
+      const sourceSim = simPositions.get(source);
+      const targetSim = simPositions.get(target);
+      if (!sourceSim || !targetSim) {
+        return;
+      }
+
+      const dx = targetSim.x - sourceSim.x;
+      const dy = targetSim.y - sourceSim.y;
+      const dist = Math.hypot(dx, dy) || 0.001;
+      const restLength =
+        (getNodeRadius(sourceSim) + getNodeRadius(targetSim)) * BUBBLE_PHYSICS.springRestLengthFactor;
+      const force = (dist - restLength) * BUBBLE_PHYSICS.springStrength * forceScale;
+      const nx = dx / dist;
+      const ny = dy / dist;
+
+      const sourceForce = forces.get(source);
+      const targetForce = forces.get(target);
+      sourceForce.fx += nx * force;
+      sourceForce.fy += ny * force;
+      targetForce.fx -= nx * force;
+      targetForce.fy -= ny * force;
+    });
+
+    const { cellSize } = BUBBLE_PHYSICS;
+    nodeIds.forEach((nodeId) => {
+      const sim = simPositions.get(nodeId);
+      const cellX = Math.floor(sim.x / cellSize);
+      const cellY = Math.floor(sim.y / cellSize);
+      const key = cellX * 100003 + cellY;
+      let bucket = grid.get(key);
+      if (!bucket) {
+        bucket = scratch.gridBuckets.pop() || [];
+        grid.set(key, bucket);
+      }
+      bucket.push(nodeId);
+    });
+
+    nodeIds.forEach((nodeId) => {
+      const sim = simPositions.get(nodeId);
+      const cellX = Math.floor(sim.x / cellSize);
+      const cellY = Math.floor(sim.y / cellSize);
+
+      for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+        for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+          const bucket = grid.get((cellX + offsetX) * 100003 + (cellY + offsetY));
+          if (!bucket) {
+            continue;
+          }
+
+          bucket.forEach((otherId) => {
+            if (otherId <= nodeId) {
+              return;
+            }
+
+            const otherSim = simPositions.get(otherId);
+            const dx = otherSim.x - sim.x;
+            const dy = otherSim.y - sim.y;
+            const dist = Math.hypot(dx, dy) || 0.001;
+            const nx = dx / dist;
+            const ny = dy / dist;
+            const radiusA = getNodeRadius(sim);
+            const radiusB = getNodeRadius(otherSim);
+
+            let push =
+              (BUBBLE_PHYSICS.repulsionStrength / Math.max(dist, BUBBLE_PHYSICS.repulsionMinDist)) *
+              forceScale;
+            const minDist = radiusA + radiusB + BUBBLE_PHYSICS.collisionPadding;
+            if (dist < minDist) {
+              push += (minDist - dist) * BUBBLE_PHYSICS.collisionStrength * forceScale;
+            }
+
+            const nodeForce = forces.get(nodeId);
+            const otherForce = forces.get(otherId);
+            nodeForce.fx -= nx * push;
+            nodeForce.fy -= ny * push;
+            otherForce.fx += nx * push;
+            otherForce.fy += ny * push;
+          });
+        }
+      }
+    });
+
+    let centerX = 0;
+    let centerY = 0;
+    nodeIds.forEach((nodeId) => {
+      const sim = simPositions.get(nodeId);
+      centerX += sim.x;
+      centerY += sim.y;
+    });
+    centerX /= nodeCount;
+    centerY /= nodeCount;
+
+    nodeIds.forEach((nodeId) => {
+      const sim = simPositions.get(nodeId);
+      const force = forces.get(nodeId);
+      force.fx += (centerX - sim.x) * BUBBLE_PHYSICS.centerGravity * forceScale;
+      force.fy += (centerY - sim.y) * BUBBLE_PHYSICS.centerGravity * forceScale;
+    });
+
+    const { damping, maxVelocity, sleepThreshold, hoverDrag } = BUBBLE_PHYSICS;
+    let awakeCount = 0;
+
+    nodeIds.forEach((nodeId) => {
+      const body = state.physicsVelocities.get(nodeId);
+      if (!body) {
+        return;
+      }
+
+      const sim = simPositions.get(nodeId);
+      const force = forces.get(nodeId);
+
+      body.vx = (body.vx + force.fx * dt) * damping;
+      body.vy = (body.vy + force.fy * dt) * damping;
+
+      if (softDrag.has(nodeId)) {
+        body.vx *= hoverDrag;
+        body.vy *= hoverDrag;
+      }
+
+      const speed = Math.hypot(body.vx, body.vy);
+      if (speed > maxVelocity) {
+        body.vx = (body.vx / speed) * maxVelocity;
+        body.vy = (body.vy / speed) * maxVelocity;
+      } else if (speed < sleepThreshold) {
+        body.vx = 0;
+        body.vy = 0;
+      }
+
+      body.px = sim.x + body.vx * dt;
+      body.py = sim.y + body.vy * dt;
+
+      if (Math.hypot(body.vx, body.vy) > BUBBLE_PHYSICS.sleepThreshold) {
+        awakeCount += 1;
+      }
+    });
+
+    const hasInteraction = softDrag.size > 0;
+    const wasSleeping = state.physicsSleeping;
+    if (!hasInteraction && forceScale >= 1 && awakeCount === 0) {
+      state.physicsSleeping = true;
+    } else {
+      state.physicsSleeping = false;
+    }
+
+    return (
+      awakeCount > 0 ||
+      hasInteraction ||
+      forceScale < 1 ||
+      (state.physicsSleeping && !wasSleeping)
+    );
+  }
+
+  function snapDisplayToPhysics(graph) {
+    if (!state.physicsVelocities) {
+      return false;
+    }
+
+    let moved = false;
+    state.physicsVelocities.forEach((body, nodeId) => {
+      if (body.displayX === body.px && body.displayY === body.py) {
+        return;
+      }
+      body.displayX = body.px;
+      body.displayY = body.py;
+      graph.setNodeAttribute(nodeId, "x", body.px);
+      graph.setNodeAttribute(nodeId, "y", body.py);
+      moved = true;
+    });
+    return moved;
+  }
+
+  function lerpDisplayPositions(graph) {
+    if (!state.physicsVelocities) {
+      return false;
+    }
+
+    const lerp = BUBBLE_PHYSICS.displayLerp;
+    const epsilon = BUBBLE_PHYSICS.displayEpsilon;
+    const epsilonSq = epsilon * epsilon;
+    let moved = false;
+
+    state.physicsVelocities.forEach((body, nodeId) => {
+      const dx = body.px - body.displayX;
+      const dy = body.py - body.displayY;
+      if (dx * dx + dy * dy < epsilonSq) {
+        return;
+      }
+
+      body.displayX += dx * lerp;
+      body.displayY += dy * lerp;
+      graph.setNodeAttribute(nodeId, "x", body.displayX);
+      graph.setNodeAttribute(nodeId, "y", body.displayY);
+      moved = true;
+    });
+
+    return moved;
+  }
+
+  function runPhysicsSimulation(frameDt) {
+    if (!state.graph || !state.physicsEnabled || state.is3DMode) {
+      return false;
+    }
+
+    if (state.physicsSleeping && getSoftDragNodes().size === 0) {
+      return false;
+    }
+
+    const now = performance.now();
+    const elapsed = Math.min(
+      frameDt > 0 ? frameDt : BUBBLE_PHYSICS.fixedDt,
+      BUBBLE_PHYSICS.maxAccumulator
+    );
+    state.physicsAccumulator += elapsed;
+
+    let substeps = 0;
+    let simActive = false;
+    while (
+      state.physicsAccumulator >= BUBBLE_PHYSICS.fixedDt &&
+      substeps < BUBBLE_PHYSICS.maxSubsteps
+    ) {
+      simActive = stepBubblePhysics(state.graph, BUBBLE_PHYSICS.fixedDt) || simActive;
+      state.physicsAccumulator -= BUBBLE_PHYSICS.fixedDt;
+      substeps += 1;
+    }
+
+    if (state.physicsAccumulator > BUBBLE_PHYSICS.maxAccumulator) {
+      state.physicsAccumulator = BUBBLE_PHYSICS.maxAccumulator;
+    }
+
+    let moved = lerpDisplayPositions(state.graph);
+    if (state.physicsSleeping) {
+      moved = snapDisplayToPhysics(state.graph) || moved;
+    }
+    state.physicsLastTime = now;
+    state.physicsPositionsDirty = moved || simActive;
+    return moved || simActive;
+  }
 
   const state = {
     graph: null, renderer: null, nodes: [], edges: [], communities: [],
@@ -63,7 +465,25 @@ export async function initGephiLite(options = {}) {
     threeNodeMeshes: [],
     threeEdgeLines: null,
     threeAnimFrameId: null,
-    threeHoveredMesh: null
+    threeHoveredMesh: null,
+    physicsEnabled: true,
+    physicsVelocities: null,
+    physicsNodeIds: null,
+    physicsAccumulator: 0,
+    physicsStartedAt: 0,
+    physicsLastTime: 0,
+    physicsSleeping: false,
+    physicsPositionsDirty: true,
+    physicsScratch: {
+      forces: new Map(),
+      simPositions: new Map(),
+      grid: new Map(),
+      gridBuckets: []
+    },
+    focusActiveId: null,
+    focusNeighborIds: null,
+    cameraDirty: false,
+    animateFrame: 0
   };
 
   let appRoot = null;
@@ -131,6 +551,15 @@ export async function initGephiLite(options = {}) {
       state.renderer.kill();
       state.renderer = null;
     }
+
+    state.physicsVelocities = null;
+    state.physicsNodeIds = null;
+    state.physicsAccumulator = 0;
+    state.physicsStartedAt = 0;
+    state.physicsLastTime = 0;
+    state.physicsSleeping = false;
+    state.focusActiveId = null;
+    state.focusNeighborIds = null;
 
     if (refs?.rendererHost) {
       refs.rendererHost.innerHTML = "";
@@ -429,6 +858,8 @@ export async function initGephiLite(options = {}) {
 
   function inspectNode(node) {
     state.selectedNode = node;
+    wakePhysics();
+    updateFocusContext();
     const nodeType = getNodeSemanticType(node);
     const fallbackRoute = (nodeType === "story" || nodeType === "topic")
       ? `/stories/${encodeURIComponent(String(node.id || "").split(":").pop() || "")}`
@@ -622,13 +1053,12 @@ export async function initGephiLite(options = {}) {
 
     const graph = new GraphCtor({ multi: true });
     state.filteredNodes.forEach((node) => {
-      const colorKey = getNodeSemanticType(node);
-      const color = CONFIG.nodeColors[colorKey] || "#3793ff";
+      const color = getCanvasNodeColor(node);
       if (!graph.hasNode(node.id)) {
         graph.addNode(node.id, {
           ...node,
           label: node.label || node.id,
-          size: Math.sqrt(node.importance || 1) * 1.5 + 1.5,
+          size: 2,
           color,
           x: Math.random() * 100,
           y: Math.random() * 100,
@@ -645,13 +1075,15 @@ export async function initGephiLite(options = {}) {
         if (!graph.hasEdge(edgeKey)) {
           graph.addEdgeWithKey(edgeKey, sourceId, targetId, {
             ...edge,
-            color: "rgba(150, 150, 150, 0.2)",
-            size: 1,
+            color: OBSIDIAN_GRAPH.edgeColor,
+            size: OBSIDIAN_GRAPH.edgeSize,
             type: "line"
           });
         }
       }
     });
+
+    applyDegreeBasedNodeSizes(graph);
 
     graph.forEachNode((nodeId, attrs) => {
       if (attrs.type !== "circle") {
@@ -674,50 +1106,54 @@ export async function initGephiLite(options = {}) {
     console.log("Gephi Lite: Running ForceAtlas2 layout...");
     const spreadSettings = {
       ...forceAtlas2.inferSettings(graph),
-      gravity: 0.0005,
-      scalingRatio: 5000,
+      gravity: 0.03,
+      scalingRatio: 100,
       strongGravityMode: false,
       outboundAttractionDistribution: true,
       linLogMode: true,
       adjustSizes: true,
-      slowDown: 1.2
+      slowDown: 2
     };
     const isFiltered = state.filteredNodes.length < state.nodes.length;
-    const iterations = isFiltered ? 50 : 300;
+    const iterations = isFiltered ? 40 : 120;
     console.time("FA2-Layout");
     forceAtlas2.assign(graph, { iterations, settings: spreadSettings });
     console.timeEnd("FA2-Layout");
 
-    graph.forEachNode((nodeId, attrs) => {
-      graph.setNodeAttribute(nodeId, "x", attrs.x * 4);
-      graph.setNodeAttribute(nodeId, "y", attrs.y * 4);
-    });
+    resetBubblePhysics(graph);
 
     console.log("Gephi Lite: Initializing Sigma renderer...");
     state.renderer = new SigmaLib(graph, ensureRendererHost(), {
       renderLabels: true,
-      labelSize: 11,
-      labelFont: "Outfit, Inter, system-ui, sans-serif",
-      labelColor: { color: "#ffe7e9" },
-      defaultEdgeColor: "rgba(180, 180, 180, 0.04)",
+      labelSize: OBSIDIAN_GRAPH.labelSize,
+      labelFont: OBSIDIAN_GRAPH.labelFont,
+      labelColor: { color: OBSIDIAN_GRAPH.labelColor },
+      defaultNodeColor: OBSIDIAN_GRAPH.defaultNode,
+      defaultEdgeColor: OBSIDIAN_GRAPH.edgeColor,
       edgeColor: "default",
-      labelGridCellSize: 180,
-      labelDensity: 0.25
+      labelGridCellSize: OBSIDIAN_GRAPH.labelGridCellSize,
+      labelDensity: OBSIDIAN_GRAPH.labelDensity,
+      labelRenderedSizeThreshold: OBSIDIAN_GRAPH.labelRenderedSizeThreshold,
+      minEdgeThickness: OBSIDIAN_GRAPH.minEdgeThickness
+    });
+
+    state.renderer.getCamera().on("updated", () => {
+      state.cameraDirty = true;
     });
 
     state.renderer.setSetting("nodeReducer", (nodeId, data) => {
       const result = { ...data };
-      const activeId = state.hoveredNode || state.selectedNode?.id;
+      const activeId = state.focusActiveId;
       if (activeId) {
         const isTarget = nodeId === activeId;
-        const isNeighbor = graph.neighbors(activeId).includes(nodeId);
+        const isNeighbor = state.focusNeighborIds?.has(nodeId);
         if (isTarget || isNeighbor) {
           result.label = data.label;
           result.zIndex = 999;
           if (isTarget) result.highlighted = true;
         } else {
           result.label = "";
-          result.color = "rgba(50, 50, 50, 0.15)";
+          result.color = OBSIDIAN_GRAPH.unfocusedNodeColor;
         }
       }
       return result;
@@ -725,11 +1161,11 @@ export async function initGephiLite(options = {}) {
 
     state.renderer.setSetting("edgeReducer", (edgeId, data) => {
       const result = { ...data };
-      const activeId = state.hoveredNode || state.selectedNode?.id;
+      const activeId = state.focusActiveId;
       if (activeId) {
         if (graph.hasExtremity(edgeId, activeId)) {
-          result.color = "#ff304c";
-          result.size = 2.5;
+          result.color = OBSIDIAN_GRAPH.focusedEdgeColor;
+          result.size = OBSIDIAN_GRAPH.focusedEdgeSize;
           result.zIndex = 998;
         } else {
           result.hidden = true;
@@ -740,20 +1176,24 @@ export async function initGephiLite(options = {}) {
 
     state.renderer.on("enterNode", ({ node }) => {
       state.hoveredNode = node;
+      wakePhysics();
+      updateFocusContext();
       const hovered = graph.getNodeAttributes(node);
       const hoverType = getNodeSemanticType(hovered);
       appRoot.style.setProperty("--node-glow-color", CONFIG.nodeColors[hoverType] || "#3793ff");
-      state.renderer.refresh();
+      state.cameraDirty = true;
     });
     state.renderer.on("leaveNode", () => {
       state.hoveredNode = null;
+      updateFocusContext();
       const selectedType = state.selectedNode ? getNodeSemanticType(state.selectedNode) : null;
       appRoot.style.setProperty("--node-glow-color", (selectedType && CONFIG.nodeColors[selectedType]) || DEFAULT_GLOW_COLOR);
-      state.renderer.refresh();
+      state.cameraDirty = true;
     });
     state.renderer.on("clickNode", ({ node }) => inspectNode(graph.getNodeAttributes(node)));
     state.renderer.on("clickStage", () => {
       state.selectedNode = null;
+      updateFocusContext();
       refs.detailTitle.textContent = "Select a node";
       refs.detailSubtitle.textContent = "Select any node on the graph to view detailed intelligence.";
       refs.detailContent.innerHTML = "";
@@ -804,18 +1244,44 @@ export async function initGephiLite(options = {}) {
       return;
     }
 
+    state.animateFrame += 1;
     syncCanvasSize();
-    drawBackgroundFlow();
+    if (state.animateFrame % BUBBLE_PHYSICS.bgFlowInterval === 0) {
+      drawBackgroundFlow();
+    }
     ctx.clearRect(0, 0, refs.canvas.width, refs.canvas.height);
     if (state.renderer) {
+      let needsRefresh = state.cameraDirty;
+      if (state.graph && state.physicsEnabled && !state.is3DMode) {
+        const frameDt =
+          state.physicsLastTime > 0
+            ? (performance.now() - state.physicsLastTime) / 1000
+            : BUBBLE_PHYSICS.fixedDt;
+        if (runPhysicsSimulation(frameDt)) {
+          needsRefresh = true;
+        }
+      }
+
       ctx.shadowBlur = 0;
+      const hadSignals = state.activeSignals.length > 0;
       state.activeSignals = state.activeSignals.filter((signal) => {
         const alive = signal.update();
         if (alive) signal.draw(ctx, state.renderer);
         return alive;
       });
+      if (state.activeSignals.length > 0 || hadSignals) {
+        needsRefresh = true;
+      }
       if (Math.random() < 0.15) spawnSignal();
-      updateStats();
+
+      if (needsRefresh) {
+        state.renderer.refresh();
+        state.cameraDirty = false;
+      }
+
+      if (state.animateFrame % BUBBLE_PHYSICS.statsInterval === 0) {
+        updateStats();
+      }
     }
 
     state.animationFrameId = window.requestAnimationFrame(animate);
@@ -827,6 +1293,7 @@ export async function initGephiLite(options = {}) {
     }
 
     console.log("Gephi Lite: Starting animation loop...");
+    state.physicsLastTime = performance.now();
     animate();
   }
 

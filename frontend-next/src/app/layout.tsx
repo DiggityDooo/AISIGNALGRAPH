@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Syne, JetBrains_Mono } from "next/font/google";
 import { ReactLenis } from "lenis/react";
 import ClientShellEffects from "@/components/ui/ClientShellEffects";
+import SiteChrome from "@/components/layout/SiteChrome";
 import "./globals.css";
 
 const syne = Syne({
@@ -33,7 +34,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-background text-foreground font-mono overflow-x-hidden">
         <ClientShellEffects />
-        <ReactLenis root>{children}</ReactLenis>
+        <SiteChrome>
+          <ReactLenis root>{children}</ReactLenis>
+        </SiteChrome>
       </body>
     </html>
   );

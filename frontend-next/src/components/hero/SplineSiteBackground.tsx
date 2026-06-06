@@ -1,18 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePointerReactiveSurface } from "@/hooks/usePointerReactiveSurface";
-
-const SPLINE_VIEWER_SCRIPT =
-  "https://unpkg.com/@splinetool/viewer/build/spline-viewer.js";
-
-const BUILD_TIME_SCENE_URL =
-  process.env.NEXT_PUBLIC_SPLINE_SCENE_URL?.trim() ?? "";
-
-const PROD_SCENE_CONFIG_PATH = "/static/spline-scene.json";
-const DEV_SCENE_CONFIG_PATH = "/spline-scene.json";
-
-type EmbedState = "idle" | "loading" | "ready" | "failed";
+import {
+  loadSplineViewerScript,
+  resolveSplineViewerUrl,
+  type SplineViewerState,
+  validateViewerUrl,
+} from "@/lib/splineScene";
 
 declare global {
   namespace JSX {
@@ -20,6 +16,7 @@ declare global {
       "spline-viewer": React.DetailedHTMLProps<
         React.HTMLAttributes<HTMLElement> & {
           url?: string;
+          loading?: "lazy" | "eager";
           "events-target"?: "global" | "local";
         },
         HTMLElement
@@ -28,96 +25,26 @@ declare global {
   }
 }
 
-function isPublicSplineIframeUrl(url: string): boolean {
-  return /my\.spline\.design/i.test(url);
-}
-
-function normalizeIframeUrl(url: string): string {
-  const trimmed = url.trim().replace(/\/+$/, "");
-  if (!trimmed) {
-    return trimmed;
-  }
-  if (/\/embed$/i.test(trimmed)) {
-    return `${trimmed}/`;
-  }
-  return `${trimmed}/embed/`;
-}
-
-function loadSplineViewerScript(): Promise<void> {
-  if (typeof window === "undefined") {
-    return Promise.resolve();
-  }
-  if (customElements.get("spline-viewer")) {
-    return Promise.resolve();
-  }
-  const existing = document.querySelector<HTMLScriptElement>(
-    `script[src="${SPLINE_VIEWER_SCRIPT}"]`,
-  );
-  if (existing?.dataset.loaded === "true") {
-    return Promise.resolve();
-  }
-  if (existing) {
-    return new Promise((resolve, reject) => {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(), { once: true });
-    });
-  }
-  return new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.type = "module";
-    script.src = SPLINE_VIEWER_SCRIPT;
-    script.addEventListener("load", () => {
-      script.dataset.loaded = "true";
-      resolve();
-    });
-    script.addEventListener("error", () => reject(new Error("Spline viewer failed to load")));
-    document.head.appendChild(script);
-  });
-}
-
-async function fetchSceneConfig(path: string): Promise<string> {
-  const response = await fetch(path, { headers: { Accept: "application/json" } });
-  if (!response.ok) {
-    return "";
-  }
-  const payload = (await response.json()) as { sceneUrl?: string };
-  return payload.sceneUrl?.trim() ?? "";
-}
-
-async function resolveSceneUrl(): Promise<string> {
-  if (BUILD_TIME_SCENE_URL) {
-    return BUILD_TIME_SCENE_URL;
-  }
-
-  const prodUrl = await fetchSceneConfig(PROD_SCENE_CONFIG_PATH);
-  if (prodUrl) {
-    return prodUrl;
-  }
-
-  if (process.env.NODE_ENV === "development") {
-    return fetchSceneConfig(DEV_SCENE_CONFIG_PATH);
-  }
-
-  return "";
-}
-
 export default function SplineSiteBackground() {
   usePointerReactiveSurface();
 
+  const [portalReady, setPortalReady] = useState(false);
   const viewerRef = useRef<HTMLElement | null>(null);
-  const [sceneUrl, setSceneUrl] = useState("");
+  const [viewerUrl, setViewerUrl] = useState("");
   const [configReady, setConfigReady] = useState(false);
-  const [embedState, setEmbedState] = useState<EmbedState>("idle");
+  const [viewerState, setViewerState] = useState<SplineViewerState>("idle");
 
-  const useIframeEmbed = isPublicSplineIframeUrl(sceneUrl);
-  const useViewerEmbed = Boolean(sceneUrl) && !useIframeEmbed;
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    resolveSceneUrl()
+
+    resolveSplineViewerUrl()
       .then((url) => {
         if (!cancelled) {
-          setSceneUrl(url);
+          setViewerUrl(url);
         }
       })
       .finally(() => {
@@ -125,85 +52,148 @@ export default function SplineSiteBackground() {
           setConfigReady(true);
         }
       });
+
     return () => {
       cancelled = true;
     };
   }, []);
 
   useEffect(() => {
-    if (!configReady || !sceneUrl) {
+    if (!configReady) {
       return;
     }
 
-    if (useIframeEmbed) {
-      setEmbedState("loading");
-      return;
-    }
-
-    if (!useViewerEmbed) {
+    if (!viewerUrl) {
+      setViewerState("failed");
       return;
     }
 
     let cancelled = false;
-    setEmbedState("loading");
-    loadSplineViewerScript()
-      .then(() => {
-        if (!cancelled) {
-          setEmbedState("idle");
+    setViewerState("loading");
+
+    validateViewerUrl(viewerUrl)
+      .then((isValid) => {
+        if (cancelled) {
+          return;
         }
+        if (!isValid) {
+          setViewerState("failed");
+          return;
+        }
+        return loadSplineViewerScript().then(() => {
+          if (!cancelled) {
+            setViewerState("idle");
+          }
+        });
       })
       .catch(() => {
         if (!cancelled) {
-          setEmbedState("failed");
+          setViewerState("failed");
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [configReady, sceneUrl, useIframeEmbed, useViewerEmbed]);
+  }, [configReady, viewerUrl]);
 
   useEffect(() => {
     const viewer = viewerRef.current;
-    if (!viewer || !useViewerEmbed || embedState === "failed") {
+    if (!viewer || viewerState === "failed" || viewerState === "loading" || !viewerUrl) {
       return;
     }
-    const markLoaded = () => setEmbedState("ready");
-    viewer.addEventListener("load", markLoaded);
-    return () => viewer.removeEventListener("load", markLoaded);
-  }, [embedState, useViewerEmbed, sceneUrl]);
 
-  const showVoidLayer = !configReady || !sceneUrl || embedState !== "ready";
+    viewer.setAttribute("url", viewerUrl);
+    viewer.setAttribute("loading", "eager");
+    viewer.setAttribute("events-target", "local");
+
+    const hideWatermark = () => {
+      const logo = viewer.shadowRoot?.querySelector("#logo");
+      if (logo instanceof HTMLElement) {
+        logo.style.display = "none";
+      }
+    };
+
+    const markReady = () => {
+      hideWatermark();
+      setViewerState("ready");
+    };
+
+    hideWatermark();
+    viewer.addEventListener("load", markReady);
+
+    const logoTimer = window.setInterval(hideWatermark, 500);
+    const logoStopTimer = window.setTimeout(() => {
+      window.clearInterval(logoTimer);
+    }, 10_000);
+
+    return () => {
+      viewer.removeEventListener("load", markReady);
+      window.clearInterval(logoTimer);
+      window.clearTimeout(logoStopTimer);
+    };
+  }, [viewerState, viewerUrl]);
+
+  const showVoidLayer =
+    !configReady ||
+    !viewerUrl ||
+    viewerState === "loading" ||
+    viewerState === "failed";
 
   const showViewer =
-    useViewerEmbed && embedState !== "failed" && embedState !== "loading";
+    Boolean(viewerUrl) &&
+    viewerState !== "failed" &&
+    viewerState !== "loading";
 
-  return (
-    <div className="spline-site-root fixed inset-0 z-[-1] overflow-hidden pointer-events-none" aria-hidden>
-      {showVoidLayer && <div className="spline-site-void absolute inset-0" />}
+  useEffect(() => {
+    if (!showViewer) {
+      return;
+    }
 
-      {useIframeEmbed && (
-        <iframe
-          title="AISIGNALGRAPH 3D atmosphere"
-          src={normalizeIframeUrl(sceneUrl)}
-          className="spline-site-iframe absolute inset-0 h-full w-full border-0"
-          loading="eager"
-          allow="autoplay; fullscreen"
-          onLoad={() => setEmbedState("ready")}
-        />
+    const nudgeViewerLayout = () => window.dispatchEvent(new Event("resize"));
+    nudgeViewerLayout();
+    const timers = [250, 1000, 2500].map((ms) =>
+      window.setTimeout(nudgeViewerLayout, ms),
+    );
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [showViewer, viewerUrl]);
+
+  const layer = (
+    <div
+      className="spline-site-root overflow-hidden pointer-events-none"
+      aria-hidden
+      data-testid="spline-site-root"
+      data-spline-state={viewerState}
+    >
+      {showVoidLayer && (
+        <div className="spline-site-void absolute inset-0" data-testid="spline-site-void" />
       )}
 
-      {showViewer && (
-        <spline-viewer
-          ref={viewerRef}
-          url={sceneUrl}
-          events-target="global"
-          className="spline-site-layer absolute inset-0 h-full w-full"
-        />
-      )}
+      <div className="spline-site-stage">
+        {showViewer && (
+          <spline-viewer
+            ref={viewerRef}
+            url={viewerUrl}
+            loading="eager"
+            events-target="local"
+            className="spline-site-layer h-full w-full"
+            data-testid="spline-viewer"
+          />
+        )}
+      </div>
 
       <div className="spline-site-vignette absolute inset-0" />
       <div className="spline-site-ambient absolute inset-0" />
+      <div className="spline-site-hero-fade absolute inset-x-0 bottom-0" aria-hidden />
     </div>
   );
+
+  if (!portalReady) {
+    return null;
+  }
+
+  return createPortal(layer, document.body);
 }

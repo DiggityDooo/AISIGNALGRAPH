@@ -1,8 +1,8 @@
 "use client";
 
-import { PointerEventsRoot } from "@/components/layout/PointerEventsRoot";
 import PageHero from "@/components/layout/PageHero";
 import BentoCard from "@/components/ui/BentoCard";
+import { usePagedList } from "@/hooks/usePagedList";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 
@@ -16,6 +16,8 @@ interface Entity {
 export default function EntitiesPage() {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
+  const { visibleItems, hasMore, loadMore, totalCount, visibleCount } =
+    usePagedList(entities);
 
   useEffect(() => {
     fetch("/api/entities")
@@ -31,7 +33,7 @@ export default function EntitiesPage() {
   }, []);
 
   return (
-    <PointerEventsRoot className="relative min-h-screen w-full flex flex-col">
+    <main className="relative min-h-screen w-full flex flex-col">
       <PageHero
         compact
         eyebrow="Entity Surveillance"
@@ -41,19 +43,19 @@ export default function EntitiesPage() {
         primaryCta={{ label: "Map the Lattice", href: "/graph" }}
       />
 
-      <div className="max-w-6xl mx-auto w-full px-6 md:px-8 pb-32 pointer-events-auto">
+      <div className="max-w-6xl mx-auto w-full px-6 md:px-8 pb-32">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {loading ? (
             <div className="col-span-full text-center font-mono text-primary animate-pulse py-20">
               IDENTIFYING ACTORS...
             </div>
           ) : (
-            entities.map((entity, i) => (
+            visibleItems.map((entity, i) => (
               <motion.div
                 key={entity.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
+                transition={{ delay: Math.min(i * 0.03, 0.6) }}
               >
                 <BentoCard
                   title={entity.type}
@@ -66,7 +68,24 @@ export default function EntitiesPage() {
             ))
           )}
         </div>
+
+        {!loading && totalCount > 0 && (
+          <div className="mt-12 flex flex-col items-center gap-4">
+            <p className="font-mono text-xs uppercase tracking-[0.25em] text-muted">
+              Showing {visibleCount} of {totalCount} actors
+            </p>
+            {hasMore && (
+              <button
+                type="button"
+                onClick={loadMore}
+                className="glass-pill px-6 py-3 font-mono text-xs uppercase tracking-[0.2em] text-foreground hover:text-primary transition-colors"
+              >
+                Load more actors
+              </button>
+            )}
+          </div>
+        )}
       </div>
-    </PointerEventsRoot>
+    </main>
   );
 }

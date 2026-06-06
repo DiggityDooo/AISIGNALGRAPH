@@ -118,7 +118,7 @@ def create_app() -> Flask:
                 "base-uri 'self'; "
                 "form-action 'self'; "
                 "frame-ancestors 'none'; "
-                "script-src 'self' 'unsafe-inline' https://unpkg.com; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://unpkg.com; "
                 "worker-src 'self' blob:; "
                 "frame-src 'self' https://my.spline.design https://*.spline.design; "
                 "connect-src 'self' https://prod.spline.design https://unpkg.com https://*.spline.design https://my.spline.design; "

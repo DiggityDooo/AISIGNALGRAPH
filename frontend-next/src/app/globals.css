@@ -30,6 +30,7 @@ body {
   color: var(--color-foreground);
   font-family: var(--font-mono);
   overflow-x: hidden;
+  isolation: isolate;
 }
 
 body.custom-cursor-active {
@@ -92,12 +93,45 @@ article {
   background: transparent !important;
 }
 
+.spline-site-root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100svh;
+  max-height: 100svh;
+  z-index: 0;
+}
+
+.spline-site-stage {
+  position: absolute;
+  top: -4%;
+  left: 50%;
+  width: min(118vw, 1320px);
+  height: 72vh;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.spline-site-hero-fade {
+  height: 42%;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(5, 2, 2, 0.55) 42%,
+    var(--color-background) 100%
+  );
+  pointer-events: none;
+}
+
 .spline-site-void {
   background:
-    radial-gradient(circle at var(--pointer-x) var(--pointer-y), rgba(255, 60, 81, 0.22), transparent 28%),
-    linear-gradient(180deg, rgba(14, 5, 6, 0.55), rgba(4, 2, 2, 0.96)),
-    radial-gradient(circle at 70% 28%, rgba(255, 42, 77, 0.14), transparent 52%),
-    radial-gradient(circle at center, var(--color-void) 0%, var(--color-background) 100%);
+    radial-gradient(circle at var(--pointer-x) var(--pointer-y), rgba(255, 48, 72, 0.28), transparent 28%),
+    linear-gradient(180deg, rgba(22, 4, 8, 0.58), rgba(6, 1, 2, 0.97)),
+    radial-gradient(circle at 70% 28%, rgba(255, 32, 64, 0.2), transparent 52%),
+    radial-gradient(circle at center, #120003 0%, var(--color-background) 100%);
 }
 
 .spline-site-iframe {
@@ -106,14 +140,19 @@ article {
 }
 
 .spline-site-layer {
-  opacity: 0.92;
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0.94;
+  filter: saturate(1.14) hue-rotate(-8deg) brightness(0.96);
+  transform: translateY(-6%);
 }
 
 .spline-site-vignette {
   background:
-    radial-gradient(circle at var(--pointer-x) var(--pointer-y), rgba(255, 60, 81, 0.2), transparent 28%),
-    linear-gradient(90deg, rgba(5, 2, 2, 0.82) 0%, rgba(5, 2, 2, 0.25) 38%, transparent 58%),
-    radial-gradient(circle at 72% 30%, rgba(255, 42, 77, 0.08), transparent 48%);
+    radial-gradient(circle at var(--pointer-x) var(--pointer-y), rgba(255, 48, 72, 0.22), transparent 28%),
+    linear-gradient(90deg, rgba(18, 2, 6, 0.48) 0%, rgba(12, 2, 4, 0.16) 38%, transparent 58%),
+    radial-gradient(circle at 72% 30%, rgba(255, 32, 64, 0.12), transparent 48%);
   pointer-events: none;
 }
 
@@ -134,8 +173,8 @@ article {
 .constellation-layer {
   position: fixed;
   inset: 0;
-  z-index: -1;
-  opacity: 0.42;
+  z-index: 1;
+  opacity: 0.28;
   pointer-events: none;
 }
 

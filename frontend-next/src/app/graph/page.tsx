@@ -60,7 +60,7 @@ export default function GraphPage() {
   };
 
   return (
-    <div id="app-root" className="relative w-full h-screen bg-transparent overflow-hidden pointer-events-auto">
+    <div id="app-root" className="relative w-full h-screen bg-[#050202] overflow-hidden pointer-events-auto">
       <link rel="stylesheet" href="/gephi_lite.css" />
       <GraphRuntime onReady={handleReady} onError={handleError} />
 

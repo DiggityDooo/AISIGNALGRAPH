@@ -41,10 +41,12 @@ Open `http://127.0.0.1:5000` to access the hub.
 
 ### Home hero (Spline)
 
-The landing page uses an Eternal ARC Spline scene as a full-screen background (poster fallback: `spline_preview.jpg`). Set `sceneUrl` in `webapp/static/spline-scene.json` when running Flask (served at `/static/spline-scene.json`; no rebuild; restart Flask). For `next dev`, use `frontend-next/public/spline-scene.json` (served at `/spline-scene.json`):
+The landing page uses a Spline **viewer** scene (liquidring) as a viewport-fixed background via `<spline-viewer>` (poster fallback: `spline_preview.jpg`). Configure `webapp/static/spline-scene.json` when running Flask (served at `/static/spline-scene.json`; restart Flask after edits). For `next dev`, mirror the same file in `frontend-next/public/spline-scene.json`:
 
-- `https://my.spline.design/.../` — public link (iframe embed, local mouse events in scene)
-- `https://prod.spline.design/.../scene.splinecode` — Viewer export (`events-target="global"` for full-page cursor Look At / Follow)
+- `viewerUrl` — **required for 3D** — Spline Viewer export (`https://prod.spline.design/.../scene.splinecode`)
+- `sceneUrl` — optional public link (`my.spline.design`); used only to derive `viewerUrl` when Viewer export is missing
+
+The viewer is portaled to `document.body` with `position: fixed` and `events-target="local"` so the ring stays put while the page scrolls. Flask CSP must allow `'unsafe-eval'` in `script-src` for the Spline runtime.
 
 Or use `NEXT_PUBLIC_SPLINE_SCENE_URL` in `frontend-next/.env.local`, then rebuild:
 

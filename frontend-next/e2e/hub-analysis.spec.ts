@@ -68,6 +68,9 @@ test.describe("AISIGNALGRAPH hub analysis", () => {
       if (route.path === "/") {
         checks.hasHero = (await page.locator(".hero-aeru").count()) > 0;
         checks.hasArchives = (await page.locator("#archives").count()) > 0;
+        checks.hasSplineRoot = (await page.locator('[data-testid="spline-site-root"]').count()) > 0;
+        checks.noAccessDeniedLeak =
+          (await page.getByText(/AccessDenied/i).count()) === 0;
         const overviewRes = await page.request.get("/api/overview");
         checks.apiOverviewOk = overviewRes.ok();
         if (!overviewRes.ok()) {

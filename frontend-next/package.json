@@ -8,7 +8,9 @@
     "build:hub": "next build && rsync -a --delete out/ ../webapp/static/hub/",
     "start": "next start",
     "lint": "eslint",
-    "analyze": "playwright test e2e/hub-analysis.spec.ts"
+    "analyze": "playwright test e2e/hub-analysis.spec.ts",
+    "test:e2e": "playwright test",
+    "test:spline": "playwright test e2e/spline-background.spec.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",

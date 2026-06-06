@@ -17,21 +17,17 @@ const CustomCursor = dynamic(() => import("@/components/ui/CustomCursor"), {
 });
 
 const SPLINE_BACKGROUND_ROUTES = new Set(["/", "/stories", "/entities"]);
-const CONSTELLATION_ROUTES = new Set(["/stories", "/entities"]);
 
 export default function ClientShellEffects() {
   const pathname = usePathname();
   const showSplineBackground = SPLINE_BACKGROUND_ROUTES.has(pathname);
-  const showConstellation = CONSTELLATION_ROUTES.has(pathname);
 
   return (
     <>
       {showSplineBackground && <SplineSiteBackground />}
-      {showConstellation && (
-        <div className="constellation-layer" aria-hidden>
-          <GlobalCanvas />
-        </div>
-      )}
+      <div className="constellation-layer" aria-hidden>
+        <GlobalCanvas />
+      </div>
       <CustomCursor />
     </>
   );

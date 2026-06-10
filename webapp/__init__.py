@@ -54,6 +54,16 @@ def create_app() -> Flask:
         startup_error = "The AI graph could not be initialized. Check AI_MASTER_DOC_PATH, the seed file, and the database state."
         app.logger.exception("Failed to initialize AI Signal Graph services: %s", exc)
 
+    if graph_store is not None:
+        _run_migrations_and_load(app, db_path)
+
+    try:
+        from .routes.api import api_bp
+
+        app.register_blueprint(api_bp, url_prefix="/api")
+    except Exception as exc:  # noqa: BLE001
+        app.logger.exception("Failed to register API v2 blueprint: %s", exc)
+
     app.extensions["graph_store"] = graph_store
     app.extensions["job_manager"] = job_manager
     app.extensions["startup_error"] = startup_error
@@ -403,6 +413,30 @@ def create_app() -> Flask:
         abort(404)
 
     return app
+
+def _run_migrations_and_load(app: Flask, db_path: Path) -> None:
+    """Apply schema migrations, then ingest seed + scraped stories."""
+    import sqlite3
+
+    try:
+        from .db import run_migrations
+        from .loader import DataLoader
+
+        conn = sqlite3.connect(db_path)
+        try:
+            run_migrations(conn)
+            loader = DataLoader()
+            seeded = loader.load_seed(conn)
+            loaded = loader.load_stories(conn)
+            if seeded or loaded:
+                app.logger.info(
+                    "Data load complete: %d seed + %d scraped stories.", seeded, loaded
+                )
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001
+        app.logger.exception("Migrations/data load failed (non-fatal): %s", exc)
+
 
 def _default_job_state() -> JobState:
     return {"active": False, "job_type": None, "started_at": None, "finished_at": None, "status": "unavailable", "error": None, "cancel_requested": False}

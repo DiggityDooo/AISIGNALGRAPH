@@ -1,0 +1,1 @@
+"""AISIGNALGRAPH daily scraper package."""

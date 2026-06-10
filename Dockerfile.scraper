@@ -1,0 +1,13 @@
+# Cloud Run Job image: daily AI scraper (run-to-completion).
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements-scraper.txt .
+RUN pip install --no-cache-dir -r requirements-scraper.txt
+
+COPY scraper/ ./scraper/
+COPY data/ai_history_seed.json ./data/ai_history_seed.json
+
+# STORIES_BUCKET and GEMINI_API_KEY are injected at deploy time.
+CMD ["python", "-m", "scraper.daily_scrape"]

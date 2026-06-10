@@ -1,0 +1,568 @@
+[
+  {
+    "id": "8a4b1f0e-1956-4d01-9a01-000000000001",
+    "title": "Dartmouth Summer Research Project on Artificial Intelligence",
+    "summary": "John McCarthy, Marvin Minsky, Claude Shannon, and Nathaniel Rochester convened the Dartmouth Summer Research Project, the founding event of artificial intelligence as a field. The proposal coined the term 'artificial intelligence' and framed the conjecture that every aspect of learning and intelligence can be precisely described and simulated by machines.",
+    "date": "1956-06-18",
+    "source_url": "https://en.wikipedia.org/wiki/Dartmouth_workshop",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "John McCarthy", "type": "person"},
+      {"name": "Marvin Minsky", "type": "person"},
+      {"name": "Claude Shannon", "type": "person"},
+      {"name": "Nathaniel Rochester", "type": "person"},
+      {"name": "Dartmouth College", "type": "lab"},
+      {"name": "Artificial Intelligence", "type": "concept"}
+    ],
+    "keywords": ["founding", "dartmouth", "artificial intelligence", "symbolic ai"],
+    "relationships": [
+      {"source": "John McCarthy", "target": "Dartmouth College", "relation": "organized workshop at"},
+      {"source": "John McCarthy", "target": "Artificial Intelligence", "relation": "coined the term"},
+      {"source": "Marvin Minsky", "target": "Dartmouth College", "relation": "co-organized workshop at"}
+    ],
+    "era": "founding",
+    "importance_score": 1.0,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1957-4d01-9a01-000000000002",
+    "title": "Frank Rosenblatt invents the Perceptron",
+    "summary": "Frank Rosenblatt at Cornell Aeronautical Laboratory invented the Perceptron, the first trainable artificial neural network for pattern recognition. The Mark I Perceptron demonstrated that machines could learn from examples, founding the connectionist approach to AI.",
+    "date": "1957-01-01",
+    "source_url": "https://en.wikipedia.org/wiki/Perceptron",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "Frank Rosenblatt", "type": "person"},
+      {"name": "Perceptron", "type": "model"},
+      {"name": "Cornell Aeronautical Laboratory", "type": "lab"},
+      {"name": "Pattern Recognition", "type": "concept"}
+    ],
+    "keywords": ["perceptron", "neural networks", "pattern recognition", "connectionism"],
+    "relationships": [
+      {"source": "Frank Rosenblatt", "target": "Perceptron", "relation": "invented"},
+      {"source": "Frank Rosenblatt", "target": "Cornell Aeronautical Laboratory", "relation": "worked at"},
+      {"source": "Perceptron", "target": "Pattern Recognition", "relation": "performed"}
+    ],
+    "era": "founding",
+    "importance_score": 0.9,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1958-4d01-9a01-000000000003",
+    "title": "John McCarthy develops LISP programming language",
+    "summary": "John McCarthy at MIT developed LISP, the second-oldest high-level programming language and the dominant language of AI research for decades. LISP introduced symbolic expression processing, recursion, and garbage collection, enabling symbolic reasoning systems.",
+    "date": "1958-01-01",
+    "source_url": "https://en.wikipedia.org/wiki/Lisp_(programming_language)",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "John McCarthy", "type": "person"},
+      {"name": "LISP", "type": "product"},
+      {"name": "MIT", "type": "lab"},
+      {"name": "Symbolic Reasoning", "type": "concept"}
+    ],
+    "keywords": ["lisp", "programming languages", "symbolic ai", "mit"],
+    "relationships": [
+      {"source": "John McCarthy", "target": "LISP", "relation": "developed"},
+      {"source": "John McCarthy", "target": "MIT", "relation": "worked at"},
+      {"source": "LISP", "target": "Symbolic Reasoning", "relation": "enabled"}
+    ],
+    "era": "founding",
+    "importance_score": 0.85,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1965-4d01-9a01-000000000004",
+    "title": "Gordon Moore publishes Moore's Law",
+    "summary": "Gordon Moore published his observation that transistor density on integrated circuits doubles approximately every two years. Moore's Law became the engine of exponential compute growth underlying every later wave of AI progress, from expert systems to deep learning.",
+    "date": "1965-04-19",
+    "source_url": "https://en.wikipedia.org/wiki/Moore%27s_law",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "Gordon Moore", "type": "person"},
+      {"name": "Moore's Law", "type": "concept"},
+      {"name": "Intel", "type": "lab"},
+      {"name": "Semiconductor Scaling", "type": "concept"}
+    ],
+    "keywords": ["moores law", "semiconductors", "compute", "hardware scaling"],
+    "relationships": [
+      {"source": "Gordon Moore", "target": "Moore's Law", "relation": "formulated"},
+      {"source": "Gordon Moore", "target": "Intel", "relation": "co-founded"},
+      {"source": "Moore's Law", "target": "Semiconductor Scaling", "relation": "predicted"}
+    ],
+    "era": "symbolic",
+    "importance_score": 0.7,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1966-4d01-9a01-000000000005",
+    "title": "MIT ELIZA chatbot demonstrated by Weizenbaum",
+    "summary": "Joseph Weizenbaum at MIT demonstrated ELIZA, the first chatbot, which simulated a Rogerian psychotherapist using pattern matching and substitution. Users attributed understanding to the program, prompting Weizenbaum's later critiques of anthropomorphizing machines.",
+    "date": "1966-01-01",
+    "source_url": "https://en.wikipedia.org/wiki/ELIZA",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "Joseph Weizenbaum", "type": "person"},
+      {"name": "ELIZA", "type": "product"},
+      {"name": "MIT", "type": "lab"},
+      {"name": "Natural Language Processing", "type": "concept"}
+    ],
+    "keywords": ["eliza", "chatbot", "nlp", "human-computer interaction"],
+    "relationships": [
+      {"source": "Joseph Weizenbaum", "target": "ELIZA", "relation": "created"},
+      {"source": "Joseph Weizenbaum", "target": "MIT", "relation": "worked at"},
+      {"source": "ELIZA", "target": "Natural Language Processing", "relation": "pioneered"}
+    ],
+    "era": "symbolic",
+    "importance_score": 0.85,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1969-4d01-9a01-000000000006",
+    "title": "Minsky and Papert publish 'Perceptrons', critiquing neural networks",
+    "summary": "Marvin Minsky and Seymour Papert published 'Perceptrons', proving that single-layer perceptrons cannot compute functions like XOR. The book's influence redirected funding away from neural network research for over a decade, contributing to the first AI winter.",
+    "date": "1969-01-01",
+    "source_url": "https://en.wikipedia.org/wiki/Perceptrons_(book)",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "Marvin Minsky", "type": "person"},
+      {"name": "Seymour Papert", "type": "person"},
+      {"name": "Perceptrons", "type": "concept"},
+      {"name": "MIT Press", "type": "lab"},
+      {"name": "Neural Network Critique", "type": "concept"}
+    ],
+    "keywords": ["perceptrons", "neural networks", "critique", "ai winter"],
+    "relationships": [
+      {"source": "Marvin Minsky", "target": "Perceptrons", "relation": "co-authored"},
+      {"source": "Seymour Papert", "target": "Perceptrons", "relation": "co-authored"},
+      {"source": "Perceptrons", "target": "Neural Network Critique", "relation": "established"}
+    ],
+    "era": "symbolic",
+    "importance_score": 0.8,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1969-4d01-9a01-000000000007",
+    "title": "Stanford Research Institute demonstrates Shakey the Robot",
+    "summary": "SRI International demonstrated Shakey, the first general-purpose mobile robot able to reason about its own actions. Shakey combined computer vision, route planning, and the STRIPS planner, establishing foundational techniques in robotics and automated planning.",
+    "date": "1969-01-01",
+    "source_url": "https://en.wikipedia.org/wiki/Shakey_the_robot",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "SRI International", "type": "lab"},
+      {"name": "Shakey", "type": "product"},
+      {"name": "Robotics", "type": "concept"},
+      {"name": "Automated Planning", "type": "concept"}
+    ],
+    "keywords": ["shakey", "robotics", "planning", "computer vision"],
+    "relationships": [
+      {"source": "SRI International", "target": "Shakey", "relation": "built"},
+      {"source": "Shakey", "target": "Robotics", "relation": "advanced"},
+      {"source": "Shakey", "target": "Automated Planning", "relation": "pioneered"}
+    ],
+    "era": "symbolic",
+    "importance_score": 0.75,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1972-4d01-9a01-000000000008",
+    "title": "Prolog programming language created by Colmerauer",
+    "summary": "Alain Colmerauer created Prolog, a logic programming language based on first-order predicate calculus. Prolog became the dominant language for knowledge representation and expert systems in Europe and Japan's Fifth Generation Computer project.",
+    "date": "1972-01-01",
+    "source_url": "https://en.wikipedia.org/wiki/Prolog",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "Alain Colmerauer", "type": "person"},
+      {"name": "Prolog", "type": "product"},
+      {"name": "Logic Programming", "type": "concept"},
+      {"name": "Knowledge Representation", "type": "concept"}
+    ],
+    "keywords": ["prolog", "logic programming", "knowledge representation"],
+    "relationships": [
+      {"source": "Alain Colmerauer", "target": "Prolog", "relation": "created"},
+      {"source": "Prolog", "target": "Logic Programming", "relation": "implemented"},
+      {"source": "Prolog", "target": "Knowledge Representation", "relation": "enabled"}
+    ],
+    "era": "symbolic",
+    "importance_score": 0.7,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1974-4d01-9a01-000000000009",
+    "title": "DARPA cuts AI funding, beginning first AI Winter",
+    "summary": "Following the pessimistic Lighthill Report and unmet promises of machine translation and general problem solving, DARPA sharply cut AI research funding. The resulting first AI winter froze the field's growth through the late 1970s.",
+    "date": "1974-01-01",
+    "source_url": "https://en.wikipedia.org/wiki/AI_winter",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "DARPA", "type": "lab"},
+      {"name": "AI Winter", "type": "event"},
+      {"name": "Lighthill Report", "type": "policy"},
+      {"name": "Funding Cuts", "type": "risk"}
+    ],
+    "keywords": ["ai winter", "darpa", "funding", "lighthill report"],
+    "relationships": [
+      {"source": "DARPA", "target": "Funding Cuts", "relation": "enacted"},
+      {"source": "Lighthill Report", "target": "AI Winter", "relation": "precipitated"},
+      {"source": "Funding Cuts", "target": "AI Winter", "relation": "triggered"}
+    ],
+    "era": "first_winter",
+    "importance_score": 0.8,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1980-4d01-9a01-000000000010",
+    "title": "XCON expert system deployed at Digital Equipment Corporation",
+    "summary": "DEC deployed XCON (R1), an expert system that configured VAX computer orders using thousands of hand-written rules. XCON saved DEC an estimated $40 million per year and ignited the 1980s commercial expert systems boom championed by Edward Feigenbaum's knowledge engineering school.",
+    "date": "1980-01-01",
+    "source_url": "https://en.wikipedia.org/wiki/Xcon",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "Digital Equipment Corporation", "type": "lab"},
+      {"name": "XCON", "type": "product"},
+      {"name": "Expert Systems", "type": "concept"},
+      {"name": "Knowledge Engineering", "type": "concept"},
+      {"name": "Edward Feigenbaum", "type": "person"}
+    ],
+    "keywords": ["xcon", "expert systems", "knowledge engineering", "dec"],
+    "relationships": [
+      {"source": "Digital Equipment Corporation", "target": "XCON", "relation": "deployed"},
+      {"source": "XCON", "target": "Expert Systems", "relation": "commercialized"},
+      {"source": "Edward Feigenbaum", "target": "Knowledge Engineering", "relation": "championed"}
+    ],
+    "era": "connectionist",
+    "importance_score": 0.75,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1982-4d01-9a01-000000000011",
+    "title": "John Hopfield introduces Hopfield Networks",
+    "summary": "John Hopfield at Caltech introduced recurrent neural networks with energy-based dynamics that function as associative memory. Hopfield Networks revived physics-community interest in neural computation and helped end the neural network research freeze.",
+    "date": "1982-01-01",
+    "source_url": "https://en.wikipedia.org/wiki/Hopfield_network",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "John Hopfield", "type": "person"},
+      {"name": "Hopfield Network", "type": "model"},
+      {"name": "Associative Memory", "type": "concept"},
+      {"name": "Caltech", "type": "lab"}
+    ],
+    "keywords": ["hopfield network", "associative memory", "neural networks", "energy models"],
+    "relationships": [
+      {"source": "John Hopfield", "target": "Hopfield Network", "relation": "introduced"},
+      {"source": "John Hopfield", "target": "Caltech", "relation": "worked at"},
+      {"source": "Hopfield Network", "target": "Associative Memory", "relation": "implemented"}
+    ],
+    "era": "connectionist",
+    "importance_score": 0.8,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1984-4d01-9a01-000000000012",
+    "title": "William Gibson publishes Neuromancer, coining 'cyberspace'",
+    "summary": "William Gibson published Neuromancer, popularizing the term 'cyberspace' and shaping cultural expectations of artificial intelligence. The novel's rogue AIs and matrix imagery influenced decades of public discourse and researcher imagination about machine intelligence.",
+    "date": "1984-07-01",
+    "source_url": "https://en.wikipedia.org/wiki/Neuromancer",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "William Gibson", "type": "person"},
+      {"name": "Cyberspace", "type": "concept"},
+      {"name": "Neuromancer", "type": "product"},
+      {"name": "Science Fiction AI", "type": "concept"}
+    ],
+    "keywords": ["neuromancer", "cyberspace", "science fiction", "ai culture"],
+    "relationships": [
+      {"source": "William Gibson", "target": "Neuromancer", "relation": "published"},
+      {"source": "William Gibson", "target": "Cyberspace", "relation": "coined"},
+      {"source": "Neuromancer", "target": "Science Fiction AI", "relation": "shaped"}
+    ],
+    "era": "connectionist",
+    "importance_score": 0.5,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1986-4d01-9a01-000000000013",
+    "title": "Rumelhart, Hinton, Williams publish backpropagation paper",
+    "summary": "David Rumelhart, Geoffrey Hinton, and Ronald Williams published 'Learning representations by back-propagating errors' in Nature, demonstrating that multi-layer neural networks can learn internal representations. Backpropagation became the training algorithm underlying all of modern deep learning.",
+    "date": "1986-10-09",
+    "source_url": "https://en.wikipedia.org/wiki/Backpropagation",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "David Rumelhart", "type": "person"},
+      {"name": "Geoffrey Hinton", "type": "person"},
+      {"name": "Ronald Williams", "type": "person"},
+      {"name": "Backpropagation", "type": "concept"},
+      {"name": "PDP Group", "type": "lab"},
+      {"name": "Nature", "type": "product"}
+    ],
+    "keywords": ["backpropagation", "neural networks", "deep learning", "representation learning"],
+    "relationships": [
+      {"source": "David Rumelhart", "target": "Backpropagation", "relation": "co-developed"},
+      {"source": "Geoffrey Hinton", "target": "Backpropagation", "relation": "co-developed"},
+      {"source": "Ronald Williams", "target": "Backpropagation", "relation": "co-developed"},
+      {"source": "PDP Group", "target": "Backpropagation", "relation": "popularized"}
+    ],
+    "era": "connectionist",
+    "importance_score": 0.95,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1987-4d01-9a01-000000000014",
+    "title": "Lisp machine market collapses; second AI winter begins",
+    "summary": "The specialized Lisp machine market collapsed as commodity workstations surpassed dedicated AI hardware, and expert system maintenance costs mounted. DARPA again cut funding, beginning the second AI winter that lasted into the early 1990s.",
+    "date": "1987-01-01",
+    "source_url": "https://en.wikipedia.org/wiki/AI_winter#Setbacks_of_the_late_1980s_and_early_1990s",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "Second AI Winter", "type": "event"},
+      {"name": "Lisp Machines", "type": "hardware"},
+      {"name": "DARPA", "type": "lab"},
+      {"name": "Expert System Collapse", "type": "risk"}
+    ],
+    "keywords": ["ai winter", "lisp machines", "expert systems", "funding collapse"],
+    "relationships": [
+      {"source": "Lisp Machines", "target": "Second AI Winter", "relation": "collapse triggered"},
+      {"source": "DARPA", "target": "Second AI Winter", "relation": "funding cuts deepened"},
+      {"source": "Expert System Collapse", "target": "Second AI Winter", "relation": "accelerated"}
+    ],
+    "era": "second_winter",
+    "importance_score": 0.75,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1989-4d01-9a01-000000000015",
+    "title": "Yann LeCun demonstrates convolutional neural networks on digit recognition",
+    "summary": "Yann LeCun at Bell Labs applied backpropagation to convolutional neural networks for handwritten digit recognition. The LeNet architecture proved neural networks could solve real perception tasks, laying groundwork for modern computer vision.",
+    "date": "1989-01-01",
+    "source_url": "https://en.wikipedia.org/wiki/LeNet",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "Yann LeCun", "type": "person"},
+      {"name": "Convolutional Neural Network", "type": "model"},
+      {"name": "LeNet", "type": "model"},
+      {"name": "Digit Recognition", "type": "concept"},
+      {"name": "Bell Labs", "type": "lab"}
+    ],
+    "keywords": ["cnn", "lenet", "computer vision", "digit recognition", "bell labs"],
+    "relationships": [
+      {"source": "Yann LeCun", "target": "LeNet", "relation": "developed"},
+      {"source": "Yann LeCun", "target": "Bell Labs", "relation": "worked at"},
+      {"source": "LeNet", "target": "Digit Recognition", "relation": "solved"},
+      {"source": "LeNet", "target": "Convolutional Neural Network", "relation": "pioneered"}
+    ],
+    "era": "connectionist",
+    "importance_score": 0.9,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1993-4d01-9a01-000000000016",
+    "title": "Vernor Vinge publishes 'The Coming Technological Singularity'",
+    "summary": "Vernor Vinge published his essay arguing that superhuman machine intelligence would end the human era, predicting the singularity within 30 years. The essay framed superintelligence discourse that later shaped AI safety and existential risk research.",
+    "date": "1993-01-01",
+    "source_url": "https://en.wikipedia.org/wiki/Technological_singularity",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "Vernor Vinge", "type": "person"},
+      {"name": "Technological Singularity", "type": "concept"},
+      {"name": "Superintelligence", "type": "concept"}
+    ],
+    "keywords": ["singularity", "superintelligence", "ai risk", "futurism"],
+    "relationships": [
+      {"source": "Vernor Vinge", "target": "Technological Singularity", "relation": "articulated"},
+      {"source": "Technological Singularity", "target": "Superintelligence", "relation": "predicted arrival of"}
+    ],
+    "era": "second_winter",
+    "importance_score": 0.7,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1997-4d01-9a01-000000000017",
+    "title": "IBM Deep Blue defeats Garry Kasparov in chess",
+    "summary": "IBM's Deep Blue defeated world chess champion Garry Kasparov 3.5-2.5 in a six-game rematch, the first computer victory over a reigning world champion under tournament conditions. The result demonstrated the power of specialized hardware and combinatorial search.",
+    "date": "1997-05-11",
+    "source_url": "https://en.wikipedia.org/wiki/Deep_Blue_(chess_computer)",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "IBM", "type": "lab"},
+      {"name": "Deep Blue", "type": "product"},
+      {"name": "Garry Kasparov", "type": "person"},
+      {"name": "Game AI", "type": "concept"},
+      {"name": "Combinatorial Search", "type": "concept"}
+    ],
+    "keywords": ["deep blue", "chess", "ibm", "game ai", "search"],
+    "relationships": [
+      {"source": "IBM", "target": "Deep Blue", "relation": "built"},
+      {"source": "Deep Blue", "target": "Garry Kasparov", "relation": "defeated"},
+      {"source": "Deep Blue", "target": "Combinatorial Search", "relation": "demonstrated"}
+    ],
+    "era": "statistical",
+    "importance_score": 1.0,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-1998-4d01-9a01-000000000018",
+    "title": "Yann LeCun publishes LeNet-5; convolutional networks applied to banking",
+    "summary": "Yann LeCun published LeNet-5, a seven-layer convolutional network deployed commercially to read millions of bank checks per day. It was the first large-scale industrial deployment of deep neural networks for perception.",
+    "date": "1998-01-01",
+    "source_url": "https://en.wikipedia.org/wiki/LeNet#LeNet-5",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "Yann LeCun", "type": "person"},
+      {"name": "LeNet-5", "type": "model"},
+      {"name": "Convolutional Neural Network", "type": "model"},
+      {"name": "Check Reading", "type": "concept"},
+      {"name": "Banking", "type": "concept"}
+    ],
+    "keywords": ["lenet-5", "cnn", "ocr", "banking", "deployment"],
+    "relationships": [
+      {"source": "Yann LeCun", "target": "LeNet-5", "relation": "published"},
+      {"source": "LeNet-5", "target": "Check Reading", "relation": "automated"},
+      {"source": "LeNet-5", "target": "Banking", "relation": "deployed in"}
+    ],
+    "era": "statistical",
+    "importance_score": 0.8,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-2001-4d01-9a01-000000000019",
+    "title": "Wikipedia launched, later becomes major NLP training corpus",
+    "summary": "Jimmy Wales and Larry Sanger launched Wikipedia, the free collaborative encyclopedia. Wikipedia's open corpus became one of the most important training datasets for natural language processing and large language models.",
+    "date": "2001-01-15",
+    "source_url": "https://en.wikipedia.org/wiki/Wikipedia",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "Wikipedia", "type": "dataset"},
+      {"name": "Jimmy Wales", "type": "person"},
+      {"name": "Larry Sanger", "type": "person"},
+      {"name": "Natural Language Processing", "type": "concept"},
+      {"name": "Training Data", "type": "concept"}
+    ],
+    "keywords": ["wikipedia", "training data", "nlp", "open knowledge"],
+    "relationships": [
+      {"source": "Jimmy Wales", "target": "Wikipedia", "relation": "co-founded"},
+      {"source": "Larry Sanger", "target": "Wikipedia", "relation": "co-founded"},
+      {"source": "Wikipedia", "target": "Training Data", "relation": "became"}
+    ],
+    "era": "statistical",
+    "importance_score": 0.6,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-2002-4d01-9a01-000000000020",
+    "title": "Roomba released; practical consumer robotics begins",
+    "summary": "iRobot released the Roomba autonomous vacuum cleaner, the first mass-market consumer robot. Roomba proved autonomous navigation could ship at consumer prices, normalizing robots in homes.",
+    "date": "2002-09-01",
+    "source_url": "https://en.wikipedia.org/wiki/Roomba",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "iRobot", "type": "lab"},
+      {"name": "Roomba", "type": "product"},
+      {"name": "Robotics", "type": "concept"},
+      {"name": "Autonomous Navigation", "type": "concept"}
+    ],
+    "keywords": ["roomba", "consumer robotics", "autonomous navigation"],
+    "relationships": [
+      {"source": "iRobot", "target": "Roomba", "relation": "released"},
+      {"source": "Roomba", "target": "Autonomous Navigation", "relation": "commercialized"},
+      {"source": "Roomba", "target": "Robotics", "relation": "mainstreamed"}
+    ],
+    "era": "statistical",
+    "importance_score": 0.5,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-2006-4d01-9a01-000000000021",
+    "title": "Geoffrey Hinton coins 'deep learning'; deep belief networks paper",
+    "summary": "Geoffrey Hinton and colleagues at Toronto published 'A fast learning algorithm for deep belief nets', showing that layer-wise pretraining with restricted Boltzmann machines makes deep networks trainable. The work launched the deep learning era and rebranded neural network research.",
+    "date": "2006-07-01",
+    "source_url": "https://en.wikipedia.org/wiki/Deep_belief_network",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "Geoffrey Hinton", "type": "person"},
+      {"name": "Deep Learning", "type": "concept"},
+      {"name": "Deep Belief Networks", "type": "model"},
+      {"name": "Restricted Boltzmann Machine", "type": "model"},
+      {"name": "Pretraining", "type": "concept"},
+      {"name": "University of Toronto", "type": "lab"}
+    ],
+    "keywords": ["deep learning", "deep belief networks", "pretraining", "hinton"],
+    "relationships": [
+      {"source": "Geoffrey Hinton", "target": "Deep Learning", "relation": "coined"},
+      {"source": "Geoffrey Hinton", "target": "Deep Belief Networks", "relation": "published"},
+      {"source": "Geoffrey Hinton", "target": "University of Toronto", "relation": "worked at"},
+      {"source": "Deep Belief Networks", "target": "Pretraining", "relation": "used"}
+    ],
+    "era": "deep_learning",
+    "importance_score": 1.0,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-2007-4d01-9a01-000000000022",
+    "title": "Fei-Fei Li begins building ImageNet dataset at Princeton",
+    "summary": "Fei-Fei Li began building ImageNet at Princeton, betting that data scale rather than algorithms was the bottleneck for visual recognition. The project crowdsourced labels for millions of images across thousands of categories.",
+    "date": "2007-01-01",
+    "source_url": "https://en.wikipedia.org/wiki/ImageNet",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "Fei-Fei Li", "type": "person"},
+      {"name": "ImageNet", "type": "dataset"},
+      {"name": "Computer Vision", "type": "concept"},
+      {"name": "Princeton University", "type": "lab"},
+      {"name": "Visual Recognition", "type": "concept"}
+    ],
+    "keywords": ["imagenet", "computer vision", "datasets", "fei-fei li"],
+    "relationships": [
+      {"source": "Fei-Fei Li", "target": "ImageNet", "relation": "began building"},
+      {"source": "Fei-Fei Li", "target": "Princeton University", "relation": "worked at"},
+      {"source": "ImageNet", "target": "Visual Recognition", "relation": "benchmarked"}
+    ],
+    "era": "deep_learning",
+    "importance_score": 0.9,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-2009-4d01-9a01-000000000023",
+    "title": "ImageNet dataset publicly released",
+    "summary": "ImageNet was publicly released at CVPR 2009 with over 3 million labeled images spanning thousands of categories. The dataset's scale enabled the deep learning breakthroughs that followed, beginning with AlexNet in 2012.",
+    "date": "2009-06-01",
+    "source_url": "https://en.wikipedia.org/wiki/ImageNet#Dataset",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "ImageNet", "type": "dataset"},
+      {"name": "Fei-Fei Li", "type": "person"},
+      {"name": "Stanford University", "type": "lab"},
+      {"name": "Computer Vision Benchmark", "type": "concept"}
+    ],
+    "keywords": ["imagenet", "dataset release", "computer vision", "benchmark"],
+    "relationships": [
+      {"source": "Fei-Fei Li", "target": "ImageNet", "relation": "released"},
+      {"source": "Fei-Fei Li", "target": "Stanford University", "relation": "moved to"},
+      {"source": "ImageNet", "target": "Computer Vision Benchmark", "relation": "established"}
+    ],
+    "era": "deep_learning",
+    "importance_score": 0.9,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "8a4b1f0e-2010-4d01-9a01-000000000024",
+    "title": "First ImageNet Large Scale Visual Recognition Challenge (ILSVRC)",
+    "summary": "The first ImageNet Large Scale Visual Recognition Challenge was held, creating the annual benchmark competition that drove computer vision progress. ILSVRC 2012's AlexNet victory two years later ignited the deep learning revolution.",
+    "date": "2010-01-01",
+    "source_url": "https://en.wikipedia.org/wiki/ImageNet#ImageNet_Challenge",
+    "source_name": "Wikipedia",
+    "entities": [
+      {"name": "ILSVRC", "type": "event"},
+      {"name": "ImageNet", "type": "dataset"},
+      {"name": "Computer Vision", "type": "concept"},
+      {"name": "Benchmark Competition", "type": "concept"}
+    ],
+    "keywords": ["ilsvrc", "imagenet challenge", "benchmark", "computer vision"],
+    "relationships": [
+      {"source": "ImageNet", "target": "ILSVRC", "relation": "spawned"},
+      {"source": "ILSVRC", "target": "Benchmark Competition", "relation": "established"},
+      {"source": "ILSVRC", "target": "Computer Vision", "relation": "accelerated"}
+    ],
+    "era": "deep_learning",
+    "importance_score": 0.8,
+    "scraped_at": "2026-06-10T00:00:00+00:00"
+  }
+]

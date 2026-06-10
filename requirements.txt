@@ -22,3 +22,4 @@ flask-limiter
 pytest
 gunicorn
 python-dotenv
+google-cloud-storage

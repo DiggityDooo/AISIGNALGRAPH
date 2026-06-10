@@ -55,6 +55,44 @@ cd frontend-next
 npm run build:hub
 ```
 
+## 🤖 Daily Scraper (Cloud Run Job + GCS)
+
+Serverless ingestion pipeline in `scraper/`:
+
+| Layer | Module | Role |
+|-------|--------|------|
+| Security | `scraper/security/` | HTTPS-only allowlist, blocklist, rate limits, bleach sanitizer |
+| Extract | `scraper/extractor.py` | **Google Gemini** (`gemini-3.1-flash-lite`, JSON-mode) |
+| Store | `scraper/storage.py` | `ai_stories.json` + `scrape_state.json` → **GCS** or local `data/` |
+| Run | `scraper/daily_scrape.py` | RSS orchestrator (Cloud Run Job entrypoint) |
+| Seed | `scraper/historical_ingest.py` | 1956–2010 corpus + optional Wayback backfill |
+| Load | `webapp/loader.py` | GCS/local JSON → SQLite on app startup |
+| Schema | `webapp/migrations/` | Auto-applied via `webapp/db.py` |
+
+**Production flow:** Cloud Scheduler → Cloud Run Job (`Dockerfile.scraper`) → GCS bucket → Flask reads bucket at boot.
+
+**Deploy (one-shot):**
+
+```bash
+# Prereq: gcloud auth + gemini-api-key in Secret Manager (see Secrets below)
+bash deploy_scraper.sh
+```
+
+**Local dev:**
+
+```bash
+cp .env.example .env          # never commit .env
+# Edit .env — set GEMINI_API_KEY (leave STORIES_BUCKET empty for local files)
+pip install -r requirements-scraper.txt
+python -m scraper.daily_scrape
+python -m scraper.historical_ingest   # optional; SKIP_WAYBACK=1 for seed only
+```
+
+**New API endpoints:** `/api/graph/era/<era>`, `/api/graph/year-range?from=&to=`,
+`/api/stories/search?q=` (FTS5), `/api/stats`.
+
+Full v2 spec: [AISIGNALGRAPH_Fable_Prompt.md](AISIGNALGRAPH_Fable_Prompt.md).
+
 ## 🔄 Dataset Management
 
 - **Rebuild:** Use the `REBUILD` button in the UI to re-ingest data from the master document.
@@ -70,3 +108,23 @@ npm run build:hub
 - **Sanitized UI:** All markdown and HTML content is sanitized before rendering.
 - **Robustness:** Custom error handling for 40x and 50x states.
 - **Performance:** Native WebGL-accelerated rendering for high-density networks.
+
+### Secrets & credentials (do not commit)
+
+| Secret | Local | Production |
+|--------|-------|--------------|
+| `GEMINI_API_KEY` | `.env` (gitignored) | GCP Secret Manager `gemini-api-key` → job env |
+| `FLASK_SECRET_KEY` | `.env` | Cloud Run secret `flask-secret-key` |
+| `STORIES_BUCKET` | unset = `data/` files | `PROJECT-aisignal-stories` GCS bucket |
+
+**Gitignored:** `.env`, `.env.*`, `data/ai_stories.json`, `data/scrape_state.json` (local scrape output).
+
+**Safe to commit:** `.env.example` (placeholders only), `deploy_scraper.sh` (references secret *names*, not values).
+
+Create Gemini secret once:
+
+```bash
+echo -n "YOUR_KEY" | gcloud secrets create gemini-api-key --data-file=-
+```
+
+Never put real API keys in source, README, or git history.

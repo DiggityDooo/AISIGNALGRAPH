@@ -1,0 +1,12 @@
+# Cloud Run Job: daily scraper dependencies
+requests
+feedparser
+beautifulsoup4
+bleach
+google-genai
+google-cloud-storage
+tenacity
+tldextract
+loguru
+tqdm
+python-dotenv

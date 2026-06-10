@@ -56,8 +56,14 @@ lint_output.txt
 # Database & Data
 data/*.db
 !data/ai_graph.db
+data/ai_stories.json
+data/scrape_state.json
 *.sqlite3
 *.sqlite
+
+# Playwright / e2e artifacts (regenerated locally)
+frontend-next/e2e/report/
+frontend-next/e2e/artifacts/
 
 # Logs
 logs/

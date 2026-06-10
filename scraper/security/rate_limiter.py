@@ -1,7 +1,31 @@
-"""Per-domain rate limiting. Thread-safe."""
+"""Per-domain and API rate limiting. Thread-safe."""
 
 import threading
 import time
+
+
+class ApiRateLimiter:
+    """Rolling-window cap for outbound API calls (e.g. Gemini free tier)."""
+
+    def __init__(self, max_requests: int = 12, window_seconds: float = 60.0) -> None:
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self._timestamps: list[float] = []
+        self._lock = threading.Lock()
+
+    def acquire(self) -> None:
+        """Block until a request slot is available within the window."""
+        with self._lock:
+            while True:
+                now = time.monotonic()
+                cutoff = now - self.window_seconds
+                self._timestamps = [t for t in self._timestamps if t > cutoff]
+                if len(self._timestamps) < self.max_requests:
+                    self._timestamps.append(now)
+                    return
+                sleep_for = self._timestamps[0] + self.window_seconds - now
+                if sleep_for > 0:
+                    time.sleep(sleep_for)
 
 
 class RateLimiter:

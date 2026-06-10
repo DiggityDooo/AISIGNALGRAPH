@@ -4,7 +4,7 @@ import pytest
 
 from scraper.security.allowlist import is_domain_allowed
 from scraper.security.blocklist import is_url_blocked
-from scraper.security.rate_limiter import RateLimiter
+from scraper.security.rate_limiter import ApiRateLimiter, RateLimiter
 from scraper.security.sanitizer import html_to_plain_text, sanitize_html
 from scraper.security.validator import SecurityValidator
 
@@ -108,3 +108,13 @@ def test_rate_limiter_delays_rapid_requests():
     limiter.wait_if_needed("example.com", 0.2)
     elapsed = time.monotonic() - start
     assert elapsed >= 0.15
+
+
+def test_api_rate_limiter_caps_requests_per_window():
+    limiter = ApiRateLimiter(max_requests=2, window_seconds=0.3)
+    limiter.acquire()
+    limiter.acquire()
+    start = time.monotonic()
+    limiter.acquire()
+    elapsed = time.monotonic() - start
+    assert elapsed >= 0.25

@@ -9,7 +9,7 @@ from scraper.extractor import StoryExtractor
 @pytest.fixture
 def extractor():
     with patch("scraper.extractor.genai.Client"):
-        return StoryExtractor(api_key="test-key")
+        return StoryExtractor(api_key="test-key", rate_limiter=MagicMock())
 
 
 VALID_PAYLOAD = {

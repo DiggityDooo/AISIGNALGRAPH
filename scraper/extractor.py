@@ -10,7 +10,10 @@ from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 from loguru import logger
 
+from scraper.security.rate_limiter import ApiRateLimiter
+
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
+_GEMINI_LIMITER = ApiRateLimiter(max_requests=12, window_seconds=60.0)
 _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 
@@ -26,11 +29,16 @@ class StoryExtractor:
     MAX_TOKENS = 900
     TEXT_CHAR_LIMIT = 3000
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        rate_limiter: ApiRateLimiter | None = None,
+    ):
         key = (api_key or os.environ.get("GEMINI_API_KEY", "")).strip()
         if not key:
             raise ValueError("GEMINI_API_KEY is not set")
         self.client = genai.Client(api_key=key)
+        self._rate_limiter = rate_limiter if rate_limiter is not None else _GEMINI_LIMITER
 
     def extract_story(
         self,
@@ -55,6 +63,7 @@ class StoryExtractor:
         reraise=True,
     )
     def _call_api(self, prompt: str) -> str:
+        self._rate_limiter.acquire()
         response = self.client.models.generate_content(
             model=self.MODEL,
             contents=prompt,

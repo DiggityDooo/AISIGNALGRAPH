@@ -1,5 +1,8 @@
 PROJECT=$(gcloud config get-value project)
 REGION=us-west1
+# Four runs/day, spread ~6h apart (UTC). Each job capped at 15m.
+SCRAPER_SCHEDULE="0 2,8,14,20 * * *"
+SCRAPER_TASK_TIMEOUT=15m
 
 # 1. GCS bucket for stories + state (using || true to ignore if already made)
 gcloud storage buckets create gs://${PROJECT}-aisignal-stories \
@@ -32,24 +35,38 @@ if gcloud run jobs describe aisignal-scraper --region $REGION >/dev/null 2>&1; t
     --region $REGION --service-account $SA \
     --set-env-vars STORIES_BUCKET=${PROJECT}-aisignal-stories \
     --set-secrets GEMINI_API_KEY=gemini-api-key:latest \
-    --max-retries 1 --task-timeout 20m
+    --max-retries 1 --task-timeout $SCRAPER_TASK_TIMEOUT
 else
   gcloud run jobs create aisignal-scraper \
     --image $IMAGE \
     --region $REGION --service-account $SA \
     --set-env-vars STORIES_BUCKET=${PROJECT}-aisignal-stories \
     --set-secrets GEMINI_API_KEY=gemini-api-key:latest \
-    --max-retries 1 --task-timeout 20m
+    --max-retries 1 --task-timeout $SCRAPER_TASK_TIMEOUT
 fi
 
 # 4. Pre-emptively enable Scheduler API to prevent prompt hanging
 gcloud services enable cloudscheduler.googleapis.com
 
-# Nightly schedule (2 AM UTC)
-gcloud scheduler jobs create http aisignal-scraper-nightly \
-  --location $REGION --schedule "0 2 * * *" \
-  --uri "https://run.googleapis.com/v2/projects/$PROJECT/locations/$REGION/jobs/aisignal-scraper:run" \
-  --http-method POST --oauth-service-account-email $SA || true
+SCHEDULER_URI="https://run.googleapis.com/v2/projects/$PROJECT/locations/$REGION/jobs/aisignal-scraper:run"
+SCHEDULER_JOB=aisignal-scraper-schedule
+
+if gcloud scheduler jobs describe $SCHEDULER_JOB --location $REGION >/dev/null 2>&1; then
+  gcloud scheduler jobs update http $SCHEDULER_JOB \
+    --location $REGION --schedule "$SCRAPER_SCHEDULE" \
+    --uri "$SCHEDULER_URI" \
+    --http-method POST --oauth-service-account-email $SA
+elif gcloud scheduler jobs describe aisignal-scraper-nightly --location $REGION >/dev/null 2>&1; then
+  gcloud scheduler jobs update http aisignal-scraper-nightly \
+    --location $REGION --schedule "$SCRAPER_SCHEDULE" \
+    --uri "$SCHEDULER_URI" \
+    --http-method POST --oauth-service-account-email $SA
+else
+  gcloud scheduler jobs create http $SCHEDULER_JOB \
+    --location $REGION --schedule "$SCRAPER_SCHEDULE" \
+    --uri "$SCHEDULER_URI" \
+    --http-method POST --oauth-service-account-email $SA
+fi
 
 gcloud projects add-iam-policy-binding $PROJECT \
   --member=serviceAccount:$SA --role=roles/run.invoker

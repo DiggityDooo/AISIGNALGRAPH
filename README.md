@@ -62,7 +62,7 @@ Serverless ingestion pipeline in `scraper/`:
 | Layer | Module | Role |
 |-------|--------|------|
 | Security | `scraper/security/` | HTTPS-only allowlist, blocklist, rate limits, bleach sanitizer |
-| Extract | `scraper/extractor.py` | **Google Gemini** (`gemini-3.1-flash-lite`, JSON-mode) |
+| Extract | `scraper/extractor.py` | **Google Gemini** (`gemini-3.1-flash-lite`, JSON-mode, 12 RPM cap) |
 | Store | `scraper/storage.py` | `ai_stories.json` + `scrape_state.json` → **GCS** or local `data/` |
 | Run | `scraper/daily_scrape.py` | RSS orchestrator (Cloud Run Job entrypoint) |
 | Seed | `scraper/historical_ingest.py` | 1956–2010 corpus + optional Wayback backfill |
@@ -70,6 +70,8 @@ Serverless ingestion pipeline in `scraper/`:
 | Schema | `webapp/migrations/` | Auto-applied via `webapp/db.py` |
 
 **Production flow:** Cloud Scheduler → Cloud Run Job (`Dockerfile.scraper`) → GCS bucket → Flask reads bucket at boot.
+
+**Schedule (production):** four short runs per day — **02:00, 08:00, 14:00, and 20:00 UTC** (`0 2,8,14,20 * * *`). Each execution is capped at **15 minutes**; Gemini extractions are rate-limited to **12 requests/minute** (free-tier headroom). A stale-run lock skips overlapping triggers if a prior run started within the last 30 minutes.
 
 **Deploy (one-shot):**
 

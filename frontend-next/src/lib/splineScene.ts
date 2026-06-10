@@ -5,6 +5,38 @@ export type SplineSceneConfig = {
 
 export type SplineViewerState = "idle" | "loading" | "ready" | "failed";
 
+/** Run work after first paint so LCP can settle on static hero assets. */
+export function scheduleAfterFirstPaint(callback: () => void): () => void {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+
+  let cancelled = false;
+  const run = () => {
+    if (!cancelled) {
+      callback();
+    }
+  };
+
+  const outerFrame = requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (cancelled) {
+        return;
+      }
+      if ("requestIdleCallback" in window) {
+        window.requestIdleCallback(run, { timeout: 2500 });
+      } else {
+        window.setTimeout(run, 1);
+      }
+    });
+  });
+
+  return () => {
+    cancelled = true;
+    cancelAnimationFrame(outerFrame);
+  };
+}
+
 const SPLINE_VIEWER_SCRIPT =
   "https://unpkg.com/@splinetool/viewer@1.9.82/build/spline-viewer.js";
 

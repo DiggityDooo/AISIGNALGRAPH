@@ -41,7 +41,7 @@ Open `http://127.0.0.1:5000` to access the hub.
 
 ### Home hero (Spline)
 
-The landing page uses a Spline **viewer** scene (liquidring) as a viewport-fixed background via `<spline-viewer>` (poster fallback: `spline_preview.jpg`). Configure `webapp/static/spline-scene.json` when running Flask (served at `/static/spline-scene.json`; restart Flask after edits). For `next dev`, mirror the same file in `frontend-next/public/spline-scene.json`:
+The landing page uses a Spline **viewer** scene (liquidring) as a viewport-fixed background via `<spline-viewer>` (CSS void poster until the scene loads). Configure `webapp/static/spline-scene.json` when running Flask (served at `/static/spline-scene.json`; restart Flask after edits). For `next dev`, mirror the same file in `frontend-next/public/spline-scene.json`:
 
 - `viewerUrl` — **required for 3D** — Spline Viewer export (`https://prod.spline.design/.../scene.splinecode`)
 - `sceneUrl` — optional public link (`my.spline.design`); used only to derive `viewerUrl` when Viewer export is missing

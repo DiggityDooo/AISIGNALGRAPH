@@ -1,7 +1,8 @@
 "use strict";
 
 const READY_CHECK_INTERVAL_MS = 100;
-const READY_CHECK_ATTEMPTS = 20;
+const READY_CHECK_ATTEMPTS = 50;
+const CONTAINER_SIZE_TIMEOUT_MS = READY_CHECK_INTERVAL_MS * READY_CHECK_ATTEMPTS;
 const DEFAULT_ACTIVE_YEAR = 2026;
 const DEFAULT_GLOW_COLOR = "#ff3148";
 const FALLBACK_X_SPREAD = 2.5;
@@ -14,6 +15,15 @@ function renderErrorMessage(error) {
   }
 
   return String(error);
+}
+
+function hasMeasurableContainerSize(container) {
+  if (!container) {
+    return false;
+  }
+
+  const rect = container.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
 }
 
 function safeInternalRoute(candidate, fallback) {
@@ -673,6 +683,8 @@ export async function initGephiLite(options = {}) {
     }
     if (!currentRefs.container) {
       missing.push("#sigma-container");
+    } else if (!hasMeasurableContainerSize(currentRefs.container)) {
+      missing.push("#sigma-container dimensions");
     }
     if (!currentRefs.canvas) {
       missing.push("#signal-canvas");
@@ -713,7 +725,7 @@ export async function initGephiLite(options = {}) {
 
           reject(
             new Error(
-              `Gephi Lite initialization timed out after ${READY_CHECK_INTERVAL_MS * READY_CHECK_ATTEMPTS}ms. Missing: ${runtime.missing.join(", ")}`
+              `Gephi Lite initialization timed out after ${CONTAINER_SIZE_TIMEOUT_MS}ms. Missing: ${runtime.missing.join(", ")}`
             )
           );
         }
@@ -721,6 +733,48 @@ export async function initGephiLite(options = {}) {
 
       intervalId = window.setInterval(evaluate, READY_CHECK_INTERVAL_MS);
       evaluate();
+    });
+  }
+
+  function waitForContainerSize(container) {
+    if (hasMeasurableContainerSize(container)) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let timeoutId = null;
+
+      const finish = (callback) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        observer.disconnect();
+        if (timeoutId !== null) {
+          window.clearTimeout(timeoutId);
+        }
+        callback();
+      };
+
+      const observer = new ResizeObserver(() => {
+        if (hasMeasurableContainerSize(container)) {
+          finish(resolve);
+        }
+      });
+
+      observer.observe(container);
+
+      timeoutId = window.setTimeout(() => {
+        if (hasMeasurableContainerSize(container)) {
+          finish(resolve);
+          return;
+        }
+
+        finish(() => {
+          reject(new Error("Gephi Lite: Sigma container has no measurable size."));
+        });
+      }, CONTAINER_SIZE_TIMEOUT_MS);
     });
   }
 
@@ -1008,7 +1062,7 @@ export async function initGephiLite(options = {}) {
       updateStats({ animate: true });
       return false;
     }
-    return buildGraph();
+    return await buildGraph();
   }
 
   // --- Graph Engine ---
@@ -1039,7 +1093,7 @@ export async function initGephiLite(options = {}) {
     }
   }
 
-  function buildGraph(options = {}) {
+  async function buildGraph(options = {}) {
     const { mountRenderer = true } = options;
     console.log("Gephi Lite: Building graph...");
     if (!state.filteredNodes.length) {
@@ -1121,6 +1175,9 @@ export async function initGephiLite(options = {}) {
     console.timeEnd("FA2-Layout");
 
     resetBubblePhysics(graph);
+
+    await waitForContainerSize(refs.container);
+    syncCanvasSize();
 
     console.log("Gephi Lite: Initializing Sigma renderer...");
     state.renderer = new SigmaLib(graph, ensureRendererHost(), {
@@ -1459,6 +1516,7 @@ export async function initGephiLite(options = {}) {
 
     addManagedListener(window, "resize", () => {
       syncCanvasSize();
+      state.renderer?.resize();
       if (state.is3DMode && state.threeRenderer && state.threeCamera && refs.threeContainer) {
         const rect = refs.threeContainer.getBoundingClientRect();
         state.threeCamera.aspect = rect.width / rect.height;

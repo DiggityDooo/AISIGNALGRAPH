@@ -25,7 +25,11 @@ declare global {
   }
 }
 
-export default function SplineSiteBackground() {
+type SplineSiteBackgroundProps = {
+  onReady?: () => void;
+};
+
+export default function SplineSiteBackground({ onReady }: SplineSiteBackgroundProps) {
   usePointerReactiveSurface();
 
   const [portalReady, setPortalReady] = useState(false);
@@ -104,7 +108,7 @@ export default function SplineSiteBackground() {
     }
 
     viewer.setAttribute("url", viewerUrl);
-    viewer.setAttribute("loading", "eager");
+    viewer.setAttribute("loading", "lazy");
     viewer.setAttribute("events-target", "local");
 
     const hideWatermark = () => {
@@ -117,6 +121,7 @@ export default function SplineSiteBackground() {
     const markReady = () => {
       hideWatermark();
       setViewerState("ready");
+      onReady?.();
     };
 
     hideWatermark();
@@ -132,7 +137,7 @@ export default function SplineSiteBackground() {
       window.clearInterval(logoTimer);
       window.clearTimeout(logoStopTimer);
     };
-  }, [viewerState, viewerUrl]);
+  }, [onReady, viewerState, viewerUrl]);
 
   const showVoidLayer =
     !configReady ||
@@ -177,7 +182,7 @@ export default function SplineSiteBackground() {
           <spline-viewer
             ref={viewerRef}
             url={viewerUrl}
-            loading="eager"
+            loading="lazy"
             events-target="local"
             className="spline-site-layer h-full w-full"
             data-testid="spline-viewer"

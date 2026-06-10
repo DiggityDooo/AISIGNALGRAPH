@@ -5,70 +5,190 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { Points, PointMaterial } from "@react-three/drei";
 import * as THREE from "three";
 
+const PARTICLE_COUNT = 200;
+const SPHERE_RADIUS = 9;
+
+// Organic drift — no springs/rest lengths (those snap nodes into lattice).
+const PHYSICS = {
+  turbulence: 1.1,
+  repulsion: 3.5,
+  repulsionRadius: 1.6,
+  damping: 0.988,
+  minDrift: 0.12,
+  maxSpeed: 1.25,
+  boundarySoftness: 0.35,
+};
+
+function randomInSphere(radius: number): [number, number, number] {
+  const u = Math.random();
+  const v = Math.random();
+  const theta = Math.PI * 2 * u;
+  const phi = Math.acos(2 * v - 1);
+  const r = radius * Math.cbrt(Math.random());
+  const sinPhi = Math.sin(phi);
+  return [r * sinPhi * Math.cos(theta), r * sinPhi * Math.sin(theta), r * Math.cos(phi)];
+}
+
 export default function Scene() {
   const pointsRef = useRef<THREE.Points>(null);
   const linesRef = useRef<THREE.LineSegments>(null);
   const { mouse, viewport } = useThree();
 
-  const particleCount = 200;
-  
-  // Generate random positions for particles
-  const [positions, lines] = useMemo(() => {
-    const pos = new Float32Array(particleCount * 3);
-    // Use a local random function to satisfy purity checks if needed, 
-    // but here we just generate once inside useMemo.
-    for (let i = 0; i < particleCount; i++) {
-      // eslint-disable-next-line react-hooks/purity
-      pos[i * 3] = (Math.random() - 0.5) * 20;     // x
-      // eslint-disable-next-line react-hooks/purity
-      pos[i * 3 + 1] = (Math.random() - 0.5) * 20; // y
-      // eslint-disable-next-line react-hooks/purity
-      pos[i * 3 + 2] = (Math.random() - 0.5) * 10 - 5; // z
+  const simulation = useMemo(() => {
+    const positions = new Float32Array(PARTICLE_COUNT * 3);
+    const velocities = new Float32Array(PARTICLE_COUNT * 3);
+    const seeds = new Float32Array(PARTICLE_COUNT);
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const [x, y, z] = randomInSphere(SPHERE_RADIUS * (0.55 + Math.random() * 0.45));
+      positions[i * 3] = x;
+      positions[i * 3 + 1] = y;
+      positions[i * 3 + 2] = z;
+
+      const speed = 0.15 + Math.random() * 0.55;
+      const dir = randomInSphere(1);
+      velocities[i * 3] = dir[0] * speed;
+      velocities[i * 3 + 1] = dir[1] * speed;
+      velocities[i * 3 + 2] = dir[2] * speed;
+
+      seeds[i] = Math.random() * Math.PI * 2;
     }
 
-    // Connect some particles with lines
-    const lineIndices = [];
-    for (let i = 0; i < particleCount; i++) {
-      for (let j = i + 1; j < particleCount; j++) {
-        const dx = pos[i * 3] - pos[j * 3];
-        const dy = pos[i * 3 + 1] - pos[j * 3 + 1];
-        const dz = pos[i * 3 + 2] - pos[j * 3 + 2];
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        
-        if (dist < 3) {
+    const lineIndices: number[] = [];
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      for (let j = i + 1; j < PARTICLE_COUNT; j++) {
+        const dx = positions[i * 3] - positions[j * 3];
+        const dy = positions[i * 3 + 1] - positions[j * 3 + 1];
+        const dz = positions[i * 3 + 2] - positions[j * 3 + 2];
+        if (dx * dx + dy * dy + dz * dz < 9) {
           lineIndices.push(i, j);
         }
       }
     }
-    
-    return [pos, new Uint16Array(lineIndices)];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    return { positions, velocities, seeds, lines: new Uint16Array(lineIndices) };
   }, []);
 
   useFrame((state, delta) => {
-    if (pointsRef.current && linesRef.current) {
-      // Slow rotation
-      pointsRef.current.rotation.y -= delta * 0.05;
-      pointsRef.current.rotation.x -= delta * 0.02;
-      
-      linesRef.current.rotation.y = pointsRef.current.rotation.y;
-      linesRef.current.rotation.x = pointsRef.current.rotation.x;
+    const points = pointsRef.current;
+    const lines = linesRef.current;
+    if (!points || !lines) return;
 
-      // Parallax effect based on mouse
-      const targetX = (mouse.x * viewport.width) / 20;
-      const targetY = (mouse.y * viewport.height) / 20;
+    const dt = Math.min(delta, 0.033);
+    const t = state.clock.elapsedTime;
+    const { positions, velocities, seeds } = simulation;
+    const {
+      turbulence,
+      repulsion,
+      repulsionRadius,
+      damping,
+      minDrift,
+      maxSpeed,
+      boundarySoftness,
+    } = PHYSICS;
+    const repulsionRadiusSq = repulsionRadius * repulsionRadius;
+    const boundary = SPHERE_RADIUS * 1.05;
 
-      pointsRef.current.position.x += (targetX - pointsRef.current.position.x) * 0.02;
-      pointsRef.current.position.y += (targetY - pointsRef.current.position.y) * 0.02;
-      
-      linesRef.current.position.x = pointsRef.current.position.x;
-      linesRef.current.position.y = pointsRef.current.position.y;
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const i3 = i * 3;
+      let fx = 0;
+      let fy = 0;
+      let fz = 0;
+      const px = positions[i3];
+      const py = positions[i3 + 1];
+      const pz = positions[i3 + 2];
+      const seed = seeds[i];
+
+      fx += Math.sin(t * 0.7 + seed) * turbulence;
+      fy += Math.cos(t * 0.9 + seed * 1.7) * turbulence;
+      fz += Math.sin(t * 0.55 + seed * 2.3) * turbulence * 0.85;
+
+      for (let j = i + 1; j < PARTICLE_COUNT; j++) {
+        const j3 = j * 3;
+        const dx = px - positions[j3];
+        const dy = py - positions[j3 + 1];
+        const dz = pz - positions[j3 + 2];
+        const distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq > repulsionRadiusSq || distSq < 1e-6) continue;
+
+        const dist = Math.sqrt(distSq);
+        const push = (repulsion * (1 - dist / repulsionRadius)) / dist;
+        const nx = dx * push;
+        const ny = dy * push;
+        const nz = dz * push;
+        fx += nx;
+        fy += ny;
+        fz += nz;
+        velocities[j3] -= nx * dt;
+        velocities[j3 + 1] -= ny * dt;
+        velocities[j3 + 2] -= nz * dt;
+      }
+
+      const distFromCenter = Math.sqrt(px * px + py * py + pz * pz);
+      if (distFromCenter > boundary) {
+        const overshoot = distFromCenter - boundary;
+        const nx = px / distFromCenter;
+        const ny = py / distFromCenter;
+        const nz = pz / distFromCenter;
+        fx -= nx * overshoot * boundarySoftness;
+        fy -= ny * overshoot * boundarySoftness;
+        fz -= nz * overshoot * boundarySoftness;
+      }
+
+      let vx = (velocities[i3] + fx * dt) * damping;
+      let vy = (velocities[i3 + 1] + fy * dt) * damping;
+      let vz = (velocities[i3 + 2] + fz * dt) * damping;
+
+      const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
+      if (speed < minDrift) {
+        const kick = minDrift / Math.max(speed, 1e-4);
+        vx *= kick;
+        vy *= kick;
+        vz *= kick;
+        vx += (Math.random() - 0.5) * 0.08;
+        vy += (Math.random() - 0.5) * 0.08;
+        vz += (Math.random() - 0.5) * 0.08;
+      } else if (speed > maxSpeed) {
+        const scale = maxSpeed / speed;
+        vx *= scale;
+        vy *= scale;
+        vz *= scale;
+      }
+
+      velocities[i3] = vx;
+      velocities[i3 + 1] = vy;
+      velocities[i3 + 2] = vz;
+      positions[i3] = px + vx * dt;
+      positions[i3 + 1] = py + vy * dt;
+      positions[i3 + 2] = pz + vz * dt;
     }
+
+    const pointAttr = points.geometry.attributes.position;
+    const lineAttr = lines.geometry.attributes.position;
+    if (pointAttr) pointAttr.needsUpdate = true;
+    if (lineAttr) lineAttr.needsUpdate = true;
+
+    points.rotation.y -= dt * 0.05;
+    points.rotation.x -= dt * 0.02;
+    lines.rotation.y = points.rotation.y;
+    lines.rotation.x = points.rotation.x;
+
+    const targetX = (mouse.x * viewport.width) / 20;
+    const targetY = (mouse.y * viewport.height) / 20;
+    points.position.x += (targetX - points.position.x) * 0.02;
+    points.position.y += (targetY - points.position.y) * 0.02;
+    lines.position.x = points.position.x;
+    lines.position.y = points.position.y;
   });
 
   return (
     <group>
-      <Points ref={pointsRef} positions={positions} stride={3} frustumCulled={false}>
+      <Points
+        ref={pointsRef}
+        positions={simulation.positions}
+        stride={3}
+        frustumCulled={false}
+      >
         <PointMaterial
           transparent
           color="#FF2A4D"
@@ -82,14 +202,14 @@ export default function Scene() {
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
-            count={positions.length / 3}
-            array={positions}
+            count={simulation.positions.length / 3}
+            array={simulation.positions}
             itemSize={3}
           />
           <bufferAttribute
             attach="index"
-            count={lines.length}
-            array={lines}
+            count={simulation.lines.length}
+            array={simulation.lines}
             itemSize={1}
           />
         </bufferGeometry>

@@ -68,9 +68,16 @@ export default function GraphRuntime({ onReady, onError }: GraphRuntimeProps) {
       }
     };
 
-    void bootstrap();
+    const frameId = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (!disposed) {
+          void bootstrap();
+        }
+      });
+    });
 
     return () => {
+      window.cancelAnimationFrame(frameId);
       disposed = true;
       cleanup();
       delete runtimeWindow.gephiLite;

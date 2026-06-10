@@ -23,12 +23,24 @@ gcloud builds submit --tag $REGION-docker.pkg.dev/$PROJECT/cloud-run-source-depl
 rm Dockerfile
 mv Dockerfile.web.bak Dockerfile
 
-gcloud run jobs create aisignal-scraper \
-  --image $REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/aisignal-scraper:latest \
-  --region $REGION --service-account $SA \
-  --set-env-vars STORIES_BUCKET=${PROJECT}-aisignal-stories \
-  --set-secrets GEMINI_API_KEY=gemini-api-key:latest \
-  --max-retries 1 --task-timeout 20m
+IMAGE=$REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/aisignal-scraper:latest
+
+# Update if job exists; create on first deploy.
+if gcloud run jobs describe aisignal-scraper --region $REGION >/dev/null 2>&1; then
+  gcloud run jobs update aisignal-scraper \
+    --image $IMAGE \
+    --region $REGION --service-account $SA \
+    --set-env-vars STORIES_BUCKET=${PROJECT}-aisignal-stories \
+    --set-secrets GEMINI_API_KEY=gemini-api-key:latest \
+    --max-retries 1 --task-timeout 20m
+else
+  gcloud run jobs create aisignal-scraper \
+    --image $IMAGE \
+    --region $REGION --service-account $SA \
+    --set-env-vars STORIES_BUCKET=${PROJECT}-aisignal-stories \
+    --set-secrets GEMINI_API_KEY=gemini-api-key:latest \
+    --max-retries 1 --task-timeout 20m
+fi
 
 # 4. Pre-emptively enable Scheduler API to prevent prompt hanging
 gcloud services enable cloudscheduler.googleapis.com

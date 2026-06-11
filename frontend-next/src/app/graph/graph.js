@@ -153,6 +153,7 @@ export async function initGephiLite(options = {}) {
   function wakePhysics() {
     state.physicsSleeping = false;
     state.physicsPositionsDirty = true;
+    ensureAnimationLoop();
   }
 
   function updateFocusContext() {
@@ -493,8 +494,12 @@ export async function initGephiLite(options = {}) {
     focusActiveId: null,
     focusNeighborIds: null,
     cameraDirty: false,
-    animateFrame: 0
+    animateFrame: 0,
+    pageHidden: false,
+    animationPaused: false
   };
+
+  let resizeRafId = null;
 
   let appRoot = null;
   let refs = null;
@@ -584,6 +589,10 @@ export async function initGephiLite(options = {}) {
     state.destroyed = true;
     clearSearchTimeout();
     clearFilterListeners();
+    if (resizeRafId !== null) {
+      window.cancelAnimationFrame(resizeRafId);
+      resizeRafId = null;
+    }
     stopAnimationLoop();
 
     // Clean up 3D scene
@@ -1196,6 +1205,7 @@ export async function initGephiLite(options = {}) {
 
     state.renderer.getCamera().on("updated", () => {
       state.cameraDirty = true;
+      ensureAnimationLoop();
     });
 
     state.renderer.setSetting("nodeReducer", (nodeId, data) => {
@@ -1239,6 +1249,7 @@ export async function initGephiLite(options = {}) {
       const hoverType = getNodeSemanticType(hovered);
       appRoot.style.setProperty("--node-glow-color", CONFIG.nodeColors[hoverType] || "#3793ff");
       state.cameraDirty = true;
+      ensureAnimationLoop();
     });
     state.renderer.on("leaveNode", () => {
       state.hoveredNode = null;
@@ -1246,6 +1257,7 @@ export async function initGephiLite(options = {}) {
       const selectedType = state.selectedNode ? getNodeSemanticType(state.selectedNode) : null;
       appRoot.style.setProperty("--node-glow-color", (selectedType && CONFIG.nodeColors[selectedType]) || DEFAULT_GLOW_COLOR);
       state.cameraDirty = true;
+      ensureAnimationLoop();
     });
     state.renderer.on("clickNode", ({ node }) => inspectNode(graph.getNodeAttributes(node)));
     state.renderer.on("clickStage", () => {
@@ -1297,16 +1309,21 @@ export async function initGephiLite(options = {}) {
   }
 
   function animate() {
-    if (state.destroyed) {
+    if (state.destroyed || state.pageHidden) {
+      state.animationFrameId = null;
       return;
     }
 
+    state.animationFrameId = null;
+    state.animationPaused = false;
     state.animateFrame += 1;
-    syncCanvasSize();
-    if (state.animateFrame % BUBBLE_PHYSICS.bgFlowInterval === 0) {
+
+    const signalsEnabled = CONFIG.maxSignals > 0;
+    const bgFlowFrame = state.animateFrame % BUBBLE_PHYSICS.bgFlowInterval === 0;
+    if (bgFlowFrame) {
       drawBackgroundFlow();
     }
-    ctx.clearRect(0, 0, refs.canvas.width, refs.canvas.height);
+
     if (state.renderer) {
       let needsRefresh = state.cameraDirty;
       if (state.graph && state.physicsEnabled && !state.is3DMode) {
@@ -1319,17 +1336,22 @@ export async function initGephiLite(options = {}) {
         }
       }
 
-      ctx.shadowBlur = 0;
-      const hadSignals = state.activeSignals.length > 0;
-      state.activeSignals = state.activeSignals.filter((signal) => {
-        const alive = signal.update();
-        if (alive) signal.draw(ctx, state.renderer);
-        return alive;
-      });
-      if (state.activeSignals.length > 0 || hadSignals) {
-        needsRefresh = true;
+      if (signalsEnabled) {
+        ctx.shadowBlur = 0;
+        const hadSignals = state.activeSignals.length > 0;
+        if (hadSignals || Math.random() < 0.15) {
+          ctx.clearRect(0, 0, refs.canvas.width, refs.canvas.height);
+          state.activeSignals = state.activeSignals.filter((signal) => {
+            const alive = signal.update();
+            if (alive) signal.draw(ctx, state.renderer);
+            return alive;
+          });
+          if (Math.random() < 0.15) spawnSignal();
+          if (state.activeSignals.length > 0 || hadSignals) {
+            needsRefresh = true;
+          }
+        }
       }
-      if (Math.random() < 0.15) spawnSignal();
 
       if (needsRefresh) {
         state.renderer.refresh();
@@ -1339,17 +1361,24 @@ export async function initGephiLite(options = {}) {
       if (state.animateFrame % BUBBLE_PHYSICS.statsInterval === 0) {
         updateStats();
       }
+
+      if (!needsRefresh && !bgFlowFrame) {
+        pauseAnimationIfIdle();
+      }
     }
 
-    state.animationFrameId = window.requestAnimationFrame(animate);
+    if (!state.animationPaused) {
+      state.animationFrameId = window.requestAnimationFrame(animate);
+    }
   }
 
   function startAnimationLoop() {
-    if (!state.renderer || state.animationFrameId !== null || state.is3DMode) {
+    if (!state.renderer || state.animationFrameId !== null || state.is3DMode || state.pageHidden) {
       return;
     }
 
     console.log("Gephi Lite: Starting animation loop...");
+    state.animationPaused = false;
     state.physicsLastTime = performance.now();
     animate();
   }
@@ -1359,6 +1388,49 @@ export async function initGephiLite(options = {}) {
       window.cancelAnimationFrame(state.animationFrameId);
       state.animationFrameId = null;
     }
+    state.animationPaused = false;
+  }
+
+  function ensureAnimationLoop() {
+    if (state.destroyed || state.pageHidden || state.is3DMode || !state.renderer) {
+      return;
+    }
+    startAnimationLoop();
+  }
+
+  function pauseAnimationIfIdle() {
+    if (
+      state.renderer &&
+      state.physicsSleeping &&
+      !state.cameraDirty &&
+      state.activeSignals.length === 0 &&
+      getSoftDragNodes().size === 0
+    ) {
+      stopAnimationLoop();
+      state.animationPaused = true;
+    }
+  }
+
+  function handleViewportResize() {
+    if (resizeRafId !== null) {
+      return;
+    }
+
+    resizeRafId = window.requestAnimationFrame(() => {
+      resizeRafId = null;
+      syncCanvasSize();
+      state.cameraDirty = true;
+      state.renderer?.resize();
+      if (state.is3DMode && state.threeRenderer && state.threeCamera && refs.threeContainer) {
+        const rect = refs.threeContainer.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          state.threeCamera.aspect = rect.width / rect.height;
+          state.threeCamera.updateProjectionMatrix();
+          state.threeRenderer.setSize(rect.width, rect.height);
+        }
+      }
+      ensureAnimationLoop();
+    });
   }
 
   function syncCanvasSize() {
@@ -1514,15 +1586,20 @@ export async function initGephiLite(options = {}) {
       void rebuildFromFilters();
     });
 
-    addManagedListener(window, "resize", () => {
-      syncCanvasSize();
-      state.renderer?.resize();
-      if (state.is3DMode && state.threeRenderer && state.threeCamera && refs.threeContainer) {
-        const rect = refs.threeContainer.getBoundingClientRect();
-        state.threeCamera.aspect = rect.width / rect.height;
-        state.threeCamera.updateProjectionMatrix();
-        state.threeRenderer.setSize(rect.width, rect.height);
+    addManagedListener(window, "resize", handleViewportResize);
+
+    addManagedListener(document, "visibilitychange", () => {
+      state.pageHidden = document.hidden;
+      if (state.pageHidden) {
+        stopAnimationLoop();
+        if (state.threeAnimFrameId !== null) {
+          window.cancelAnimationFrame(state.threeAnimFrameId);
+          state.threeAnimFrameId = null;
+        }
+        return;
       }
+      ensureAnimationLoop();
+      state.resumeThreeLoop?.();
     });
 
     addManagedListener(refs.toggle3d, "click", async () => {
@@ -1574,6 +1651,7 @@ export async function initGephiLite(options = {}) {
   }
 
   function destroy3DScene() {
+    state.resumeThreeLoop = null;
     if (state.threeAnimFrameId !== null) {
       window.cancelAnimationFrame(state.threeAnimFrameId);
       state.threeAnimFrameId = null;
@@ -1790,7 +1868,10 @@ export async function initGephiLite(options = {}) {
     // Animation loop
     let pulseTime = 0;
     function animate3D() {
-      if (state.destroyed || !state.is3DMode) return;
+      if (state.destroyed || !state.is3DMode || state.pageHidden) {
+        state.threeAnimFrameId = null;
+        return;
+      }
       state.threeAnimFrameId = requestAnimationFrame(animate3D);
       pulseTime += 0.01;
 
@@ -1832,6 +1913,12 @@ export async function initGephiLite(options = {}) {
       controls.update();
       renderer.render(scene, camera);
     }
+
+    state.resumeThreeLoop = () => {
+      if (state.is3DMode && !state.pageHidden && state.threeAnimFrameId === null) {
+        animate3D();
+      }
+    };
 
     animate3D();
     renderer.domElement.style.cursor = "grab";
@@ -1923,13 +2010,14 @@ export async function initGephiLite(options = {}) {
     appRoot.style.setProperty("--node-glow-color", DEFAULT_GLOW_COLOR);
     window.gephiLite = { selectNode: selectNodeById };
 
+    state.pageHidden = document.hidden;
     bindControls();
     renderFilters();
     initBackgroundFlow();
 
     await loadGraphData();
     const hasRenderer = await rebuildFromFilters();
-    if (hasRenderer) {
+    if (hasRenderer && !state.pageHidden) {
       startAnimationLoop();
     }
     onReady?.({ nodes: state.nodes.length, edges: state.edges.length });

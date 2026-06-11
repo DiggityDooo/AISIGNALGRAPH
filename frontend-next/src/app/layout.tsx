@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Syne, JetBrains_Mono } from "next/font/google";
 import { ReactLenis } from "lenis/react";
+import "lenis/dist/lenis.css";
 import ClientShellEffects from "@/components/ui/ClientShellEffects";
 import SiteChrome from "@/components/layout/SiteChrome";
 import "./globals.css";

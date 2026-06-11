@@ -13,7 +13,21 @@ export default function GraphPage() {
   const [progress, setProgress] = useState(0);
   const [stats, setStats] = useState({ nodes: 0, edges: 0 });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const loadingTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!isMobileMenuOpen) {
+      return undefined;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isMobileMenuOpen]);
 
   useEffect(() => {
     if (isLoaded) {
@@ -54,13 +68,14 @@ export default function GraphPage() {
 
   const handleError = (error: unknown) => {
     console.error("Gephi Lite: Runtime error.", error);
-    setStatus("Neural Link Interrupted.");
+    setLoadFailed(true);
+    setStatus("Neural Link Interrupted — refresh to retry.");
     setProgress(100);
     settleOverlay();
   };
 
   return (
-    <div id="app-root" className="relative w-full h-screen bg-[#050202] overflow-hidden pointer-events-auto">
+    <div id="app-root" data-lenis-prevent className="relative w-full h-screen bg-[#050202] overflow-hidden pointer-events-auto">
       <link rel="stylesheet" href="/gephi_lite.css" />
       <GraphRuntime onReady={handleReady} onError={handleError} />
 
@@ -88,7 +103,10 @@ export default function GraphPage() {
                 <h1 className="font-display text-4xl font-bold uppercase tracking-widest text-foreground">
                   <KineticText text="Neural Lattice" />
                 </h1>
-                <p className="font-mono text-sm text-primary animate-pulse tracking-widest uppercase">
+                <p
+                  className={`font-mono text-sm tracking-widest uppercase ${loadFailed ? "text-secondary" : "text-primary animate-pulse"}`}
+                  role={loadFailed ? "alert" : "status"}
+                >
                   {status}
                 </p>
               </div>
@@ -113,8 +131,12 @@ export default function GraphPage() {
         <header id="hud-top" className="relative z-30 flex justify-between items-center px-4 md:px-8 py-4 border-b border-white/5 bg-black/40 backdrop-blur-md">
           <div className="flex items-center gap-4 md:gap-8">
              <button 
+               type="button"
                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-               className="md:hidden glass-panel p-2 hover:bg-primary/10 transition-colors"
+               className="md:hidden glass-panel p-2 hover:bg-primary/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+               aria-label={isMobileMenuOpen ? "Close lattice controls" : "Open lattice controls"}
+               aria-expanded={isMobileMenuOpen}
+               aria-controls="hud-left"
              >
                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                  {isMobileMenuOpen ? <path d="M18 6L6 18M6 6l12 12" /> : <path d="M3 12h18M3 6h18M3 18h18" />}
@@ -137,6 +159,14 @@ export default function GraphPage() {
         </header>
 
         <div className="flex-1 relative flex">
+          {isMobileMenuOpen && (
+            <button
+              type="button"
+              className="md:hidden absolute inset-0 z-10 bg-black/60 backdrop-blur-[2px]"
+              aria-label="Close lattice controls"
+              onClick={() => setIsMobileMenuOpen(false)}
+            />
+          )}
           {/* Left HUD */}
           <aside 
             id="hud-left" 

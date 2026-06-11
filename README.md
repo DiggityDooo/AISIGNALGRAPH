@@ -55,6 +55,28 @@ cd frontend-next
 npm run build:hub
 ```
 
+### Frontend dev (`next dev`)
+
+The Next.js app lives in `frontend-next/`. List pages (`/stories`, `/entities`) and the graph call `/api/*`; in dev, `next.config.ts` rewrites those requests to Flask on **`http://localhost:8080`**. Start the backend before `next dev`, or Stories/Entities will show the API-unavailable empty state.
+
+```bash
+# Terminal 1 — API + SQLite graph
+./venv/bin/python app.py          # listens on :8080
+
+# Terminal 2 — Next.js UI
+cd frontend-next
+npm install
+npm run dev                       # http://localhost:3000
+```
+
+**Scroll:** site-wide smooth scroll uses [Lenis](https://github.com/darkroomengineering/lenis) (`ReactLenis` root + `lenis/dist/lenis.css`). The graph page sets `data-lenis-prevent` so wheel events stay on the canvas. Compact list-page heroes use `pointer-events-auto` so wheel scroll reaches Lenis.
+
+**List pages:** Stories and Entities show skeleton loaders, retry on API failure, and paginated “load more” (48 items per batch). Back-to-top uses Lenis `scrollTo(0)` when available.
+
+**Graph performance:** the Sigma animation loop pauses when idle or the tab is hidden; window resize is throttled; signal-canvas work is skipped when `maxSignals` is 0.
+
+Production still ships via `npm run build:hub` into `webapp/static/hub/` (static export served by Flask).
+
 ## 🤖 Daily Scraper (Cloud Run Job + GCS)
 
 Serverless ingestion pipeline in `scraper/`:

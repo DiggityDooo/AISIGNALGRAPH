@@ -45,7 +45,16 @@ export default function EntitiesPage() {
   }, []);
 
   useEffect(() => {
-    void fetchEntities();
+    let active = true;
+    const rafId = requestAnimationFrame(() => {
+      if (active) {
+        void fetchEntities();
+      }
+    });
+    return () => {
+      active = false;
+      cancelAnimationFrame(rafId);
+    };
   }, [fetchEntities]);
 
   return (

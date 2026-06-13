@@ -11,6 +11,7 @@ import {
 } from "@/lib/splineScene";
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
       "spline-viewer": React.DetailedHTMLProps<
@@ -39,7 +40,16 @@ export default function SplineSiteBackground({ onReady }: SplineSiteBackgroundPr
   const [viewerState, setViewerState] = useState<SplineViewerState>("idle");
 
   useEffect(() => {
-    setPortalReady(true);
+    let active = true;
+    const rafId = requestAnimationFrame(() => {
+      if (active) {
+        setPortalReady(true);
+      }
+    });
+    return () => {
+      active = false;
+      cancelAnimationFrame(rafId);
+    };
   }, []);
 
   useEffect(() => {
@@ -64,16 +74,27 @@ export default function SplineSiteBackground({ onReady }: SplineSiteBackgroundPr
 
   useEffect(() => {
     if (!configReady) {
-      return;
-    }
-
-    if (!viewerUrl) {
-      setViewerState("failed");
-      return;
+      return undefined;
     }
 
     let cancelled = false;
-    setViewerState("loading");
+
+    if (!viewerUrl) {
+      queueMicrotask(() => {
+        if (!cancelled) {
+          setViewerState("failed");
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setViewerState("loading");
+      }
+    });
 
     validateViewerUrl(viewerUrl)
       .then((isValid) => {

@@ -1,20 +1,13 @@
 {
-  "generatedAt": "2026-06-03T08:50:05.444Z",
+  "generatedAt": "2026-06-13T21:05:04.044Z",
   "findings": [
     {
       "path": "/",
       "name": "home",
       "status": 200,
       "title": "AISIGNALGRAPH | Intelligence Hub",
-      "consoleErrors": [
-        "Failed to load resource: the server responded with a status of 403 ()"
-      ],
-      "failedRequests": [
-        {
-          "url": "https://my.spline.design/theeternalarc-tlFzTC78qR503Crv9MgluFWq-Ii3/embed/",
-          "status": 403
-        }
-      ],
+      "consoleErrors": [],
+      "failedRequests": [],
       "checks": {
         "statusOk": true,
         "hasSiteHeader": true,
@@ -22,9 +15,11 @@
         "hasMainOrAppRoot": true,
         "hasHero": true,
         "hasArchives": true,
+        "hasSplineRoot": true,
+        "noAccessDeniedLeak": true,
         "apiOverviewOk": true,
         "apiOverviewHasStats": true,
-        "expectedHeading": false
+        "expectedHeading": true
       },
       "notes": []
     },
@@ -33,21 +28,14 @@
       "name": "stories",
       "status": 200,
       "title": "AISIGNALGRAPH | Intelligence Hub",
-      "consoleErrors": [
-        "Failed to load resource: the server responded with a status of 403 ()"
-      ],
-      "failedRequests": [
-        {
-          "url": "https://my.spline.design/theeternalarc-tlFzTC78qR503Crv9MgluFWq-Ii3/embed/",
-          "status": 403
-        }
-      ],
+      "consoleErrors": [],
+      "failedRequests": [],
       "checks": {
         "statusOk": true,
         "hasSiteHeader": true,
         "hasPrimaryNav": true,
         "hasMainOrAppRoot": true,
-        "expectedHeading": false
+        "expectedHeading": true
       },
       "notes": []
     },
@@ -56,21 +44,14 @@
       "name": "entities",
       "status": 200,
       "title": "AISIGNALGRAPH | Intelligence Hub",
-      "consoleErrors": [
-        "Failed to load resource: the server responded with a status of 403 ()"
-      ],
-      "failedRequests": [
-        {
-          "url": "https://my.spline.design/theeternalarc-tlFzTC78qR503Crv9MgluFWq-Ii3/embed/",
-          "status": 403
-        }
-      ],
+      "consoleErrors": [],
+      "failedRequests": [],
       "checks": {
         "statusOk": true,
         "hasSiteHeader": true,
         "hasPrimaryNav": true,
         "hasMainOrAppRoot": true,
-        "expectedHeading": false
+        "expectedHeading": true
       },
       "notes": []
     },
@@ -79,15 +60,8 @@
       "name": "graph",
       "status": 200,
       "title": "AISIGNALGRAPH | Intelligence Hub",
-      "consoleErrors": [
-        "Failed to load resource: the server responded with a status of 403 ()"
-      ],
-      "failedRequests": [
-        {
-          "url": "https://my.spline.design/theeternalarc-tlFzTC78qR503Crv9MgluFWq-Ii3/embed/",
-          "status": 403
-        }
-      ],
+      "consoleErrors": [],
+      "failedRequests": [],
       "checks": {
         "statusOk": true,
         "hasSiteHeader": true,
@@ -95,7 +69,7 @@
         "hasMainOrAppRoot": true,
         "hasAppRoot": true,
         "graphJsOk": true,
-        "expectedHeading": false
+        "expectedHeading": true
       },
       "notes": []
     }

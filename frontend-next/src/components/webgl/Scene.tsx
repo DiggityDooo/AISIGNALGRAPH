@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useMemo } from "react";
+import { useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Points, PointMaterial } from "@react-three/drei";
+import { PointMaterial } from "@react-three/drei";
 import * as THREE from "three";
 
 const PARTICLE_COUNT = 200;
@@ -19,12 +19,21 @@ const PHYSICS = {
   boundarySoftness: 0.35,
 };
 
-function randomInSphere(radius: number): [number, number, number] {
-  const u = Math.random();
-  const v = Math.random();
+// Simple seedable Linear Congruential Generator (LCG)
+function createRandom(seed = 12345) {
+  let s = seed;
+  return () => {
+    s = (s * 1664525 + 1013904223) % 4294967296;
+    return s / 4294967296;
+  };
+}
+
+function randomInSphere(radius: number, rand: () => number): [number, number, number] {
+  const u = rand();
+  const v = rand();
   const theta = Math.PI * 2 * u;
   const phi = Math.acos(2 * v - 1);
-  const r = radius * Math.cbrt(Math.random());
+  const r = radius * Math.cbrt(rand());
   const sinPhi = Math.sin(phi);
   return [r * sinPhi * Math.cos(theta), r * sinPhi * Math.sin(theta), r * Math.cos(phi)];
 }
@@ -34,24 +43,32 @@ export default function Scene() {
   const linesRef = useRef<THREE.LineSegments>(null);
   const { mouse, viewport } = useThree();
 
-  const simulation = useMemo(() => {
+  const simulationRef = useRef<{
+    positions: Float32Array;
+    velocities: Float32Array;
+    seeds: Float32Array;
+    lines: Uint16Array;
+  } | null>(null);
+
+  useEffect(() => {
+    const rand = createRandom(12345);
     const positions = new Float32Array(PARTICLE_COUNT * 3);
     const velocities = new Float32Array(PARTICLE_COUNT * 3);
     const seeds = new Float32Array(PARTICLE_COUNT);
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const [x, y, z] = randomInSphere(SPHERE_RADIUS * (0.55 + Math.random() * 0.45));
+      const [x, y, z] = randomInSphere(SPHERE_RADIUS * (0.55 + rand() * 0.45), rand);
       positions[i * 3] = x;
       positions[i * 3 + 1] = y;
       positions[i * 3 + 2] = z;
 
-      const speed = 0.15 + Math.random() * 0.55;
-      const dir = randomInSphere(1);
+      const speed = 0.15 + rand() * 0.55;
+      const dir = randomInSphere(1, rand);
       velocities[i * 3] = dir[0] * speed;
       velocities[i * 3 + 1] = dir[1] * speed;
       velocities[i * 3 + 2] = dir[2] * speed;
 
-      seeds[i] = Math.random() * Math.PI * 2;
+      seeds[i] = rand() * Math.PI * 2;
     }
 
     const lineIndices: number[] = [];
@@ -66,17 +83,36 @@ export default function Scene() {
       }
     }
 
-    return { positions, velocities, seeds, lines: new Uint16Array(lineIndices) };
+    const lines = new Uint16Array(lineIndices);
+
+    simulationRef.current = {
+      positions,
+      velocities,
+      seeds,
+      lines,
+    };
+
+    const points = pointsRef.current;
+    const lineSegs = linesRef.current;
+    if (points && lineSegs) {
+      points.geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      points.geometry.computeBoundingSphere();
+
+      lineSegs.geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      lineSegs.geometry.setIndex(new THREE.BufferAttribute(lines, 1));
+      lineSegs.geometry.computeBoundingSphere();
+    }
   }, []);
 
   useFrame((state, delta) => {
     const points = pointsRef.current;
     const lines = linesRef.current;
-    if (!points || !lines) return;
+    const sim = simulationRef.current;
+    if (!points || !lines || !sim) return;
 
     const dt = Math.min(delta, 0.033);
     const t = state.clock.elapsedTime;
-    const { positions, velocities, seeds } = simulation;
+    const { positions, velocities, seeds } = sim;
     const {
       turbulence,
       repulsion,
@@ -183,12 +219,8 @@ export default function Scene() {
 
   return (
     <group>
-      <Points
-        ref={pointsRef}
-        positions={simulation.positions}
-        stride={3}
-        frustumCulled={false}
-      >
+      <points ref={pointsRef} frustumCulled={false}>
+        <bufferGeometry />
         <PointMaterial
           transparent
           color="#FF2A4D"
@@ -197,22 +229,9 @@ export default function Scene() {
           depthWrite={false}
           blending={THREE.AdditiveBlending}
         />
-      </Points>
+      </points>
       <lineSegments ref={linesRef}>
-        <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            count={simulation.positions.length / 3}
-            array={simulation.positions}
-            itemSize={3}
-          />
-          <bufferAttribute
-            attach="index"
-            count={simulation.lines.length}
-            array={simulation.lines}
-            itemSize={1}
-          />
-        </bufferGeometry>
+        <bufferGeometry />
         <lineBasicMaterial
           color="#800015"
           transparent

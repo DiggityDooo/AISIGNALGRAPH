@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import KineticText from "@/components/ui/KineticText";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
+import "../../../public/gephi_lite.css";
 
 const GraphRuntime = dynamic(() => import("./GraphRuntime"), { ssr: false });
 
@@ -76,7 +77,6 @@ export default function GraphPage() {
 
   return (
     <div id="app-root" data-lenis-prevent className="relative w-full h-screen bg-[#050202] overflow-hidden pointer-events-auto">
-      <link rel="stylesheet" href="/gephi_lite.css" />
       <GraphRuntime onReady={handleReady} onError={handleError} />
 
       {/* Cinematic Loading Overlay */}

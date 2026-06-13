@@ -22,15 +22,25 @@ export default function BackToTopButton() {
   });
 
   useEffect(() => {
+    let rafId: number;
     if (lenis) {
-      updateVisible(lenis.scroll);
-      return undefined;
+      rafId = requestAnimationFrame(() => {
+        updateVisible(lenis.scroll);
+      });
+      return () => {
+        cancelAnimationFrame(rafId);
+      };
     }
 
     const onScroll = () => updateVisible(window.scrollY);
-    onScroll();
+    rafId = requestAnimationFrame(() => {
+      onScroll();
+    });
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener("scroll", onScroll);
+    };
   }, [lenis, updateVisible]);
 
   useEffect(() => {

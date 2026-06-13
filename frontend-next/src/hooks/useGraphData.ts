@@ -1,0 +1,82 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import {
+  fetchGraphApi,
+  type GraphApiPayload,
+} from "@/components/graph-flow/fetchGraphApi";
+import { graphPayloadFingerprint } from "@/lib/graphFlow/graphFingerprint";
+
+export interface UseGraphDataOptions {
+  /** Dataset name forwarded to `/api/graph?dataset=`. */
+  dataset?: string;
+  /**
+   * Poll interval (ms) for picking up scraper/database updates without a full
+   * page reload. Omit or set `0` to fetch once.
+   */
+  refreshMs?: number;
+}
+
+export interface UseGraphDataResult {
+  payload: GraphApiPayload | null;
+  /** Revision string; stable across polls when scraper data unchanged. */
+  revision: string | null;
+  loading: boolean;
+  error: Error | null;
+}
+
+/**
+ * Fetches the flat graph payload from Flask / Cloud Run (`GET /api/graph`).
+ * Poll updates only replace state when the fingerprint changes, so node
+ * positions and expand/collapse are not reset by identical responses.
+ */
+export function useGraphData(
+  options: UseGraphDataOptions = {},
+): UseGraphDataResult {
+  const { dataset, refreshMs = 0 } = options;
+  const [payload, setPayload] = useState<GraphApiPayload | null>(null);
+  const [revision, setRevision] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const revisionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const load = async () => {
+      try {
+        const next = await fetchGraphApi({ dataset, signal: controller.signal });
+        if (cancelled) return;
+
+        const fp = graphPayloadFingerprint(next);
+        if (fp !== revisionRef.current) {
+          revisionRef.current = fp;
+          setPayload(next);
+          setRevision(fp);
+        }
+        setError(null);
+      } catch (err) {
+        if (cancelled || controller.signal.aborted) return;
+        setError(err instanceof Error ? err : new Error(String(err)));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void load();
+
+    let timer: ReturnType<typeof setInterval> | undefined;
+    if (refreshMs > 0) {
+      timer = setInterval(() => void load(), refreshMs);
+    }
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      if (timer) clearInterval(timer);
+    };
+  }, [dataset, refreshMs]);
+
+  return { payload, revision, loading, error };
+}

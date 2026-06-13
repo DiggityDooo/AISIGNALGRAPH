@@ -45,7 +45,16 @@ export default function StoriesPage() {
   }, []);
 
   useEffect(() => {
-    void fetchStories();
+    let active = true;
+    const rafId = requestAnimationFrame(() => {
+      if (active) {
+        void fetchStories();
+      }
+    });
+    return () => {
+      active = false;
+      cancelAnimationFrame(rafId);
+    };
   }, [fetchStories]);
 
   return (

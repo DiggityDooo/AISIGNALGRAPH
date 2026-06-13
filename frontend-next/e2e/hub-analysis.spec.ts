@@ -51,6 +51,16 @@ test.describe("AISIGNALGRAPH hub analysis", () => {
       const response = await page.goto(route.path, { waitUntil, timeout: 60_000 });
       const status = response?.status() ?? null;
 
+      let headingVisible = false;
+      if (route.path === "/graph") {
+        headingVisible = await page
+          .getByRole("heading")
+          .filter({ hasText: route.expectHeading })
+          .first()
+          .isVisible()
+          .catch(() => false);
+      }
+
       await page.screenshot({
         path: join("e2e", "artifacts", `${route.name}.png`),
         fullPage: true,
@@ -89,14 +99,14 @@ test.describe("AISIGNALGRAPH hub analysis", () => {
         checks.hasAppRoot = (await page.locator("#app-root").count()) > 0;
         const graphJs = await page.request.get("/graph.js");
         checks.graphJsOk = graphJs.ok();
+      } else {
+        headingVisible = await page
+          .getByRole("heading")
+          .filter({ hasText: route.expectHeading })
+          .first()
+          .isVisible()
+          .catch(() => false);
       }
-
-      const headingVisible = await page
-        .getByRole("heading")
-        .filter({ hasText: route.expectHeading })
-        .first()
-        .isVisible()
-        .catch(() => false);
       checks.expectedHeading = headingVisible;
 
       findings.push({

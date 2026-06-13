@@ -1,0 +1,133 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { useMemo, useState } from "react";
+import { useGraphData } from "@/hooks/useGraphData";
+import { useDataTransformer } from "@/hooks/useDataTransformer";
+import { isGraphFlowEnabled } from "@/lib/graphFlow/featureFlag";
+
+// d3-force + browser layout APIs; keep it out of SSR/export.
+const ForceTree = dynamic(
+  () => import("@/components/visualization/ForceTree"),
+  { ssr: false },
+);
+
+// Alternate react-d3-tree renderer; keep it out of SSR/export.
+const D3TreeContainer = dynamic(
+  () => import("@/components/visualization/D3TreeContainer"),
+  { ssr: false },
+);
+
+// Re-fetch every 30s so scraper/database updates surface without a reload.
+const GRAPH_REFRESH_MS = 30_000;
+
+export default function GraphFlowPage() {
+  const enabled = isGraphFlowEnabled();
+  const [visibleNodes, setVisibleNodes] = useState(0);
+  const [viewMode, setViewMode] = useState<"force" | "tree">("force");
+
+  const { payload, revision, loading, error } = useGraphData({
+    refreshMs: GRAPH_REFRESH_MS,
+  });
+
+  const graphInput = useMemo(
+    () => (payload ? { nodes: payload.nodes, edges: payload.edges } : null),
+    [payload],
+  );
+
+  const tree = useDataTransformer(graphInput, revision);
+
+  if (!enabled) {
+    return (
+      <div className="relative w-full h-screen bg-[#050202] flex items-center justify-center">
+        <p className="font-mono text-sm text-muted uppercase tracking-widest">
+          Signal Tree is disabled
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-full h-screen bg-[#050202] overflow-hidden pt-20">
+      <header className="absolute top-20 left-0 right-0 z-20 flex justify-between items-center px-4 md:px-8 py-4 border-b border-white/5 bg-black/40 backdrop-blur-md">
+        <div className="flex items-center gap-4">
+          <h2 className="font-mono text-xs text-primary uppercase tracking-widest">
+            Signal Tree
+          </h2>
+          <div className="flex gap-1">
+            <button
+              id="toggle-layout-force"
+              onClick={() => setViewMode("force")}
+              className={`glass-panel px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider transition-all border ${
+                viewMode === "force"
+                  ? "bg-primary/20 text-primary border-primary/40 font-bold"
+                  : "bg-transparent text-muted hover:text-white border-white/5 hover:border-white/10"
+              }`}
+            >
+              Lattice
+            </button>
+            <button
+              id="toggle-layout-tree"
+              onClick={() => setViewMode("tree")}
+              className={`glass-panel px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider transition-all border ${
+                viewMode === "tree"
+                  ? "bg-primary/20 text-primary border-primary/40 font-bold"
+                  : "bg-transparent text-muted hover:text-white border-white/5 hover:border-white/10"
+              }`}
+            >
+              Tree
+            </button>
+          </div>
+        </div>
+        <div className="font-mono text-[10px] text-muted uppercase tracking-widest flex gap-6">
+          <span>
+            Visible:{" "}
+            <strong className="text-secondary">
+              {viewMode === "force" ? visibleNodes : "--"}
+            </strong>
+          </span>
+          <span>
+            Indexed:{" "}
+            <strong className="text-primary">{payload?.nodes.length ?? 0}</strong>
+          </span>
+          <span>
+            Edges:{" "}
+            <strong className="text-white">{payload?.edges.length ?? 0}</strong>
+          </span>
+        </div>
+      </header>
+
+      <div className="absolute inset-0 pt-32">
+        {error && (
+          <p
+            role="alert"
+            className="font-mono text-sm text-secondary p-8 tracking-widest uppercase"
+          >
+            Failed to load signal graph — {error.message}
+          </p>
+        )}
+        {!error && loading && !tree && (
+          <p
+            role="status"
+            className="font-mono text-sm text-primary p-8 tracking-widest uppercase animate-pulse"
+          >
+            Synthesizing signal tree…
+          </p>
+        )}
+        {tree && (
+          viewMode === "force" ? (
+            <ForceTree
+              data={tree}
+              dataRevision={revision}
+              initialSeedCount={12}
+              onVisibleCountChange={setVisibleNodes}
+            />
+          ) : (
+            <D3TreeContainer data={tree} initialDepth={1} />
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+

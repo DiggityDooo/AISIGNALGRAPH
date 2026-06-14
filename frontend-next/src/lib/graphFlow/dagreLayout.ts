@@ -21,8 +21,8 @@ export function layoutWithDagre<T extends Record<string, unknown>>(
     direction = "LR",
     nodeWidth = DOCUMENT_CARD_WIDTH,
     nodeHeight = DOCUMENT_CARD_HEIGHT,
-    nodesep = 48,
-    ranksep = 88,
+    nodesep = 56,
+    ranksep = 104,
   } = options;
 
   const graph = new dagre.graphlib.Graph();

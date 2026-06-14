@@ -119,6 +119,18 @@ function outDegreeOf(datum: RawNodeDatum): number {
   return datum.children?.length ?? 0;
 }
 
+/** Visible tree leaf — no expanded children rendered. */
+function isVisibleLeaf(node: SimNode): boolean {
+  return !node.children || node.children.length === 0;
+}
+
+/** Frontier expand: visible leaf with hidden children. */
+function canExpandFrontier(node: SimNode, collapsedIds: Set<string>): boolean {
+  const fullChildCount = node.data.children?.length ?? 0;
+  if (fullChildCount === 0) return false;
+  return collapsedIds.has(idOf(node.data)) && isVisibleLeaf(node);
+}
+
 function normalizeScores(values: number[]): (v: number) => number {
   if (values.length === 0) return () => 0;
   const min = Math.min(...values);
@@ -193,7 +205,7 @@ function buildPriorityCollapsed(
 export default function ForceTree({
   data,
   dataRevision,
-  initialSeedCount = 12,
+  initialSeedCount = 8,
   onVisibleCountChange,
   onNodeSelect,
 }: ForceTreeProps) {
@@ -460,8 +472,10 @@ export default function ForceTree({
     dragRef.current = null;
     if (drag && !drag.moved) {
       event.stopPropagation();
-      const childCount = node.data.children?.length ?? 0;
-      if (childCount > 0) {
+      const fullChildCount = node.data.children?.length ?? 0;
+      if (canExpandFrontier(node, collapsed)) {
+        toggleCollapse(node);
+      } else if (fullChildCount > 0 && !isVisibleLeaf(node)) {
         toggleCollapse(node);
       } else {
         onNodeSelect?.(node.data);
@@ -508,25 +522,32 @@ export default function ForceTree({
                 ? (datum.attributes.type as string)
                 : "node";
             const childCount = datum.children?.length ?? 0;
-            const isCollapsed = childCount > 0 && collapsed.has(idOf(datum));
+            const nodeId = idOf(datum);
+            const isCollapsed = childCount > 0 && collapsed.has(nodeId);
+            const frontierExpand = canExpandFrontier(node, collapsed);
             const r = radiusFor(datum, childCount > 0);
             const hitR = hitRadiusFor(datum, childCount > 0);
             return (
               <g
-                key={idOf(datum)}
+                key={nodeId}
                 className="signal-tree__node"
                 transform={`translate(${node.x ?? 0},${node.y ?? 0})`}
                 onPointerDown={(e) => onNodePointerDown(node, e)}
                 onPointerMove={onNodePointerMove}
                 onPointerUp={(e) => onNodePointerUp(node, e)}
-                style={{ touchAction: "none" }}
+                style={{
+                  touchAction: "none",
+                  cursor: frontierExpand ? "pointer" : "grab",
+                }}
               >
                 <circle className="signal-tree__hit" r={hitR} />
                 <title>
                   {datum.name}
-                  {childCount > 0
-                    ? ` (${childCount}${isCollapsed ? " — click to expand" : ""})`
-                    : ""}
+                  {frontierExpand
+                    ? ` (${childCount} hidden — click to expand)`
+                    : childCount > 0 && !isVisibleLeaf(node)
+                      ? ` (${node.children?.length ?? 0} visible — click to collapse)`
+                      : ""}
                 </title>
                 <circle r={r + 6} fill={accent} opacity={0.16} pointerEvents="none" />
                 {isCollapsed && (
@@ -534,9 +555,9 @@ export default function ForceTree({
                     r={r + 4}
                     fill="none"
                     stroke={accent}
-                    strokeWidth={1}
+                    strokeWidth={frontierExpand ? 1.5 : 1}
                     strokeDasharray="2 3"
-                    opacity={0.65}
+                    opacity={frontierExpand ? 0.9 : 0.45}
                     pointerEvents="none"
                   />
                 )}

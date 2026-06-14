@@ -2,11 +2,38 @@ import type {
   GraphApiNode,
   GraphApiPayload,
 } from "@/components/graph-flow/fetchGraphApi";
+import { nodeTypeOf } from "@/lib/graphFlow/nodeColors";
 
 export interface GraphIndex {
   nodeById: Map<string, GraphApiNode>;
   childrenById: Map<string, string[]>;
   rootIds: string[];
+}
+
+/** Prefer story/entity roots with high importance and recent year. */
+const SEED_TYPE_WEIGHT: Record<string, number> = {
+  story: 1,
+  entity: 0.84,
+  topic: 0.74,
+  community: 0.68,
+  person: 0.62,
+  product: 0.56,
+  lab: 0.52,
+  model: 0.5,
+  risk: 0.42,
+  year: 0.36,
+};
+
+function seedScore(id: string, index: GraphIndex): number {
+  const node = index.nodeById.get(id);
+  if (!node) return 0;
+  const type = nodeTypeOf(node);
+  const typeW = SEED_TYPE_WEIGHT[type] ?? 0.45;
+  const imp = typeof node.importance === "number" ? node.importance : 0;
+  const year = typeof node.year === "number" ? node.year : 0;
+  const childCount = (index.childrenById.get(id) ?? []).length;
+  const branchW = Math.min(childCount, 10) * 0.05;
+  return typeW * 1000 + imp * 10 + year * 0.08 + branchW * 80;
 }
 
 function sortChildIds(
@@ -75,7 +102,9 @@ export function buildGraphIndex(payload: GraphApiPayload): GraphIndex {
 }
 
 export function pickSeedIds(index: GraphIndex, count: number): string[] {
-  return index.rootIds.slice(0, Math.max(1, count));
+  const ranked = [...index.rootIds].sort((a, b) => seedScore(b, index) - seedScore(a, index));
+  const limit = Math.max(1, Math.min(count, ranked.length));
+  return ranked.slice(0, limit);
 }
 
 /**

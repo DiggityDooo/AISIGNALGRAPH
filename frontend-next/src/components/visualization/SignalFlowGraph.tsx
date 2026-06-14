@@ -68,6 +68,19 @@ function buildFlowElements(
   expandedIds: Set<string>,
 ): { nodes: Node<DocumentCardData>[]; edges: Edge[] } {
   const visibleIds = computeVisibleIds(seedIds, expandedIds, index.childrenById);
+  const depthById = new Map<string, number>();
+  const queue = seedIds.map((id) => ({ id, depth: 0 }));
+  while (queue.length > 0) {
+    const { id, depth } = queue.shift()!;
+    if (depthById.has(id)) continue;
+    depthById.set(id, depth);
+    if (!expandedIds.has(id)) continue;
+    for (const childId of index.childrenById.get(id) ?? []) {
+      if (!visibleIds.has(childId)) continue;
+      queue.push({ id: childId, depth: depth + 1 });
+    }
+  }
+
   const nodes: Node<DocumentCardData>[] = [];
   const edges: Edge[] = [];
 
@@ -78,6 +91,7 @@ function buildFlowElements(
     const nodeType = nodeTypeOf(apiNode);
     const accentColor = accentForType(nodeType);
     const expanded = expandedIds.has(id);
+    const depth = depthById.get(id) ?? 0;
 
     nodes.push({
       id,
@@ -90,12 +104,14 @@ function buildFlowElements(
         hasChildren: children.length > 0,
         expanded,
         childCount: children.length,
+        depth,
       },
     });
 
     if (!expanded) continue;
     for (const childId of children) {
       if (!visibleIds.has(childId)) continue;
+      const edgeOpacity = Math.max(0.35, 0.9 - depth * 0.12);
       edges.push({
         id: `e:${id}->${childId}`,
         source: id,
@@ -103,17 +119,21 @@ function buildFlowElements(
         type: "smoothstep",
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          width: 16,
-          height: 16,
+          width: 14,
+          height: 14,
           color: accentColor,
         },
-        style: { stroke: accentColor, strokeWidth: 1.5 },
+        style: {
+          stroke: accentColor,
+          strokeWidth: Math.max(1, 1.8 - depth * 0.15),
+          opacity: edgeOpacity,
+        },
       });
     }
   }
 
   return {
-    nodes: layoutWithDagre(nodes, edges, { direction: "LR" }),
+    nodes: layoutWithDagre(nodes, edges, { direction: "LR", nodesep: 56, ranksep: 104 }),
     edges,
   };
 }
@@ -134,7 +154,7 @@ function AutoFit({ layoutKey }: { layoutKey: string }) {
 function SignalFlowGraphInner({
   payload,
   dataRevision,
-  initialSeedCount = 5,
+  initialSeedCount = 3,
   onVisibleCountChange,
 }: SignalFlowGraphProps) {
   const [graphIndex, setGraphIndex] = useState<GraphIndex | null>(null);
@@ -192,8 +212,8 @@ function SignalFlowGraphInner({
 
   if (!graphIndex || nodes.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#f8fafc]">
-        <p className="font-mono text-xs uppercase tracking-widest text-slate-400">
+      <div className="flex h-full items-center justify-center bg-[#050202]">
+        <p className="font-mono text-xs uppercase tracking-widest text-white/35">
           No signal roots indexed
         </p>
       </div>
@@ -201,7 +221,7 @@ function SignalFlowGraphInner({
   }
 
   return (
-    <div className="h-full w-full bg-[#f8fafc]">
+    <div className="h-full w-full bg-[#050202]">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -209,7 +229,7 @@ function SignalFlowGraphInner({
         onNodesChange={onNodesChange}
         onNodeDoubleClick={onNodeDoubleClick}
         nodesDraggable
-        panOnDrag
+        panOnDrag={[1, 2]}
         panOnScroll
         zoomOnScroll
         nodesConnectable={false}
@@ -219,13 +239,17 @@ function SignalFlowGraphInner({
         maxZoom={1.8}
         proOptions={{ hideAttribution: true }}
       >
-        <Background gap={18} size={1} color="#e2e8f0" />
-        <Controls showInteractive={false} />
+        <Background gap={22} size={1} color="rgba(0,224,255,0.06)" />
+        <Controls
+          showInteractive={false}
+          className="!border-white/10 !bg-black/50 !shadow-none [&>button]:!border-white/10 [&>button]:!bg-black/40 [&>button]:!fill-white/70"
+        />
         <MiniMap
           nodeColor={(node) =>
-            (node.data as DocumentCardData | undefined)?.accentColor ?? "#cbd5e1"
+            (node.data as DocumentCardData | undefined)?.accentColor ?? "#334155"
           }
-          maskColor="rgba(15, 23, 42, 0.08)"
+          maskColor="rgba(5, 2, 2, 0.65)"
+          className="!border-white/10 !bg-black/40"
           pannable
           zoomable
         />

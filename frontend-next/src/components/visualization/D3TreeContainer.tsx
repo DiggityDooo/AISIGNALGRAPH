@@ -30,7 +30,7 @@ const TREE_CSS = `
 .signal-tree__link {
   fill: none;
   stroke-width: 1.5px;
-  stroke-opacity: 0.85;
+  stroke-opacity: 0.75;
 }
 ${BRANCH_PALETTE.map(
   (color, index) => `.signal-tree__link--b${index} { stroke: ${color}; }`,
@@ -40,18 +40,28 @@ ${BRANCH_PALETTE.map(
 }
 .signal-tree__node:hover circle {
   stroke-width: 3px;
-  filter: brightness(1.08);
+  filter: brightness(1.12);
 }
 .signal-tree__label {
-  font: 600 11px/1 var(--font-sans, system-ui, sans-serif);
-  fill: #ffffff;
+  font: 600 10px/1.2 var(--font-sans, system-ui, sans-serif);
+  fill: rgba(245, 245, 245, 0.95);
+  paint-order: stroke;
+  stroke: rgba(5, 2, 2, 0.85);
+  stroke-width: 3px;
   pointer-events: none;
   user-select: none;
+}
+.signal-tree__sub {
+  font: 8px/1 var(--font-mono, monospace);
+  fill: rgba(255, 255, 255, 0.38);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  pointer-events: none;
 }
 `;
 
 function truncateLabel(text: string, depth: number): string {
-  const max = depth <= 1 ? 14 : depth === 2 ? 10 : 8;
+  const max = depth <= 1 ? 18 : depth === 2 ? 14 : 10;
   if (text.length <= max) return text;
   return `${text.slice(0, max - 1)}…`;
 }
@@ -75,10 +85,10 @@ function branchColor(node: CustomNodeElementProps["hierarchyPointNode"]): string
 }
 
 function nodeRadius(depth: number, hasChildren: boolean): number {
-  if (depth === 0) return 20;
-  if (depth === 1) return 16;
-  if (depth === 2) return 13;
-  return Math.max(9, 12 - depth + (hasChildren ? 1 : 0));
+  if (depth === 0) return 14;
+  if (depth === 1) return 15;
+  if (depth === 2) return 12;
+  return Math.max(8, 11 - depth * 0.5 + (hasChildren ? 1 : 0));
 }
 
 function renderCircleNode({
@@ -91,19 +101,39 @@ function renderCircleNode({
   const fill = branchColor(hierarchyPointNode);
   const radius = nodeRadius(depth, hasChildren);
   const label = truncateLabel(nodeDatum.name, depth);
-  const fontSize = Math.max(8, 12 - depth * 0.8);
+  const fontSize = Math.max(8, 11 - depth * 0.6);
+  const type =
+    typeof nodeDatum.attributes?.type === "string"
+      ? (nodeDatum.attributes.type as string)
+      : "node";
+  const showLabel = depth > 0;
+  const labelY = radius + 14;
 
   return (
-    <g className="signal-tree__node" onClick={toggleNode} style={{ cursor: hasChildren ? "pointer" : "default" }}>
-      <circle r={radius} fill={fill} stroke="#ffffff" strokeWidth={2} />
-      <text
-        className="signal-tree__label"
-        textAnchor="middle"
-        dy="0.35em"
-        fontSize={fontSize}
-      >
-        {label}
-      </text>
+    <g
+      className="signal-tree__node"
+      onClick={hasChildren ? toggleNode : undefined}
+      style={{ cursor: hasChildren ? "pointer" : "default" }}
+    >
+      <circle r={radius} fill={fill} stroke="#ffffff" strokeWidth={depth === 0 ? 1.5 : 2} />
+      {showLabel && (
+        <>
+          <text
+            className="signal-tree__label"
+            textAnchor="middle"
+            y={labelY}
+            fontSize={fontSize}
+          >
+            {label}
+          </text>
+          {depth <= 2 && (
+            <text className="signal-tree__sub" textAnchor="middle" y={labelY + 12}>
+              {type}
+              {hasChildren ? " · +" : ""}
+            </text>
+          )}
+        </>
+      )}
     </g>
   );
 }
@@ -115,7 +145,7 @@ function pathClassFunc(linkData: TreeLinkDatum): string {
 
 export default function D3TreeContainer({
   data,
-  initialDepth = 2,
+  initialDepth = 1,
 }: D3TreeContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
@@ -136,7 +166,7 @@ export default function D3TreeContainer({
 
   const translate = useMemo(() => {
     if (!dimensions) return { x: 0, y: 0 };
-    return { x: dimensions.width / 2, y: 56 };
+    return { x: dimensions.width / 2, y: 72 };
   }, [dimensions]);
 
   return (
@@ -145,8 +175,7 @@ export default function D3TreeContainer({
       style={{
         width: "100%",
         height: "100%",
-        background: "#ffffff",
-        borderRadius: 8,
+        background: "transparent",
       }}
     >
       <style>{TREE_CSS}</style>
@@ -161,16 +190,16 @@ export default function D3TreeContainer({
           renderCustomNodeElement={renderCircleNode}
           collapsible
           initialDepth={initialDepth}
-          shouldCollapseNeighborNodes={false}
+          shouldCollapseNeighborNodes
           zoomable
           draggable
-          zoom={0.85}
-          scaleExtent={{ min: 0.15, max: 2.5 }}
-          nodeSize={{ x: 120, y: 72 }}
-          separation={{ siblings: 1.05, nonSiblings: 1.2 }}
+          zoom={0.72}
+          scaleExtent={{ min: 0.12, max: 2.2 }}
+          nodeSize={{ x: 156, y: 96 }}
+          separation={{ siblings: 1.12, nonSiblings: 1.28 }}
           enableLegacyTransitions
-          transitionDuration={400}
-          centeringTransitionDuration={500}
+          transitionDuration={350}
+          centeringTransitionDuration={450}
         />
       )}
     </div>

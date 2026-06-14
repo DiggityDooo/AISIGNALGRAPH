@@ -140,18 +140,18 @@ export default function GraphFlowPage() {
           <ForceTree
             data={tree}
             dataRevision={revision}
-            initialSeedCount={12}
+            initialSeedCount={8}
             onVisibleCountChange={setVisibleNodes}
           />
         )}
         {viewMode === "tree" && tree && (
-          <D3TreeContainer data={tree} initialDepth={2} />
+          <D3TreeContainer data={tree} initialDepth={1} />
         )}
         {viewMode === "flow" && payload && (
           <SignalFlowGraph
             payload={payload}
             dataRevision={revision}
-            initialSeedCount={5}
+            initialSeedCount={3}
             onVisibleCountChange={setVisibleNodes}
           />
         )}

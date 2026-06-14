@@ -4,148 +4,118 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Tree, {
   type CustomNodeElementProps,
   type RawNodeDatum,
+  type TreeLinkDatum,
 } from "react-d3-tree";
 
 export interface D3TreeContainerProps {
-  /** Hierarchical tree produced by `useDataTransformer`. */
   data: RawNodeDatum | null;
-  /** Collapse all branches beyond this depth on first render (perf for large graphs). */
   initialDepth?: number;
 }
 
-/** Brand accent per signal node type; falls back to the primary cyan. */
-const TYPE_COLOR: Record<string, string> = {
-  root: "#ffffff",
-  story: "#00e0ff",
-  entity: "#7c5cff",
-  lab: "#ff5c8a",
-  model: "#34d399",
-  person: "#fbbf24",
-  risk: "#ef4444",
-  topic: "#22d3ee",
-  product: "#a78bfa",
-  year: "#94a3b8",
-  community: "#f97316",
-};
+/** Branch palette — blue / purple / pink families like classic react-d3-tree demos. */
+const BRANCH_PALETTE = [
+  "#7986cb",
+  "#5c6bc0",
+  "#9575cd",
+  "#7e57c2",
+  "#e57373",
+  "#ec407a",
+  "#f06292",
+  "#4db6ac",
+  "#26a69a",
+  "#ffb74d",
+];
 
-function accentFor(nodeDatum: RawNodeDatum): string {
-  const type = nodeDatum.attributes?.type;
-  if (typeof type === "string" && TYPE_COLOR[type]) return TYPE_COLOR[type];
-  return TYPE_COLOR.story;
+const TREE_CSS = `
+.signal-tree__link {
+  fill: none;
+  stroke-width: 1.5px;
+  stroke-opacity: 0.85;
 }
-
-/**
- * Organic-motion CSS injected once. react-d3-tree pins nodes to fixed tree
- * coordinates, so true force-directed momentum isn't possible; this mimics the
- * old engine's "alive" feel with a subtle per-node float and a hover spring,
- * while `enableLegacyTransitions` interpolates nodes between layout positions.
- */
-const NODE_MOTION_CSS = `
-@keyframes rd3t-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
+${BRANCH_PALETTE.map(
+  (color, index) => `.signal-tree__link--b${index} { stroke: ${color}; }`,
+).join("\n")}
+.signal-tree__node circle {
+  transition: r 200ms ease, stroke-width 200ms ease;
 }
-.signal-tree__card {
-  animation: rd3t-float 6s ease-in-out infinite;
-  transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 220ms ease;
-  will-change: transform;
+.signal-tree__node:hover circle {
+  stroke-width: 3px;
+  filter: brightness(1.08);
 }
-.signal-tree__card:hover {
-  transform: scale(1.06);
-  box-shadow: 0 8px 26px rgba(0,0,0,0.55);
-}
-@media (prefers-reduced-motion: reduce) {
-  .signal-tree__card { animation: none; }
+.signal-tree__label {
+  font: 600 11px/1 var(--font-sans, system-ui, sans-serif);
+  fill: #ffffff;
+  pointer-events: none;
+  user-select: none;
 }
 `;
 
-function renderDocumentCardNode({
+function truncateLabel(text: string, depth: number): string {
+  const max = depth <= 1 ? 14 : depth === 2 ? 10 : 8;
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1)}…`;
+}
+
+function branchKey(node: CustomNodeElementProps["hierarchyPointNode"]): number {
+  if (node.depth <= 1) {
+    return node.parent?.children?.indexOf(node) ?? 0;
+  }
+  let current = node;
+  while (current.depth > 1 && current.parent) {
+    current = current.parent;
+  }
+  return current.parent?.children?.indexOf(current) ?? 0;
+}
+
+function branchColor(node: CustomNodeElementProps["hierarchyPointNode"]): string {
+  if (node.depth === 0) {
+    return "#4fc3f7";
+  }
+  return BRANCH_PALETTE[branchKey(node) % BRANCH_PALETTE.length];
+}
+
+function nodeRadius(depth: number, hasChildren: boolean): number {
+  if (depth === 0) return 20;
+  if (depth === 1) return 16;
+  if (depth === 2) return 13;
+  return Math.max(9, 12 - depth + (hasChildren ? 1 : 0));
+}
+
+function renderCircleNode({
   nodeDatum,
   toggleNode,
   hierarchyPointNode,
 }: CustomNodeElementProps) {
-  const accent = accentFor(nodeDatum);
-  const type =
-    typeof nodeDatum.attributes?.type === "string"
-      ? (nodeDatum.attributes.type as string)
-      : "node";
-  const hasChildren =
-    Array.isArray(nodeDatum.children) && nodeDatum.children.length > 0;
-  const collapsed = nodeDatum.__rd3t.collapsed;
-  // Stagger the float so siblings drift out of phase (organic, not uniform).
-  const floatDelay = `${(hierarchyPointNode.x % 6).toFixed(2)}s`;
+  const hasChildren = Array.isArray(nodeDatum.children) && nodeDatum.children.length > 0;
+  const depth = hierarchyPointNode.depth;
+  const fill = branchColor(hierarchyPointNode);
+  const radius = nodeRadius(depth, hasChildren);
+  const label = truncateLabel(nodeDatum.name, depth);
+  const fontSize = Math.max(8, 12 - depth * 0.8);
 
   return (
-    <g>
-      {/* foreignObject lets us render a branded HTML card inside the SVG tree. */}
-      <foreignObject x={-110} y={-28} width={220} height={56} overflow="visible">
-        <button
-          type="button"
-          className="signal-tree__card"
-          onClick={toggleNode}
-          title={hasChildren ? (collapsed ? "Expand" : "Collapse") : undefined}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            width: "100%",
-            height: "100%",
-            padding: "8px 12px",
-            borderRadius: 8,
-            border: "1px solid rgba(255,255,255,0.1)",
-            borderLeft: `4px solid ${accent}`,
-            background: "rgba(8,2,2,0.85)",
-            backdropFilter: "blur(6px)",
-            color: "#f5f5f5",
-            font: '500 12px/1.2 var(--font-mono, monospace)',
-            textAlign: "left",
-            cursor: hasChildren ? "pointer" : "default",
-            boxShadow: "0 4px 14px rgba(0,0,0,0.4)",
-            animationDelay: floatDelay,
-          }}
-        >
-          <span
-            aria-hidden
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: accent,
-              flexShrink: 0,
-              boxShadow: `0 0 8px ${accent}`,
-            }}
-          />
-          <span style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <span
-              style={{
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {nodeDatum.name}
-            </span>
-            <span
-              style={{
-                fontSize: 9,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                color: "rgba(255,255,255,0.45)",
-              }}
-            >
-              {type}
-              {hasChildren ? ` · ${nodeDatum.children!.length}` : ""}
-            </span>
-          </span>
-        </button>
-      </foreignObject>
+    <g className="signal-tree__node" onClick={toggleNode} style={{ cursor: hasChildren ? "pointer" : "default" }}>
+      <circle r={radius} fill={fill} stroke="#ffffff" strokeWidth={2} />
+      <text
+        className="signal-tree__label"
+        textAnchor="middle"
+        dy="0.35em"
+        fontSize={fontSize}
+      >
+        {label}
+      </text>
     </g>
   );
 }
 
+function pathClassFunc(linkData: TreeLinkDatum): string {
+  const index = branchKey(linkData.target) % BRANCH_PALETTE.length;
+  return `signal-tree__link signal-tree__link--b${index}`;
+}
+
 export default function D3TreeContainer({
   data,
-  initialDepth = 1,
+  initialDepth = 2,
 }: D3TreeContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
@@ -166,30 +136,41 @@ export default function D3TreeContainer({
 
   const translate = useMemo(() => {
     if (!dimensions) return { x: 0, y: 0 };
-    return { x: dimensions.width / 2, y: dimensions.height / 2 };
+    return { x: dimensions.width / 2, y: 56 };
   }, [dimensions]);
 
   return (
-    <div ref={containerRef} style={{ width: "100%", height: "100%" }}>
-      <style>{NODE_MOTION_CSS}</style>
+    <div
+      ref={containerRef}
+      style={{
+        width: "100%",
+        height: "100%",
+        background: "#ffffff",
+        borderRadius: 8,
+      }}
+    >
+      <style>{TREE_CSS}</style>
       {data && dimensions && (
         <Tree
           data={data}
-          orientation="horizontal"
+          orientation="vertical"
           translate={translate}
           dimensions={dimensions}
           pathFunc="step"
-          renderCustomNodeElement={renderDocumentCardNode}
+          pathClassFunc={pathClassFunc}
+          renderCustomNodeElement={renderCircleNode}
           collapsible
           initialDepth={initialDepth}
-          shouldCollapseNeighborNodes
+          shouldCollapseNeighborNodes={false}
           zoomable
           draggable
-          zoom={0.7}
-          scaleExtent={{ min: 0.1, max: 3 }}
-          nodeSize={{ x: 260, y: 90 }}
-          separation={{ siblings: 1, nonSiblings: 1.4 }}
-          centeringTransitionDuration={600}
+          zoom={0.85}
+          scaleExtent={{ min: 0.15, max: 2.5 }}
+          nodeSize={{ x: 120, y: 72 }}
+          separation={{ siblings: 1.05, nonSiblings: 1.2 }}
+          enableLegacyTransitions
+          transitionDuration={400}
+          centeringTransitionDuration={500}
         />
       )}
     </div>

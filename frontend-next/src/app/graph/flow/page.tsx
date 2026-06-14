@@ -18,13 +18,21 @@ const D3TreeContainer = dynamic(
   { ssr: false },
 );
 
+// React Flow + dagre progressive explorer; keep it out of SSR/export.
+const SignalFlowGraph = dynamic(
+  () => import("@/components/visualization/SignalFlowGraph"),
+  { ssr: false },
+);
+
 // Re-fetch every 30s so scraper/database updates surface without a reload.
 const GRAPH_REFRESH_MS = 30_000;
+
+type ViewMode = "force" | "tree" | "flow";
 
 export default function GraphFlowPage() {
   const enabled = isGraphFlowEnabled();
   const [visibleNodes, setVisibleNodes] = useState(0);
-  const [viewMode, setViewMode] = useState<"force" | "tree">("force");
+  const [viewMode, setViewMode] = useState<ViewMode>("tree");
 
   const { payload, revision, loading, error } = useGraphData({
     refreshMs: GRAPH_REFRESH_MS,
@@ -47,6 +55,13 @@ export default function GraphFlowPage() {
     );
   }
 
+  const modeButtonClass = (active: boolean) =>
+    `glass-panel px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider transition-all border ${
+      active
+        ? "bg-primary/20 text-primary border-primary/40 font-bold"
+        : "bg-transparent text-muted hover:text-white border-white/5 hover:border-white/10"
+    }`;
+
   return (
     <div className="relative w-full h-screen bg-[#050202] overflow-hidden pt-20">
       <header className="absolute top-20 left-0 right-0 z-20 flex justify-between items-center px-4 md:px-8 py-4 border-b border-white/5 bg-black/40 backdrop-blur-md">
@@ -58,24 +73,23 @@ export default function GraphFlowPage() {
             <button
               id="toggle-layout-force"
               onClick={() => setViewMode("force")}
-              className={`glass-panel px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider transition-all border ${
-                viewMode === "force"
-                  ? "bg-primary/20 text-primary border-primary/40 font-bold"
-                  : "bg-transparent text-muted hover:text-white border-white/5 hover:border-white/10"
-              }`}
+              className={modeButtonClass(viewMode === "force")}
             >
               Lattice
             </button>
             <button
               id="toggle-layout-tree"
               onClick={() => setViewMode("tree")}
-              className={`glass-panel px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider transition-all border ${
-                viewMode === "tree"
-                  ? "bg-primary/20 text-primary border-primary/40 font-bold"
-                  : "bg-transparent text-muted hover:text-white border-white/5 hover:border-white/10"
-              }`}
+              className={modeButtonClass(viewMode === "tree")}
             >
               Tree
+            </button>
+            <button
+              id="toggle-layout-flow"
+              onClick={() => setViewMode("flow")}
+              className={modeButtonClass(viewMode === "flow")}
+            >
+              Flow
             </button>
           </div>
         </div>
@@ -83,7 +97,7 @@ export default function GraphFlowPage() {
           <span>
             Visible:{" "}
             <strong className="text-secondary">
-              {viewMode === "force" ? visibleNodes : "--"}
+              {viewMode === "tree" ? "--" : visibleNodes}
             </strong>
           </span>
           <span>
@@ -106,7 +120,7 @@ export default function GraphFlowPage() {
             Failed to load signal graph — {error.message}
           </p>
         )}
-        {!error && loading && !tree && (
+        {!error && loading && !tree && viewMode !== "flow" && (
           <p
             role="status"
             className="font-mono text-sm text-primary p-8 tracking-widest uppercase animate-pulse"
@@ -114,20 +128,34 @@ export default function GraphFlowPage() {
             Synthesizing signal tree…
           </p>
         )}
-        {tree && (
-          viewMode === "force" ? (
-            <ForceTree
-              data={tree}
-              dataRevision={revision}
-              initialSeedCount={12}
-              onVisibleCountChange={setVisibleNodes}
-            />
-          ) : (
-            <D3TreeContainer data={tree} initialDepth={1} />
-          )
+        {!error && loading && viewMode === "flow" && !payload && (
+          <p
+            role="status"
+            className="font-mono text-sm text-primary p-8 tracking-widest uppercase animate-pulse"
+          >
+            Loading signal flow…
+          </p>
+        )}
+        {viewMode === "force" && tree && (
+          <ForceTree
+            data={tree}
+            dataRevision={revision}
+            initialSeedCount={12}
+            onVisibleCountChange={setVisibleNodes}
+          />
+        )}
+        {viewMode === "tree" && tree && (
+          <D3TreeContainer data={tree} initialDepth={2} />
+        )}
+        {viewMode === "flow" && payload && (
+          <SignalFlowGraph
+            payload={payload}
+            dataRevision={revision}
+            initialSeedCount={5}
+            onVisibleCountChange={setVisibleNodes}
+          />
         )}
       </div>
     </div>
   );
 }
-

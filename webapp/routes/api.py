@@ -128,13 +128,17 @@ def graph_by_era(era_name: str):
 
     if era_name not in ERA_DATE_RANGES:
         return _error(f"unknown era '{era_name}'", 404)
+    store = current_app.extensions.get("graph_store")
+    if store is None:
+        return _error("graph unavailable", 503)
     try:
-        with _connect() as conn:
-            payload = _build_graph_payload(conn, "era = ?", (era_name,))
-    except sqlite3.DatabaseError:
+        payload = store.get_graph_data_by_era(era_name)
+    except ValueError as exc:
+        return _error(str(exc), 404)
+    except Exception:
         current_app.logger.exception("graph_by_era failed")
         return _error("database error", 500)
-    return _json(payload)
+    return _json({**payload, "status": "ok", "filter": {"era": era_name}})
 
 
 @api_bp.get("/graph/year-range")
@@ -146,15 +150,21 @@ def graph_by_year_range():
         return _error("'from' and 'to' must be integers", 400)
     if year_from > year_to:
         return _error("'from' must be <= 'to'", 400)
+    store = current_app.extensions.get("graph_store")
+    if store is None:
+        return _error("graph unavailable", 503)
     try:
-        with _connect() as conn:
-            payload = _build_graph_payload(
-                conn, "year BETWEEN ? AND ?", (year_from, year_to)
-            )
-    except sqlite3.DatabaseError:
+        payload = store.get_graph_data_by_year_range(year_from, year_to)
+    except Exception:
         current_app.logger.exception("graph_by_year_range failed")
         return _error("database error", 500)
-    return _json(payload)
+    return _json(
+        {
+            **payload,
+            "status": "ok",
+            "filter": {"from": year_from, "to": year_to},
+        }
+    )
 
 
 @api_bp.get("/stories/search")

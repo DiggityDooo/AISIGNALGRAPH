@@ -87,8 +87,9 @@ test.describe("AISIGNALGRAPH hub analysis", () => {
       if (route.path === "/graph") {
         await page.waitForTimeout(3000);
         checks.hasAppRoot = (await page.locator("#app-root").count()) > 0;
-        const graphJs = await page.request.get("/graph.js");
-        checks.graphJsOk = graphJs.ok();
+        checks.hasSigmaContainer = (await page.locator("#sigma-container").count()) > 0;
+        const graphApi = await page.request.get("/api/graph");
+        checks.graphApiOk = graphApi.ok();
       }
 
       const headingVisible = await page

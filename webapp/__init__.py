@@ -201,6 +201,11 @@ def create_app() -> Flask:
     def dashboard():
         return app.send_static_file("hub/graph.html")
 
+    @app.get("/graph/prototype")
+    @app.get("/graph/Prototype")
+    def graph_prototype():
+        return app.send_static_file("hub/graph/prototype.html")
+
     @app.get("/stories")
     def stories():
         return app.send_static_file("hub/stories.html")

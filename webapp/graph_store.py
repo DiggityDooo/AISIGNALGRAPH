@@ -410,6 +410,8 @@ class StoryRecord:
     tags: list[str]
     entities: list[dict[str, Any]]
     related_stories: list[dict[str, Any]]
+    era: str | None = None
+    year: int | None = None
 
     @property
     def excerpt(self) -> str:
@@ -1975,6 +1977,8 @@ class GraphStore:
                 tags=sorted(set(story_to_tags[row["id"]])),
                 entities=entity_refs,
                 related_stories=related_stories,
+                era=row["era"] if "era" in row.keys() else None,
+                year=int(row["year"]) if "year" in row.keys() and row["year"] is not None else None,
             )
 
         entity_records: dict[str, EntityRecord] = {}
@@ -2172,11 +2176,72 @@ class GraphStore:
         stories = [self._stories[item["id"]] for item in entity.stories if item["id"] in self._stories]
         return {"record": entity, "stories": stories, "linked_entities": linked_entities}
 
+    def _story_year(self, story: StoryRecord) -> int | None:
+        if story.year is not None:
+            return story.year
+        if story.event_date:
+            try:
+                return int(story.event_date[:4])
+            except ValueError:
+                return None
+        return None
+
+    def _story_era(self, story: StoryRecord) -> str | None:
+        if story.era:
+            return story.era
+        year = self._story_year(story)
+        if year is None:
+            return None
+        from scraper.sources import classify_era
+
+        return classify_era(year)
+
+    def _included_entity_ids(self, allowed_story_ids: set[str]) -> set[str]:
+        ids: set[str] = set()
+        for story_id in allowed_story_ids:
+            story = self._stories.get(story_id)
+            if story is None:
+                continue
+            for ref in story.entities:
+                ids.add(ref["id"])
+            if story.event_date:
+                ids.add(f"year-{story.event_date[:4]}")
+        return ids
+
+    def _iter_active_stories(self, allowed_story_ids: set[str] | None):
+        if allowed_story_ids is None:
+            return self._stories.values()
+        return (self._stories[story_id] for story_id in allowed_story_ids if story_id in self._stories)
+
     def get_graph_data(self) -> GraphData:
         self._refresh()
         if self._graph_data_cache is not None:
             return self._graph_data_cache
-        story_months = {story.id: timeline_month_key(story.event_date) for story in self._stories.values()}
+        self._graph_data_cache = self._build_graph_data(None)
+        return self._graph_data_cache
+
+    def get_graph_data_by_era(self, era_name: str) -> GraphData:
+        from scraper.sources import ERA_DATE_RANGES
+
+        if era_name not in ERA_DATE_RANGES:
+            raise ValueError(f"unknown era '{era_name}'")
+        self._refresh()
+        story_ids = {story.id for story in self._stories.values() if self._story_era(story) == era_name}
+        return self._build_graph_data(story_ids)
+
+    def get_graph_data_by_year_range(self, year_from: int, year_to: int) -> GraphData:
+        self._refresh()
+        story_ids = {
+            story.id
+            for story in self._stories.values()
+            if (year := self._story_year(story)) is not None and year_from <= year <= year_to
+        }
+        return self._build_graph_data(story_ids)
+
+    def _build_graph_data(self, allowed_story_ids: set[str] | None) -> GraphData:
+        active_stories = list(self._iter_active_stories(allowed_story_ids))
+        included_entities = self._included_entity_ids(allowed_story_ids) if allowed_story_ids is not None else None
+        story_months = {story.id: timeline_month_key(story.event_date) for story in active_stories}
         known_story_months = sorted((month for month in story_months.values() if month), key=timeline_month_sort_key)
         first_story_month = known_story_months[0] if known_story_months else "2020-01"
         last_story_month = known_story_months[-1] if known_story_months else first_story_month
@@ -2195,6 +2260,8 @@ class GraphStore:
         nodes: list[dict[str, Any]] = []
         node_by_id: dict[str, dict[str, Any]] = {}
         for entity in self._entities.values():
+            if included_entities is not None and entity.id not in included_entities:
+                continue
             is_model = entity.entity_type == "model"
             frontend_type = graph_node_type(entity.entity_type, entity.group_name)
             timeline_month = entity_first_seen.get(entity.id, first_story_month)
@@ -2226,7 +2293,7 @@ class GraphStore:
             nodes.append(node)
             node_by_id[node["id"]] = node
 
-        for story in self._stories.values():
+        for story in active_stories:
             story_month = story_months.get(story.id) or last_story_month
             node = {
                 "id": f"story:{story.id}",
@@ -2257,7 +2324,7 @@ class GraphStore:
             node_by_id[node["id"]] = node
 
         edges: list[dict[str, Any]] = []
-        for story in self._stories.values():
+        for story in active_stories:
             story_month = story_months.get(story.id) or last_story_month
             if story.event_date:
                 year_node_id = f"entity:year-{story.event_date[:4]}"
@@ -2296,12 +2363,16 @@ class GraphStore:
         for entity in self._entities.values():
             if entity.entity_type == "year":
                 continue
+            if included_entities is not None and entity.id not in included_entities:
+                continue
             source_type = graph_node_type(entity.entity_type, entity.group_name)
             for link in entity.links:
                 if link["relation"] != "co-mentioned" or link["weight"] < 2 or entity.id >= link["target_id"]:
                     continue
                 target_entity = self._entities.get(link["target_id"])
                 if target_entity is None or target_entity.entity_type == "year":
+                    continue
+                if included_entities is not None and target_entity.id not in included_entities:
                     continue
                 source_month = entity_first_seen.get(entity.id, first_story_month)
                 target_month = entity_first_seen.get(target_entity.id, first_story_month)
@@ -2320,8 +2391,8 @@ class GraphStore:
                     }
                 )
 
-        story_rows = [{"id": story.id, "event_date": story.event_date} for story in self._stories.values()]
-        story_to_entities = {story.id: [entity["id"] for entity in story.entities] for story in self._stories.values()}
+        story_rows = [{"id": story.id, "event_date": story.event_date} for story in active_stories]
+        story_to_entities = {story.id: [entity["id"] for entity in story.entities] for story in active_stories}
         for link in self._build_story_context_links(story_rows, story_to_entities):
             edges.append(
                 {
@@ -2361,7 +2432,7 @@ class GraphStore:
             node["display_cluster_id"] = display_meta["display_cluster_id"] if display_meta else None
             node["display_cluster_label"] = display_meta["display_cluster_label"] if display_meta else None
 
-        payload = {
+        return {
             "nodes": [self._compact_graph_node(node) for node in nodes],
             "edges": [self._compact_graph_edge(edge) for edge in edges],
             "communities": communities,
@@ -2371,5 +2442,3 @@ class GraphStore:
                 "end": last_story_month,
             },
         }
-        self._graph_data_cache = payload
-        return payload

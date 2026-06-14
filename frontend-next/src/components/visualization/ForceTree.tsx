@@ -319,23 +319,27 @@ export default function ForceTree({
       }
     });
 
-    const linkDistance = 140 * Math.max(0.75, Math.min(1.25, viewportScale));
+    const linkDistance = 155 * Math.max(0.75, Math.min(1.25, viewportScale));
 
     simRef.current?.stop();
     const sim = runForceLayout(nodes, links, {
-      chargeStrength: -800,
-      collidePadding: 12,
+      chargeStrength: -540,
+      collidePadding: 9,
       collideRadius: (d) =>
         hitRadiusFor(d.data, (d.children?.length ?? 0) > 0),
       linkDistance,
+      linkStrength: 0.1,
+      anchorStrength: 0.012,
+      centerStrength: 0.015,
+      velocityDecay: 0.13,
       cx,
       cy,
       getAnchorX: (d) => d.anchorX,
       getAnchorY: (d) => d.anchorY,
-      warmupTicks: structuralChange ? 25 : 0,
+      warmupTicks: structuralChange ? 12 : 0,
     })
-      .alpha(structuralChange ? 0.55 : 0.12)
-      .alphaDecay(0.006)
+      .alpha(structuralChange ? 0.42 : 0.1)
+      .alphaDecay(0.0035)
       .alphaMin(0.001)
       .on("tick", () => {
         for (const n of nodes) {
@@ -364,14 +368,14 @@ export default function ForceTree({
     };
   }, [data, dims, collapsed, onVisibleCountChange]);
 
-  // Subtle drift only when tree is small enough to stay readable.
+  // Keep lattice alive without pulling nodes back into rigid radial rings.
   useEffect(() => {
     const id = window.setInterval(() => {
       const sim = simRef.current;
       const visible = layout.nodes.length;
-      if (!sim || sim.alpha() > 0.08 || visible > 80) return;
-      sim.alpha(0.06).restart();
-    }, 5000);
+      if (!sim || sim.alpha() > 0.06 || visible > 120) return;
+      sim.alpha(0.045).restart();
+    }, 3500);
     return () => window.clearInterval(id);
   }, [layout.nodes.length]);
 
@@ -446,15 +450,6 @@ export default function ForceTree({
       const id = idOf(node.data);
       const currently = collapsed.has(id);
       next.set(id, !currently);
-      
-      if (currently && node.parent && node.parent.children) {
-        for (const sibling of node.parent.children) {
-          const siblingId = idOf(sibling.data);
-          if (siblingId !== id && (sibling.data.children?.length ?? 0) > 0) {
-            next.set(siblingId, true);
-          }
-        }
-      }
       return next;
     });
   }, [collapsed]);

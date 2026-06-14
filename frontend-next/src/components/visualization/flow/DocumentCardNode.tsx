@@ -1,12 +1,15 @@
 "use client";
 
 import { memo } from "react";
+import Link from "next/link";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { useGraphLayoutMode } from "@/components/visualization/flow/GraphLayoutContext";
 import {
   DOCUMENT_CARD_HEIGHT,
   DOCUMENT_CARD_WIDTH,
 } from "@/lib/graphFlow/layoutUtils";
+import { glowShadowForAccent } from "@/lib/graphFlow/nodeColors";
+import { buildLatticeFocusHref } from "@/lib/graphFlow/latticeBridge";
 
 export type DocumentCardData = {
   label: string;
@@ -16,6 +19,8 @@ export type DocumentCardData = {
   expanded: boolean;
   childCount: number;
   depth: number;
+  nodeId: string;
+  progressive?: boolean;
 };
 
 export type DocumentCardNodeType = Node<DocumentCardData, "documentCard">;
@@ -24,23 +29,34 @@ const HANDLE_CLASS =
   "!h-1 !w-1 !min-h-0 !min-w-0 !border-0 !bg-cyan-500/60 rounded-full opacity-0";
 
 function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNodeType>) {
-  const { label, nodeType, accentColor, hasChildren, expanded, childCount } = data;
+  const {
+    label,
+    nodeType,
+    accentColor,
+    hasChildren,
+    expanded,
+    childCount,
+    nodeId,
+    progressive = true,
+  } = data;
   const canExpand = hasChildren && !expanded;
   const mode = useGraphLayoutMode();
   const targetPos = mode === "tree" ? Position.Top : Position.Left;
   const sourcePos = mode === "tree" ? Position.Bottom : Position.Right;
+  const glow = glowShadowForAccent(accentColor);
 
   return (
     <div
-      className={`relative flex rounded-md border shadow-md transition-shadow ${
-        canExpand ? "border-white/15" : "border-white/8"
-      } bg-black/80 ${
-        selected ? "ring-2 ring-primary/70 shadow-lg shadow-primary/10" : ""
+      className={`relative flex rounded-md border backdrop-blur-md transition-shadow ${
+        canExpand ? "border-slate-600/50" : "border-slate-700/50"
+      } bg-slate-900/60 ${
+        selected ? "ring-2 ring-primary/70" : ""
       }`}
       style={{
         width: DOCUMENT_CARD_WIDTH,
         maxWidth: DOCUMENT_CARD_WIDTH,
         minHeight: DOCUMENT_CARD_HEIGHT,
+        boxShadow: glow,
       }}
     >
       <span
@@ -53,7 +69,7 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
           <p className="text-[11px] font-semibold leading-tight text-white/92 break-words">
             {label}
           </p>
-          {hasChildren && (
+          {progressive && hasChildren && (
             <span
               className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide ${
                 canExpand
@@ -65,10 +81,22 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
               {expanded ? "−" : `+${childCount}`}
             </span>
           )}
+          {!progressive && childCount > 0 && (
+            <span className="shrink-0 rounded border border-cyan-500/20 bg-cyan-500/5 px-1.5 py-0.5 font-mono text-[9px] text-cyan-200/55">
+              →{childCount}
+            </span>
+          )}
         </div>
         <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-white/38">
           {nodeType}
         </p>
+        <Link
+          href={buildLatticeFocusHref(nodeId)}
+          className="nodrag nopan mt-0.5 w-fit rounded border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider text-cyan-300/90 hover:bg-cyan-500/20"
+          onClick={(event) => event.stopPropagation()}
+        >
+          View in Lattice
+        </Link>
         <div className="flex flex-col gap-1" aria-hidden>
           <span className="h-1 w-full rounded-full bg-white/8" />
           <span className="h-1 w-[80%] rounded-full bg-white/6" />

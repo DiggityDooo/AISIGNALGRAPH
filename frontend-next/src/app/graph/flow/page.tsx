@@ -12,9 +12,14 @@ const ForceTree = dynamic(
   { ssr: false },
 );
 
-// React Flow + dagre progressive explorer; keep it out of SSR/export.
+// Directed signal-flow overview; keep React Flow + dagre out of SSR/export.
 const SignalCardGraph = dynamic(
   () => import("@/components/visualization/SignalCardGraph"),
+  { ssr: false },
+);
+
+const ProgressiveTreeGraph = dynamic(
+  () => import("@/components/visualization/ProgressiveTreeGraph"),
   { ssr: false },
 );
 
@@ -141,12 +146,18 @@ export default function GraphFlowPage() {
             onVisibleCountChange={setVisibleNodes}
           />
         )}
-        {(viewMode === "tree" || viewMode === "flow") && payload && (
+        {viewMode === "tree" && payload && (
+          <ProgressiveTreeGraph
+            payload={payload}
+            dataRevision={revision}
+            initialSeedCount={3}
+            onVisibleCountChange={setVisibleNodes}
+          />
+        )}
+        {viewMode === "flow" && payload && (
           <SignalCardGraph
             payload={payload}
             dataRevision={revision}
-            layoutMode={viewMode}
-            initialSeedCount={3}
             onVisibleCountChange={setVisibleNodes}
           />
         )}

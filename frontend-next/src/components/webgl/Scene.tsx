@@ -37,41 +37,6 @@ function randomInSphere(radius: number, rand: () => number): [number, number, nu
   return [r * sinPhi * Math.cos(theta), r * sinPhi * Math.sin(theta), r * Math.cos(phi)];
 }
 
-function createSimulationBuffers() {
-  const positions = new Float32Array(PARTICLE_COUNT * 3);
-  const velocities = new Float32Array(PARTICLE_COUNT * 3);
-  const seeds = new Float32Array(PARTICLE_COUNT);
-
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
-    const [x, y, z] = randomInSphere(SPHERE_RADIUS * (0.55 + Math.random() * 0.45));
-    positions[i * 3] = x;
-    positions[i * 3 + 1] = y;
-    positions[i * 3 + 2] = z;
-
-    const speed = 0.15 + Math.random() * 0.55;
-    const dir = randomInSphere(1);
-    velocities[i * 3] = dir[0] * speed;
-    velocities[i * 3 + 1] = dir[1] * speed;
-    velocities[i * 3 + 2] = dir[2] * speed;
-
-    seeds[i] = Math.random() * Math.PI * 2;
-  }
-
-  const lineIndices: number[] = [];
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
-    for (let j = i + 1; j < PARTICLE_COUNT; j++) {
-      const dx = positions[i * 3] - positions[j * 3];
-      const dy = positions[i * 3 + 1] - positions[j * 3 + 1];
-      const dz = positions[i * 3 + 2] - positions[j * 3 + 2];
-      if (dx * dx + dy * dy + dz * dz < 9) {
-        lineIndices.push(i, j);
-      }
-    }
-  }
-
-  return { positions, velocities, seeds, lines: new Uint16Array(lineIndices) };
-}
-
 export default function Scene() {
   const pointsRef = useRef<THREE.Points>(null);
   const linesRef = useRef<THREE.LineSegments>(null);

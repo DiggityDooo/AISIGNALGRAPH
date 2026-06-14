@@ -11,6 +11,8 @@ import {
   type SimulationNodeDatum,
 } from "d3-force";
 import type { Edge, Node } from "@xyflow/react";
+import { graphPayloadFingerprint } from "@/lib/graphFlow/graphFingerprint";
+import type { GraphApiPayload } from "@/components/graph-flow/fetchGraphApi";
 
 export const DOCUMENT_CARD_WIDTH = 280;
 export const DOCUMENT_CARD_HEIGHT = 100;
@@ -25,11 +27,60 @@ const LAYOUT_CONFIG: Record<
   tree: { rankdir: "TB", nodesep: 50, ranksep: 100 },
 };
 
+const layoutCache = new Map<string, { nodes: Node<Record<string, unknown>>[]; edges: Edge[] }>();
+const MAX_LAYOUT_CACHE_ENTRIES = 64;
+let lastFingerprint = "";
+
+function layoutCacheKey(
+  nodes: Node<Record<string, unknown>>[],
+  edges: Edge[],
+  mode: LayoutMode,
+  fingerprint?: string,
+): string {
+  const fp = fingerprint ?? "";
+  const nodeKey = nodes.map((n) => n.id).sort().join(",");
+  const edgeKey = edges
+    .map((edge) => `${edge.id}:${edge.source}->${edge.target}`)
+    .sort()
+    .join(",");
+  return `${fp}|${mode}|${nodeKey}|${edgeKey}`;
+}
+
+export function clearLayoutCache(fingerprint?: string): void {
+  if (fingerprint === undefined) {
+    layoutCache.clear();
+    lastFingerprint = "";
+  } else if (fingerprint !== lastFingerprint) {
+    layoutCache.clear();
+    lastFingerprint = fingerprint;
+  }
+}
+
 export function getLayoutedElements<T extends Record<string, unknown>>(
   nodes: Node<T>[],
   edges: Edge[],
   mode: LayoutMode,
+  options?: { fingerprint?: string; payload?: GraphApiPayload | null },
 ): { nodes: Node<T>[]; edges: Edge[] } {
+  const fingerprint =
+    options?.fingerprint ??
+    (options?.payload ? graphPayloadFingerprint(options.payload) : "");
+
+  if (fingerprint) clearLayoutCache(fingerprint);
+
+  const cacheKey = layoutCacheKey(
+    nodes as Node<Record<string, unknown>>[],
+    edges,
+    mode,
+    fingerprint,
+  );
+  const cached = layoutCache.get(cacheKey);
+  if (cached) {
+    layoutCache.delete(cacheKey);
+    layoutCache.set(cacheKey, cached);
+    return { nodes: cached.nodes as Node<T>[], edges: cached.edges };
+  }
+
   const { rankdir, nodesep, ranksep } = LAYOUT_CONFIG[mode];
   const width = DOCUMENT_CARD_WIDTH;
   const height = DOCUMENT_CARD_HEIGHT;
@@ -61,7 +112,16 @@ export function getLayoutedElements<T extends Record<string, unknown>>(
     };
   });
 
-  return { nodes: layoutedNodes, edges };
+  const result = { nodes: layoutedNodes, edges };
+  layoutCache.set(cacheKey, {
+    nodes: layoutedNodes as Node<Record<string, unknown>>[],
+    edges,
+  });
+  if (layoutCache.size > MAX_LAYOUT_CACHE_ENTRIES) {
+    const oldestKey = layoutCache.keys().next().value;
+    if (oldestKey !== undefined) layoutCache.delete(oldestKey);
+  }
+  return result;
 }
 
 export interface ForceLayoutOptions<N extends SimulationNodeDatum> {

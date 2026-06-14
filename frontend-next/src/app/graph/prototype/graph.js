@@ -23,7 +23,7 @@ import {
   getCanvasNodeColor,
 } from "../../../lib/graph/nodeUtils.js";
 import { filterNodes, filterEdges } from "../../../lib/graph/filters.js";
-import { fetchGraphData, fetchFtsStoryIds, resolveGraphFetch } from "../../../lib/graph/data.js";
+import { fetchFtsStoryIds, resolveGraphFetch } from "../../../lib/graph/data.js";
 import { exportSubgraphJson } from "../../../lib/graph/export.js";
 import { requestServerRebuild } from "../../../lib/graph/rebuild.js";
 import { collectHudRefs, validateHudRefs } from "../../../lib/graph/hudRefs.js";

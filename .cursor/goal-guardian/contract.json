@@ -1,0 +1,16 @@
+{
+  "goal": "Unify the visual identity of the Signal Tree (/graph/flow) with the Neural Lattice (/graph) while implementing advanced graph intelligence and high-scale performance optimizations.",
+  "success_criteria": [
+    "Nodes in /graph/flow implement glassmorphism design with dynamic glow effects tied to node type-colors.",
+    "Edges in /graph/flow are replaced with animated SVG signal paths with speed modulated by node importance.",
+    "The BFS transformer identifies and flags cyclic edges for rendering instead of discarding them.",
+    "A 'View in Lattice' trigger in the 2D flow successfully executes a camera 'fly-to' animation in the 3D engine.",
+    "BFS tree transformation is offloaded to a Web Worker, ensuring zero main-thread blocking during large graph loads.",
+    "Dagre layout calculations are memoized using the graph fingerprint to prevent redundant re-renders."
+  ],
+  "constraints": [
+    "No silent scope expansion: every step must map to explicit success criteria IDs.",
+    "Keep updates in the state store instead of chat-only planning.",
+    "Prefer small, testable tasks with explicit completion criteria."
+  ]
+}

@@ -1,7 +1,5 @@
 import { test } from "@playwright/test";
 
-const DEST = "/home/seanb/Documents/December 2023";
-
 test.use({
   video: { mode: "on", size: { width: 1920, height: 1080 } },
   viewport: { width: 1920, height: 1080 },

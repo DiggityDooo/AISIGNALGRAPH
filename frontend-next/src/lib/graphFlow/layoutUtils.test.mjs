@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getLayoutedElements } from "./layoutUtils.ts";
+import { clearLayoutCache, getLayoutedElements } from "./layoutUtils.ts";
 
 const nodes = [
   {
@@ -53,4 +53,35 @@ test("getLayoutedElements keeps disconnected nodes at finite positions", () => {
   assert.ok(orphanNode);
   assert.ok(Number.isFinite(orphanNode.position.x));
   assert.ok(Number.isFinite(orphanNode.position.y));
+});
+
+test("getLayoutedElements returns cached layout for identical graph signature", () => {
+  clearLayoutCache();
+  const first = getLayoutedElements(nodes, edges, "flow", { fingerprint: "fp-test" });
+  const second = getLayoutedElements(nodes, edges, "flow", { fingerprint: "fp-test" });
+  assert.equal(first.nodes, second.nodes);
+  assert.equal(first.edges, second.edges);
+});
+
+test("getLayoutedElements does not reuse layout when edge endpoints change", () => {
+  clearLayoutCache();
+  const thirdNode = {
+    id: "c",
+    type: "documentCard",
+    position: { x: 0, y: 0 },
+    data: { label: "C" },
+  };
+  const graphNodes = [...nodes, thirdNode];
+  const first = getLayoutedElements(
+    graphNodes,
+    [{ id: "e1", source: "a", target: "b" }],
+    "flow",
+  );
+  const second = getLayoutedElements(
+    graphNodes,
+    [{ id: "e1", source: "a", target: "c" }],
+    "flow",
+  );
+
+  assert.notEqual(first.nodes, second.nodes);
 });

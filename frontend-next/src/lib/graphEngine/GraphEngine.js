@@ -381,7 +381,7 @@ export class GraphEngine {
     this._filteredNodeIds = allowedNodeIds ? new Set(allowedNodeIds) : null;
   }
 
-  filterByYear(_from, _to) {
+  filterByYear() {
     // Client applies year filter via node set passed to filterByEra.
   }
 

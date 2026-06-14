@@ -507,6 +507,13 @@ article {
   box-shadow: 0 0 16px rgba(255, 42, 77, 0.45);
 }
 
+/* React Flow signal edges — marching dash animation [SC-2] */
+@keyframes signal-edge-march {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+
 /* Aeruk glass pill + decorative shards */
 .glass-pill {
   border: 1px solid rgba(255, 255, 255, 0.22);

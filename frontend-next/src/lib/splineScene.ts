@@ -26,7 +26,7 @@ export function scheduleAfterFirstPaint(callback: () => void): () => void {
       if ("requestIdleCallback" in window) {
         window.requestIdleCallback(run, { timeout: 2500 });
       } else {
-        window.setTimeout(run, 1);
+        globalThis.setTimeout(run, 1);
       }
     });
   });

@@ -467,6 +467,7 @@ export async function initGephiLite(options = {}) {
     animationFrameId: null,
     destroyed: false,
     is3DMode: false,
+    threeModule: null,
     threeScene: null,
     threeRenderer: null,
     threeCamera: null,
@@ -1011,6 +1012,56 @@ export async function initGephiLite(options = {}) {
     if (!state.graph || !state.graph.hasNode(id)) return;
     const attrs = state.graph.getNodeAttributes(id);
     inspectNode(attrs);
+    if (state.renderer) {
+      state.renderer.getCamera().animate({ x: attrs.x, y: attrs.y, ratio: 0.15 }, { duration: 500 });
+    }
+  }
+
+  async function enter3DModeIfNeeded() {
+    if (state.is3DMode) return;
+    state.is3DMode = true;
+    if (refs.toggle3dLabel) refs.toggle3dLabel.textContent = "2D";
+    if (refs.toggle3d) {
+      refs.toggle3d.style.background = "rgba(255, 66, 88, 0.3)";
+      refs.toggle3d.style.borderColor = "rgba(255, 66, 88, 0.6)";
+    }
+    stopAnimationLoop();
+    state.activeSignals = [];
+    destroyRenderer();
+    if (refs.rendererHost) refs.rendererHost.style.display = "none";
+    if (refs.canvas) refs.canvas.style.display = "none";
+    if (refs.threeContainer) refs.threeContainer.style.display = "block";
+    const visualizer = document.getElementById("node-visualizer-container");
+    if (visualizer) visualizer.style.display = "none";
+    await build3DScene();
+  }
+
+  async function flyToNodeById(id, prefer3d = false) {
+    if (!state.graph || !state.graph.hasNode(id)) return;
+    const attrs = state.graph.getNodeAttributes(id);
+    inspectNode(attrs);
+
+    if (prefer3d) {
+      await enter3DModeIfNeeded();
+    }
+
+    const THREE = state.threeModule;
+    if (state.is3DMode && THREE) {
+      highlight3DNeighbors(id, THREE);
+    }
+
+    if (state.is3DMode && THREE && state.threeCamera && state.threeControls && state.threeNodeMeshes.length) {
+      const mesh = state.threeNodeMeshes.find(
+        (item) => item.userData.nodeId === id && !item.userData.isGlow,
+      );
+      if (mesh) {
+        const targetPos = mesh.position.clone();
+        const camTarget = targetPos.clone().add(new THREE.Vector3(0, 0, 80));
+        animateCamera(state.threeCamera, state.threeControls, camTarget, targetPos, 800);
+        return;
+      }
+    }
+
     if (state.renderer) {
       state.renderer.getCamera().animate({ x: attrs.x, y: attrs.y, ratio: 0.15 }, { duration: 500 });
     }
@@ -1679,6 +1730,7 @@ export async function initGephiLite(options = {}) {
       refs.threeContainer.innerHTML = "";
     }
     state.threeScene = null;
+    state.threeModule = null;
     state.threeCamera = null;
     state.threeNodeMeshes = [];
     state.threeEdgeLines = null;
@@ -1694,6 +1746,7 @@ export async function initGephiLite(options = {}) {
     const { OrbitControls } = await import("three/examples/jsm/controls/OrbitControls.js");
 
     destroy3DScene();
+    state.threeModule = THREE;
 
     const rect = refs.threeContainer.getBoundingClientRect();
     const width = rect.width;
@@ -2008,7 +2061,7 @@ export async function initGephiLite(options = {}) {
     }
 
     appRoot.style.setProperty("--node-glow-color", DEFAULT_GLOW_COLOR);
-    window.gephiLite = { selectNode: selectNodeById };
+    window.gephiLite = { selectNode: selectNodeById, flyToNode: flyToNodeById };
 
     state.pageHidden = document.hidden;
     bindControls();
@@ -2021,6 +2074,13 @@ export async function initGephiLite(options = {}) {
       startAnimationLoop();
     }
     onReady?.({ nodes: state.nodes.length, edges: state.edges.length });
+
+    const focusParams = new URLSearchParams(window.location.search);
+    const focusId = focusParams.get("focus");
+    const focus3d = focusParams.get("mode") === "3d";
+    if (focusId) {
+      void flyToNodeById(focusId, focus3d);
+    }
 
     return cleanup;
   } catch (error) {

@@ -1,23 +1,34 @@
 import type { NextConfig } from "next";
+import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const nextConfig: NextConfig = {
-  output: 'export',
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
+
+const sharedConfig: NextConfig = {
   images: { unoptimized: true },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  // Note: rewrites only work in development for static exports
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: 'http://localhost:8080/api/:path*',
-      },
-    ];
+  turbopack: {
+    root: projectRoot,
   },
 };
 
-export default nextConfig;
+export default function nextConfig(phase: string): NextConfig {
+  if (phase === PHASE_DEVELOPMENT_SERVER) {
+    return {
+      ...sharedConfig,
+      async rewrites() {
+        return [
+          {
+            source: "/api/:path*",
+            destination: "http://localhost:8080/api/:path*",
+          },
+        ];
+      },
+    };
+  }
+
+  return {
+    ...sharedConfig,
+    output: "export",
+  };
+}

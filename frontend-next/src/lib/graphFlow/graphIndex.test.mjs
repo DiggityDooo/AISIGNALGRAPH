@@ -50,3 +50,40 @@ test("toggleExpanded adds children and collapses descendant branches", () => {
   const reExpanded = toggleExpanded("root", collapsed, index.childrenById);
   assert.equal(reExpanded.has("root"), true);
 });
+
+test("buildGraphIndex records non-tree edges when a node has multiple parents", () => {
+  const cyclicPayload = {
+    nodes: [
+      { id: "a", label: "A", type: "story", importance: 10, year: 2024 },
+      { id: "b", label: "B", type: "entity", importance: 5, year: 2023 },
+      { id: "c", label: "C", type: "topic", importance: 3, year: 2022 },
+    ],
+    edges: [
+      { source: "a", target: "b" },
+      { source: "c", target: "b" },
+    ],
+  };
+  const index = buildGraphIndex(cyclicPayload);
+  assert.equal(index.cyclicEdges.length, 1);
+  assert.deepEqual(index.cyclicEdges[0], { source: "c", target: "b" });
+  assert.deepEqual(index.childrenById.get("a"), ["b"]);
+  assert.equal(index.childrenById.get("c")?.length, 0);
+});
+
+test("buildGraphIndex breaks a directed cycle into a tree plus cyclic edge", () => {
+  const index = buildGraphIndex({
+    nodes: [
+      { id: "a", label: "A", importance: 10 },
+      { id: "b", label: "B", importance: 5 },
+    ],
+    edges: [
+      { source: "a", target: "b" },
+      { source: "b", target: "a" },
+    ],
+  });
+
+  assert.deepEqual(index.rootIds, ["a"]);
+  assert.deepEqual(index.childrenById.get("a"), ["b"]);
+  assert.deepEqual(index.childrenById.get("b"), []);
+  assert.deepEqual(index.cyclicEdges, [{ source: "b", target: "a" }]);
+});

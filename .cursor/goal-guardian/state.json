@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "goal": "Unify the visual identity of the Signal Tree (/graph/flow) with the Neural Lattice (/graph) while implementing advanced graph intelligence and high-scale performance optimizations.",
+  "definition_of_done": [
+    "[SC-1] Glassmorphism nodes with type-color glow",
+    "[SC-2] Animated SVG signal edges (speed ∝ importance)",
+    "[SC-3] BFS flags cyclic edges for rendering",
+    "[SC-4] View in Lattice fly-to 3D camera",
+    "[SC-5] BFS tree transform in Web Worker",
+    "[SC-6] Dagre layout memoized by graph fingerprint"
+  ],
+  "constraints": [
+    "No silent scope expansion: every step must map to explicit success criteria IDs.",
+    "Keep updates in the state store instead of chat-only planning.",
+    "Prefer small, testable tasks with explicit completion criteria."
+  ],
+  "active_task": null,
+  "tasks": [
+    { "id": "sc_1", "title": "[SC-1] Glassmorphism nodes", "status": "done" },
+    { "id": "sc_2", "title": "[SC-2] Animated signal edges", "status": "done" },
+    { "id": "sc_3", "title": "[SC-3] Cycle detection & render", "status": "done" },
+    { "id": "sc_4", "title": "[SC-4] View in Lattice fly-to", "status": "done" },
+    { "id": "sc_5", "title": "[SC-5] BFS Web Worker", "status": "done" },
+    { "id": "sc_6", "title": "[SC-6] Dagre fingerprint memo", "status": "done" }
+  ],
+  "queue": [],
+  "open_questions": [],
+  "decisions": [],
+  "pinned_context": [".cursor-progress.json", "contract.json"],
+  "_meta": {
+    "lastUpdated": "2026-06-14T20:15:00.000Z"
+  }
+}

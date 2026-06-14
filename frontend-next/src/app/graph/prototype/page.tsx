@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
+import "../../../../public/gephi_lite.css";
 import GraphErrorBanner from "@/components/graph/GraphErrorBanner";
 import GraphHud from "@/components/graph/GraphHud";
 import GraphLoadingOverlay from "@/components/graph/GraphLoadingOverlay";
@@ -129,7 +130,6 @@ export default function GraphPage() {
       data-graph-variant="prototype"
       className="relative w-full h-screen bg-[#050202] overflow-hidden pointer-events-auto"
     >
-      <link rel="stylesheet" href="/gephi_lite.css" />
       <div className="absolute top-20 left-1/2 z-20 -translate-x-1/2 pointer-events-none">
         <span className="font-mono text-[10px] uppercase tracking-[0.35em] text-primary/80 border border-primary/30 bg-black/50 px-3 py-1 rounded-full">
           Graph Prototype

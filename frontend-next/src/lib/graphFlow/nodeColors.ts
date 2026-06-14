@@ -23,3 +23,26 @@ export function nodeTypeOf(node: { node_type?: string; type?: string }): string 
   if (typeof node.type === "string" && node.type) return node.type;
   return "story";
 }
+
+export function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const normalized = hex.trim();
+  const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(normalized);
+  if (!match) return null;
+  return {
+    r: Number.parseInt(match[1], 16),
+    g: Number.parseInt(match[2], 16),
+    b: Number.parseInt(match[3], 16),
+  };
+}
+
+/** Higher importance → shorter animation duration (faster signal). */
+export function signalDurationFromImportance(importance: number | undefined): number {
+  const imp = typeof importance === "number" ? Math.max(0, Math.min(importance, 10)) : 0;
+  return Math.max(0.35, 2.8 - imp * 0.25);
+}
+
+export function glowShadowForAccent(accentColor: string): string | undefined {
+  const rgb = hexToRgb(accentColor);
+  if (!rgb) return undefined;
+  return `0 0 15px rgba(${rgb.r},${rgb.g},${rgb.b},0.4), 0 0 32px rgba(${rgb.r},${rgb.g},${rgb.b},0.18)`;
+}

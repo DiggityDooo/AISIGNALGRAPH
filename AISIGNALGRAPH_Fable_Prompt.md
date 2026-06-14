@@ -7,7 +7,7 @@
 > is unspecified, use the most secure and performant option available.
 >
 > **Repo:** https://github.com/DiggityDooo/AISIGNALGRAPH
-> **Stack:** Python 3.11 / Flask / SQLite / Three.js / D3.js / WebGL GLSL / Google Cloud Run
+> **Stack:** Python 3.11 / Flask / SQLite / Three.js / D3.js / WebGL GLSL / Google Cloud Run / HTML
 > **Existing requirements.txt:** requests, requests-cache, beautifulsoup4, bleach, pymupdf,
 > python-docx, markdownify, Markdown, python-frontmatter, pathlib, tqdm, loguru, tenacity,
 > ollama, adroit, pandas, Flask

@@ -91,7 +91,7 @@ export class LabelAtlas {
     }
   }
 
-  updateVisibility(nodePositions, camera, minImportance = 2, maxDist = 400) {
+  updateVisibility(nodePositions, camera, maxDist = 400) {
     const cam = camera.position;
     for (const [nodeId, sprite] of this._sprites.entries()) {
       const pos = nodePositions.get(nodeId);

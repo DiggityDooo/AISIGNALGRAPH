@@ -1,0 +1,54 @@
+{
+  "goal": "Unify Signal Tree (/graph/flow) visual identity with Neural Lattice (/graph) plus graph intelligence and scale perf.",
+  "constraints": [
+    "Every task maps to SC-1..SC-6",
+    "Updates tracked here, not chat-only",
+    "Small atomic commits with explicit verification"
+  ],
+  "active": null,
+  "criteria": {
+    "SC-1": {
+      "title": "Glassmorphism nodes with type-color glow",
+      "phase": "1.1",
+      "status": "done",
+      "target": "frontend-next/src/components/visualization/flow/DocumentCardNode.tsx",
+      "verification": "Nodes semi-transparent with backdrop blur; outer glow matches node type accent"
+    },
+    "SC-2": {
+      "title": "Animated SVG signal edges (speed ∝ importance)",
+      "phase": "1.2",
+      "status": "done",
+      "target": "frontend-next/src/components/visualization/flow/SignalEdge.tsx",
+      "verification": "Marching dash animation on parent→child edges; higher importance = faster duration"
+    },
+    "SC-3": {
+      "title": "BFS flags cyclic edges for dashed render",
+      "phase": "2.1",
+      "status": "done",
+      "target": "frontend-next/src/lib/graphFlow/graphTransform.ts",
+      "verification": "Circular dependency shows purple dashed edge without layout break"
+    },
+    "SC-4": {
+      "title": "View in Lattice fly-to 3D camera",
+      "phase": "3.1",
+      "status": "done",
+      "target": "latticeBridge.ts + graph.js flyToNodeById",
+      "verification": "Button triggers smooth camera glide to node in 3D lattice"
+    },
+    "SC-5": {
+      "title": "BFS tree transform in Web Worker",
+      "phase": "4.1",
+      "status": "done",
+      "target": "graphTransform.worker.ts + hooks",
+      "verification": "Graphs ≥80 nodes offload index/tree build to worker"
+    },
+    "SC-6": {
+      "title": "Dagre layout memoized by graph fingerprint",
+      "phase": "4.2",
+      "status": "done",
+      "target": "frontend-next/src/lib/graphFlow/layoutUtils.ts",
+      "verification": "Re-render without data change skips dagre.layout"
+    }
+  },
+  "lastUpdated": "2026-06-14T20:15:00.000Z"
+}

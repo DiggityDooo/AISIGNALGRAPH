@@ -8,8 +8,8 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
   workers: 1,
-  reporter: [["list"], ["html", { open: "never", outputFolder: "e2e/report" }]],
-  outputDir: "e2e/test-results",
+  reporter: [["list"], ["html", { open: "never", outputFolder: ".playwright/report" }]],
+  outputDir: ".playwright/test-results",
   use: {
     baseURL,
     trace: "on-first-retry",

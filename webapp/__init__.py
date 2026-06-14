@@ -201,6 +201,10 @@ def create_app() -> Flask:
     def dashboard():
         return app.send_static_file("hub/graph.html")
 
+    @app.get("/graph/flow")
+    def graph_flow():
+        return app.send_static_file("hub/graph/flow.html")
+
     def _prototype_enabled() -> bool:
         return bool(app.config.get("GRAPH_PROTOTYPE_ENABLED"))
 

@@ -4,6 +4,7 @@ WORKDIR /build
 COPY frontend-next/package*.json ./
 RUN npm install
 COPY frontend-next/ ./
+ENV NEXT_PUBLIC_GRAPH_FLOW=1
 RUN npm run build
 
 # Stage 2: Build the Python backend

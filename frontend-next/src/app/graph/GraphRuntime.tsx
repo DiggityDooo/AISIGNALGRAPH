@@ -68,8 +68,11 @@ export default function GraphRuntime({ onReady, onError }: GraphRuntimeProps) {
       }
     };
 
-    const frameId = window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
+    let outerFrameId = 0;
+    let innerFrameId = 0;
+
+    outerFrameId = window.requestAnimationFrame(() => {
+      innerFrameId = window.requestAnimationFrame(() => {
         if (!disposed) {
           void bootstrap();
         }
@@ -77,7 +80,8 @@ export default function GraphRuntime({ onReady, onError }: GraphRuntimeProps) {
     });
 
     return () => {
-      window.cancelAnimationFrame(frameId);
+      window.cancelAnimationFrame(outerFrameId);
+      window.cancelAnimationFrame(innerFrameId);
       disposed = true;
       cleanup();
       delete runtimeWindow.gephiLite;

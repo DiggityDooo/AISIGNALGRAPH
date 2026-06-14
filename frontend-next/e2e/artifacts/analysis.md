@@ -10,13 +10,11 @@
   - hasMainOrAppRoot: pass
   - hasHero: pass
   - hasArchives: pass
+  - hasSplineRoot: pass
+  - noAccessDeniedLeak: pass
   - apiOverviewOk: pass
   - apiOverviewHasStats: pass
-  - expectedHeading: FAIL
-- Console errors (1):
-  - `Failed to load resource: the server responded with a status of 403 ()`
-- Failed requests:
-  - 403 https://my.spline.design/theeternalarc-tlFzTC78qR503Crv9MgluFWq-Ii3/embed/
+  - expectedHeading: pass
 
 ## stories — `/stories`
 - HTTP: 200
@@ -26,11 +24,7 @@
   - hasSiteHeader: pass
   - hasPrimaryNav: pass
   - hasMainOrAppRoot: pass
-  - expectedHeading: FAIL
-- Console errors (1):
-  - `Failed to load resource: the server responded with a status of 403 ()`
-- Failed requests:
-  - 403 https://my.spline.design/theeternalarc-tlFzTC78qR503Crv9MgluFWq-Ii3/embed/
+  - expectedHeading: pass
 
 ## entities — `/entities`
 - HTTP: 200
@@ -40,11 +34,7 @@
   - hasSiteHeader: pass
   - hasPrimaryNav: pass
   - hasMainOrAppRoot: pass
-  - expectedHeading: FAIL
-- Console errors (1):
-  - `Failed to load resource: the server responded with a status of 403 ()`
-- Failed requests:
-  - 403 https://my.spline.design/theeternalarc-tlFzTC78qR503Crv9MgluFWq-Ii3/embed/
+  - expectedHeading: pass
 
 ## graph — `/graph`
 - HTTP: 200
@@ -56,8 +46,4 @@
   - hasMainOrAppRoot: pass
   - hasAppRoot: pass
   - graphJsOk: pass
-  - expectedHeading: FAIL
-- Console errors (1):
-  - `Failed to load resource: the server responded with a status of 403 ()`
-- Failed requests:
-  - 403 https://my.spline.design/theeternalarc-tlFzTC78qR503Crv9MgluFWq-Ii3/embed/
+  - expectedHeading: pass

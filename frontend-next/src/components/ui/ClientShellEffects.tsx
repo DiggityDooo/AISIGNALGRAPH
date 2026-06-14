@@ -29,14 +29,16 @@ export default function ClientShellEffects() {
 
   useEffect(() => {
     if (!showSplineBackground) {
-      setMountSpline(false);
-      setPosterHidden(false);
-      return;
+      return undefined;
     }
 
-    setMountSpline(false);
-    setPosterHidden(false);
-    return scheduleAfterFirstPaint(() => setMountSpline(true));
+    const cancelPaint = scheduleAfterFirstPaint(() => setMountSpline(true));
+
+    return () => {
+      cancelPaint();
+      setMountSpline(false);
+      setPosterHidden(false);
+    };
   }, [showSplineBackground]);
 
   return (

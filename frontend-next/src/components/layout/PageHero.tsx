@@ -25,8 +25,8 @@ export default function PageHero({
 }: PageHeroProps) {
   return (
     <section
-      className={`hero-aeru relative w-full flex flex-col items-center justify-center px-6 pointer-events-none ${
-        compact ? "min-h-[42vh] pt-28 pb-16" : "min-h-screen pb-28 pt-28"
+      className={`hero-aeru relative w-full flex flex-col items-center justify-center px-6 ${
+        compact ? "min-h-[42vh] pt-28 pb-16 pointer-events-auto" : "min-h-screen pb-28 pt-28 pointer-events-none"
       }`}
     >
       <div className="hero-aeru__bg-title" aria-hidden>

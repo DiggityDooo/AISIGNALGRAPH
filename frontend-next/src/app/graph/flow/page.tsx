@@ -12,13 +12,13 @@ const ForceTree = dynamic(
   { ssr: false },
 );
 
-// Alternate react-d3-tree renderer; keep it out of SSR/export.
-const D3TreeContainer = dynamic(
-  () => import("@/components/visualization/D3TreeContainer"),
+// React Flow + dagre TB progressive explorer; keep it out of SSR/export.
+const SignalTreeGraph = dynamic(
+  () => import("@/components/visualization/SignalTreeGraph"),
   { ssr: false },
 );
 
-// React Flow + dagre progressive explorer; keep it out of SSR/export.
+// React Flow + dagre LR progressive explorer; keep it out of SSR/export.
 const SignalFlowGraph = dynamic(
   () => import("@/components/visualization/SignalFlowGraph"),
   { ssr: false },
@@ -62,6 +62,8 @@ export default function GraphFlowPage() {
         : "bg-transparent text-muted hover:text-white border-white/5 hover:border-white/10"
     }`;
 
+  const needsTreeData = viewMode === "force";
+
   return (
     <div className="relative w-full h-screen bg-[#050202] overflow-hidden pt-20">
       <header className="absolute top-20 left-0 right-0 z-20 flex justify-between items-center px-4 md:px-8 py-4 border-b border-white/5 bg-black/40 backdrop-blur-md">
@@ -96,9 +98,7 @@ export default function GraphFlowPage() {
         <div className="font-mono text-[10px] text-muted uppercase tracking-widest flex gap-6">
           <span>
             Visible:{" "}
-            <strong className="text-secondary">
-              {viewMode === "tree" ? "--" : visibleNodes}
-            </strong>
+            <strong className="text-secondary">{visibleNodes}</strong>
           </span>
           <span>
             Indexed:{" "}
@@ -120,7 +120,7 @@ export default function GraphFlowPage() {
             Failed to load signal graph — {error.message}
           </p>
         )}
-        {!error && loading && !tree && viewMode !== "flow" && (
+        {!error && loading && needsTreeData && !tree && (
           <p
             role="status"
             className="font-mono text-sm text-primary p-8 tracking-widest uppercase animate-pulse"
@@ -128,12 +128,12 @@ export default function GraphFlowPage() {
             Synthesizing signal tree…
           </p>
         )}
-        {!error && loading && viewMode === "flow" && !payload && (
+        {!error && loading && (viewMode === "flow" || viewMode === "tree") && !payload && (
           <p
             role="status"
             className="font-mono text-sm text-primary p-8 tracking-widest uppercase animate-pulse"
           >
-            Loading signal flow…
+            Loading signal graph…
           </p>
         )}
         {viewMode === "force" && tree && (
@@ -144,8 +144,13 @@ export default function GraphFlowPage() {
             onVisibleCountChange={setVisibleNodes}
           />
         )}
-        {viewMode === "tree" && tree && (
-          <D3TreeContainer data={tree} initialDepth={1} />
+        {viewMode === "tree" && payload && (
+          <SignalTreeGraph
+            payload={payload}
+            dataRevision={revision}
+            initialSeedCount={3}
+            onVisibleCountChange={setVisibleNodes}
+          />
         )}
         {viewMode === "flow" && payload && (
           <SignalFlowGraph

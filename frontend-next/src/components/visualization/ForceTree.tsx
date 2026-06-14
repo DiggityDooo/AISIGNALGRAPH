@@ -10,17 +10,8 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
-import {
-  forceSimulation,
-  forceLink,
-  forceManyBody,
-  forceCollide,
-  forceX,
-  forceY,
-  forceCenter,
-  type Simulation,
-  type SimulationNodeDatum,
-} from "d3-force";
+import { type Simulation, type SimulationNodeDatum } from "d3-force";
+import { runForceLayout } from "@/lib/graphFlow/layoutUtils";
 import { select } from "d3-selection";
 import { zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
 import type { RawNodeDatum } from "react-d3-tree";
@@ -328,25 +319,20 @@ export default function ForceTree({
     });
 
     const linkDistance = 140 * Math.max(0.75, Math.min(1.25, viewportScale));
-    const anchorStrength = 0.045;
 
     simRef.current?.stop();
-    const sim = forceSimulation<SimNode>(nodes)
-      .velocityDecay(0.22)
-      .force(
-        "link",
-        forceLink<SimNode, LayoutLink>(links)
-          .distance(linkDistance)
-          .strength(0.2),
-      )
-      .force("charge", forceManyBody<SimNode>().strength(-180).distanceMax(600))
-      .force(
-        "collide",
-        forceCollide<SimNode>((d) => radiusFor(d.data, (d.children?.length ?? 0) > 0) + 8),
-      )
-      .force("center", forceCenter(cx, cy).strength(0.04))
-      .force("x", forceX<SimNode>((d) => d.anchorX).strength(anchorStrength))
-      .force("y", forceY<SimNode>((d) => d.anchorY).strength(anchorStrength))
+    const sim = runForceLayout(nodes, links, {
+      chargeStrength: -800,
+      collidePadding: 12,
+      collideRadius: (d) =>
+        hitRadiusFor(d.data, (d.children?.length ?? 0) > 0),
+      linkDistance,
+      cx,
+      cy,
+      getAnchorX: (d) => d.anchorX,
+      getAnchorY: (d) => d.anchorY,
+      warmupTicks: structuralChange ? 100 : 0,
+    })
       .alpha(structuralChange ? 0.55 : 0.12)
       .alphaDecay(0.006)
       .alphaMin(0.001)

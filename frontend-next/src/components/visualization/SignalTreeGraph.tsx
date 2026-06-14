@@ -28,7 +28,7 @@ import { GraphLayoutProvider } from "@/components/visualization/flow/GraphLayout
 import { useProgressiveGraph } from "@/hooks/useProgressiveGraph";
 import { getLayoutedElements } from "@/lib/graphFlow/layoutUtils";
 
-export interface SignalFlowGraphProps {
+export interface SignalTreeGraphProps {
   payload: GraphApiPayload | null;
   dataRevision: string | null;
   initialSeedCount?: number;
@@ -56,12 +56,12 @@ function AutoFit({ layoutKey }: { layoutKey: string }) {
   return null;
 }
 
-function SignalFlowGraphInner({
+function SignalTreeGraphInner({
   payload,
   dataRevision,
   initialSeedCount = 3,
   onVisibleCountChange,
-}: SignalFlowGraphProps) {
+}: SignalTreeGraphProps) {
   const { graphIndex, layoutKey, rawNodes, rawEdges, onToggleExpand } =
     useProgressiveGraph({
       payload,
@@ -71,7 +71,7 @@ function SignalFlowGraphInner({
     });
 
   const layouted = useMemo(
-    () => getLayoutedElements(rawNodes, rawEdges, "flow"),
+    () => getLayoutedElements(rawNodes, rawEdges, "tree"),
     [rawNodes, rawEdges],
   );
 
@@ -105,7 +105,7 @@ function SignalFlowGraphInner({
   }
 
   return (
-    <GraphLayoutProvider mode="flow">
+    <GraphLayoutProvider mode="tree">
       <div className="h-full w-full bg-[#050202]">
         <ReactFlow
           nodes={nodes}
@@ -146,10 +146,10 @@ function SignalFlowGraphInner({
   );
 }
 
-export default function SignalFlowGraph(props: SignalFlowGraphProps) {
+export default function SignalTreeGraph(props: SignalTreeGraphProps) {
   return (
     <ReactFlowProvider>
-      <SignalFlowGraphInner {...props} />
+      <SignalTreeGraphInner {...props} />
     </ReactFlowProvider>
   );
 }

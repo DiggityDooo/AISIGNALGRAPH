@@ -15,6 +15,7 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  type Edge,
   type Node,
   type NodeChange,
 } from "@xyflow/react";
@@ -26,11 +27,15 @@ import {
 } from "@/components/visualization/flow/DocumentCardNode";
 import { GraphLayoutProvider } from "@/components/visualization/flow/GraphLayoutContext";
 import { useProgressiveGraph } from "@/hooks/useProgressiveGraph";
-import { getLayoutedElements } from "@/lib/graphFlow/layoutUtils";
+import {
+  getLayoutedElements,
+  type LayoutMode,
+} from "@/lib/graphFlow/layoutUtils";
 
-export interface SignalTreeGraphProps {
+export interface SignalCardGraphProps {
   payload: GraphApiPayload | null;
   dataRevision: string | null;
+  layoutMode: LayoutMode;
   initialSeedCount?: number;
   onVisibleCountChange?: (visible: number) => void;
 }
@@ -43,7 +48,7 @@ const defaultEdgeOptions = {
   style: { stroke: "rgba(0,224,255,0.7)", strokeWidth: 1.5 },
 };
 
-function AutoFit({ layoutKey }: { layoutKey: string }) {
+function AutoFit({ fitKey }: { fitKey: string }) {
   const { fitView } = useReactFlow();
 
   useEffect(() => {
@@ -51,37 +56,24 @@ function AutoFit({ layoutKey }: { layoutKey: string }) {
       void fitView({ padding: 0.2, duration: 800 });
     }, 40);
     return () => window.clearTimeout(timer);
-  }, [layoutKey, fitView]);
+  }, [fitKey, fitView]);
 
   return null;
 }
 
-function SignalTreeGraphInner({
-  payload,
-  dataRevision,
-  initialSeedCount = 3,
-  onVisibleCountChange,
-}: SignalTreeGraphProps) {
-  const { graphIndex, layoutKey, rawNodes, rawEdges, onToggleExpand } =
-    useProgressiveGraph({
-      payload,
-      dataRevision,
-      initialSeedCount,
-      onVisibleCountChange,
-    });
-
-  const layouted = useMemo(
-    () => getLayoutedElements(rawNodes, rawEdges, "tree"),
-    [rawNodes, rawEdges],
-  );
-
-  const [nodes, setNodes] = useState<Node<DocumentCardData>[]>(layouted.nodes);
-  const [edges, setEdges] = useState(layouted.edges);
-
-  useEffect(() => {
-    setNodes(layouted.nodes);
-    setEdges(layouted.edges);
-  }, [layoutKey, layouted]);
+function SignalCardGraphCanvas({
+  layoutMode,
+  fitKey,
+  layouted,
+  onToggleExpand,
+}: {
+  layoutMode: LayoutMode;
+  fitKey: string;
+  layouted: { nodes: Node<DocumentCardData>[]; edges: Edge[] };
+  onToggleExpand: (nodeId: string) => void;
+}) {
+  const [nodes, setNodes] = useState(layouted.nodes);
+  const [edges] = useState(layouted.edges);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setNodes((current) => applyNodeChanges(changes, current));
@@ -94,18 +86,8 @@ function SignalTreeGraphInner({
     [onToggleExpand],
   );
 
-  if (!graphIndex || nodes.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center bg-[#050202]">
-        <p className="font-mono text-xs uppercase tracking-widest text-white/35">
-          No signal roots indexed
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <GraphLayoutProvider mode="tree">
+    <GraphLayoutProvider mode={layoutMode}>
       <div className="h-full w-full bg-[#050202]">
         <ReactFlow
           nodes={nodes}
@@ -120,7 +102,6 @@ function SignalTreeGraphInner({
           zoomOnScroll
           nodesConnectable={false}
           elementsSelectable
-          fitView
           minZoom={0.08}
           maxZoom={1.8}
           proOptions={{ hideAttribution: true }}
@@ -139,17 +120,64 @@ function SignalTreeGraphInner({
             pannable
             zoomable
           />
-          <AutoFit layoutKey={layoutKey} />
+          <AutoFit fitKey={fitKey} />
         </ReactFlow>
       </div>
     </GraphLayoutProvider>
   );
 }
 
-export default function SignalTreeGraph(props: SignalTreeGraphProps) {
+function SignalCardGraphBody({
+  payload,
+  dataRevision,
+  layoutMode,
+  initialSeedCount = 3,
+  onVisibleCountChange,
+}: SignalCardGraphProps) {
+  const { graphIndex, layoutKey, fitKey, rawNodes, rawEdges, onToggleExpand } =
+    useProgressiveGraph({
+      payload,
+      dataRevision,
+      initialSeedCount,
+      onVisibleCountChange,
+    });
+
+  const layouted = useMemo(
+    () => getLayoutedElements(rawNodes, rawEdges, layoutMode),
+    [rawNodes, rawEdges, layoutMode],
+  );
+
+  if (!graphIndex || layouted.nodes.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center bg-[#050202]">
+        <p className="font-mono text-xs uppercase tracking-widest text-white/35">
+          No signal roots indexed
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <SignalCardGraphCanvas
+      key={layoutKey}
+      layoutMode={layoutMode}
+      fitKey={fitKey}
+      layouted={layouted}
+      onToggleExpand={onToggleExpand}
+    />
+  );
+}
+
+function SignalCardGraphInner(props: SignalCardGraphProps) {
+  return (
+    <SignalCardGraphBody key={props.dataRevision ?? "none"} {...props} />
+  );
+}
+
+export default function SignalCardGraph(props: SignalCardGraphProps) {
   return (
     <ReactFlowProvider>
-      <SignalTreeGraphInner {...props} />
+      <SignalCardGraphInner {...props} />
     </ReactFlowProvider>
   );
 }

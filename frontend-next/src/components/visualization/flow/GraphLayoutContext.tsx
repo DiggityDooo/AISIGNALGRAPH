@@ -1,8 +1,7 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-
-export type LayoutMode = "flow" | "tree";
+import type { LayoutMode } from "@/lib/graphFlow/layoutUtils";
 
 const GraphLayoutContext = createContext<LayoutMode>("flow");
 

@@ -117,22 +117,27 @@ export function useProgressiveGraph({
   initialSeedCount = 3,
   onVisibleCountChange,
 }: UseProgressiveGraphOptions) {
-  const [graphIndex, setGraphIndex] = useState<GraphIndex | null>(null);
-  const [seedIds, setSeedIds] = useState<string[]>([]);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const graphIndex = useMemo(
+    () => (payload ? buildGraphIndex(payload) : null),
+    [payload],
+  );
 
-  useEffect(() => {
-    if (!payload || !dataRevision) return;
-    const index = buildGraphIndex(payload);
-    setGraphIndex(index);
-    setSeedIds(pickSeedIds(index, initialSeedCount));
-    setExpandedIds(new Set());
-  }, [payload, dataRevision, initialSeedCount]);
+  const seedIds = useMemo(() => {
+    if (!graphIndex) return [];
+    return pickSeedIds(graphIndex, initialSeedCount);
+  }, [graphIndex, initialSeedCount]);
+
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
 
   const layoutKey = useMemo(() => {
     const expanded = [...expandedIds].sort().join(",");
     return `${dataRevision ?? "none"}:${seedIds.join(",")}:${expanded}`;
   }, [dataRevision, seedIds, expandedIds]);
+
+  const fitKey = useMemo(
+    () => `${dataRevision ?? "none"}:${seedIds.join(",")}`,
+    [dataRevision, seedIds],
+  );
 
   const { nodes: rawNodes, edges: rawEdges } = useMemo(() => {
     if (!graphIndex || seedIds.length === 0) {
@@ -162,6 +167,7 @@ export function useProgressiveGraph({
     seedIds,
     expandedIds,
     layoutKey,
+    fitKey,
     rawNodes,
     rawEdges,
     onToggleExpand,

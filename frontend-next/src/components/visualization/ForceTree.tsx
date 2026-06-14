@@ -248,6 +248,7 @@ export default function ForceTree({
   } | null>(null);
   const zoomReadyRef = useRef(false);
   const lastStructuralKeyRef = useRef("");
+  const tickRafRef = useRef<number | null>(null);
 
   const [, tick] = useReducer((n: number) => n + 1, 0);
 
@@ -331,7 +332,7 @@ export default function ForceTree({
       cy,
       getAnchorX: (d) => d.anchorX,
       getAnchorY: (d) => d.anchorY,
-      warmupTicks: structuralChange ? 100 : 0,
+      warmupTicks: structuralChange ? 25 : 0,
     })
       .alpha(structuralChange ? 0.55 : 0.12)
       .alphaDecay(0.006)
@@ -345,12 +346,20 @@ export default function ForceTree({
             vy: n.vy ?? 0,
           });
         }
-        tick();
+        if (tickRafRef.current !== null) return;
+        tickRafRef.current = requestAnimationFrame(() => {
+          tickRafRef.current = null;
+          tick();
+        });
       });
 
     simRef.current = sim;
     return () => {
       cancelled = true;
+      if (tickRafRef.current !== null) {
+        cancelAnimationFrame(tickRafRef.current);
+        tickRafRef.current = null;
+      }
       sim.stop();
     };
   }, [data, dims, collapsed, onVisibleCountChange]);

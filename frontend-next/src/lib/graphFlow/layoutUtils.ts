@@ -49,17 +49,14 @@ export function getLayoutedElements<T extends Record<string, unknown>>(
 
   const layoutedNodes = nodes.map((node) => {
     const positioned = graph.node(node.id);
+    const cx = typeof positioned?.x === "number" ? positioned.x : 0;
+    const cy = typeof positioned?.y === "number" ? positioned.y : 0;
     return {
       ...node,
       style: { width, height },
-      data: {
-        ...node.data,
-        layoutWidth: width,
-        layoutHeight: height,
-      },
       position: {
-        x: positioned.x - width / 2,
-        y: positioned.y - height / 2,
+        x: cx - width / 2,
+        y: cy - height / 2,
       },
     };
   });

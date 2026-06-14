@@ -3,6 +3,10 @@
 import { memo } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { useGraphLayoutMode } from "@/components/visualization/flow/GraphLayoutContext";
+import {
+  DOCUMENT_CARD_HEIGHT,
+  DOCUMENT_CARD_WIDTH,
+} from "@/lib/graphFlow/layoutUtils";
 
 export type DocumentCardData = {
   label: string;
@@ -12,8 +16,6 @@ export type DocumentCardData = {
   expanded: boolean;
   childCount: number;
   depth: number;
-  layoutWidth?: number;
-  layoutHeight?: number;
 };
 
 export type DocumentCardNodeType = Node<DocumentCardData, "documentCard">;
@@ -30,12 +32,16 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
 
   return (
     <div
-      className={`relative flex w-[280px] max-w-[280px] rounded-md border shadow-md transition-shadow ${
+      className={`relative flex rounded-md border shadow-md transition-shadow ${
         canExpand ? "border-white/15" : "border-white/8"
       } bg-black/80 ${
         selected ? "ring-2 ring-primary/70 shadow-lg shadow-primary/10" : ""
       }`}
-      style={{ minHeight: 100 }}
+      style={{
+        width: DOCUMENT_CARD_WIDTH,
+        maxWidth: DOCUMENT_CARD_WIDTH,
+        minHeight: DOCUMENT_CARD_HEIGHT,
+      }}
     >
       <span
         className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-md"

@@ -12,15 +12,9 @@ const ForceTree = dynamic(
   { ssr: false },
 );
 
-// React Flow + dagre TB progressive explorer; keep it out of SSR/export.
-const SignalTreeGraph = dynamic(
-  () => import("@/components/visualization/SignalTreeGraph"),
-  { ssr: false },
-);
-
-// React Flow + dagre LR progressive explorer; keep it out of SSR/export.
-const SignalFlowGraph = dynamic(
-  () => import("@/components/visualization/SignalFlowGraph"),
+// React Flow + dagre progressive explorer; keep it out of SSR/export.
+const SignalCardGraph = dynamic(
+  () => import("@/components/visualization/SignalCardGraph"),
   { ssr: false },
 );
 
@@ -43,7 +37,10 @@ export default function GraphFlowPage() {
     [payload],
   );
 
-  const tree = useDataTransformer(graphInput, revision);
+  const tree = useDataTransformer(
+    viewMode === "force" ? graphInput : null,
+    revision,
+  );
 
   if (!enabled) {
     return (
@@ -144,18 +141,11 @@ export default function GraphFlowPage() {
             onVisibleCountChange={setVisibleNodes}
           />
         )}
-        {viewMode === "tree" && payload && (
-          <SignalTreeGraph
+        {(viewMode === "tree" || viewMode === "flow") && payload && (
+          <SignalCardGraph
             payload={payload}
             dataRevision={revision}
-            initialSeedCount={3}
-            onVisibleCountChange={setVisibleNodes}
-          />
-        )}
-        {viewMode === "flow" && payload && (
-          <SignalFlowGraph
-            payload={payload}
-            dataRevision={revision}
+            layoutMode={viewMode}
             initialSeedCount={3}
             onVisibleCountChange={setVisibleNodes}
           />

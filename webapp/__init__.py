@@ -201,6 +201,16 @@ def create_app() -> Flask:
     def dashboard():
         return app.send_static_file("hub/graph.html")
 
+    def _prototype_enabled() -> bool:
+        return bool(app.config.get("GRAPH_PROTOTYPE_ENABLED"))
+
+    @app.get("/graph/prototype")
+    @app.get("/graph/Prototype")
+    def graph_prototype():
+        if not _prototype_enabled():
+            abort(404)
+        return app.send_static_file("hub/graph/prototype.html")
+
     @app.get("/stories")
     def stories():
         return app.send_static_file("hub/stories.html")
@@ -407,6 +417,11 @@ def create_app() -> Flask:
 
     @app.get("/<path:path>")
     def hub_assets(path):
+        if not _prototype_enabled() and (
+            path == "graph/prototype.html"
+            or path.startswith("graph/prototype/")
+        ):
+            abort(404)
         hub_file = Path(app.static_folder) / "hub" / path
         if hub_file.exists() and hub_file.is_file():
             return app.send_static_file(f"hub/{path}")

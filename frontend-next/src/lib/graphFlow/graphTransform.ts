@@ -3,12 +3,15 @@ import type {
   GraphApiEdge,
   GraphApiNode,
 } from "@/components/graph-flow/fetchGraphApi";
+import { connectionCountsFromTree } from "@/lib/graphFlow/nodeSizing";
+import { SYNTHETIC_ROOT_ID, SYNTHETIC_ROOT_LABEL } from "@/lib/graphFlow/syntheticRoot";
 import type { BuildTreeResult, CyclicEdge, GraphIndexSerializable } from "./graphTransformTypes";
 import { nodeTypeOf } from "./nodeColors";
 
-const SYNTHETIC_ROOT_NAME = "AISIGNALGRAPH";
-
-function toAttributes(node: GraphApiNode): RawNodeDatum["attributes"] {
+function toAttributes(
+  node: GraphApiNode,
+  degree?: number,
+): RawNodeDatum["attributes"] {
   const attributes: Record<string, string | number | boolean> = { id: node.id };
   for (const [key, value] of Object.entries(node)) {
     if (key === "id" || key === "label") continue;
@@ -20,6 +23,7 @@ function toAttributes(node: GraphApiNode): RawNodeDatum["attributes"] {
       attributes[key] = value;
     }
   }
+  if (typeof degree === "number") attributes.degree = degree;
   return attributes;
 }
 
@@ -147,12 +151,14 @@ export function buildTreeFromPayload(input: {
   edges: GraphApiEdge[];
 }): BuildTreeResult {
   const index = buildGraphIndexFromPayload(input);
+  const childrenMap = new Map(Object.entries(index.childrenById));
+  const connectionCounts = connectionCountsFromTree(childrenMap, index.cyclicEdges);
   const datumById = new Map<string, RawNodeDatum>();
 
   for (const [id, node] of Object.entries(index.nodeById)) {
     datumById.set(id, {
       name: node.label ?? node.id,
-      attributes: toAttributes(node),
+      attributes: toAttributes(node, connectionCounts.get(id) ?? 0),
     });
   }
 
@@ -169,8 +175,8 @@ export function buildTreeFromPayload(input: {
 
   return {
     tree: {
-      name: SYNTHETIC_ROOT_NAME,
-      attributes: { id: "__root__", type: "root", nodeCount: datumById.size },
+      name: SYNTHETIC_ROOT_LABEL,
+      attributes: { id: SYNTHETIC_ROOT_ID, type: "root", nodeCount: datumById.size },
       children: index.rootIds.flatMap((id) => {
         const datum = datumById.get(id);
         return datum ? [datum] : [];

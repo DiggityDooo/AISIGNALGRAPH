@@ -140,7 +140,8 @@ export default function GraphFlowPage() {
         )}
         {viewMode === "force" && tree && (
           <ForceTree
-            data={tree}
+            data={tree.tree}
+            cyclicEdges={tree.cyclicEdges}
             dataRevision={revision}
             initialSeedCount={8}
             onVisibleCountChange={setVisibleNodes}

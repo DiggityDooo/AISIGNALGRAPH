@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { RawNodeDatum } from "react-d3-tree";
 import type { GraphApiPayload } from "@/components/graph-flow/fetchGraphApi";
 import { buildTreeFromPayload } from "@/lib/graphFlow/graphTransform";
-import type { BuildTreeResult } from "@/lib/graphFlow/graphTransformTypes";
+import type { BuildTreeResult, CyclicEdge } from "@/lib/graphFlow/graphTransformTypes";
 
 const WORKER_THRESHOLD = 80;
 
@@ -12,10 +12,15 @@ type GraphTransformWorker = Worker & {
   postMessage(message: unknown): void;
 };
 
+export interface DataTransformerResult {
+  tree: RawNodeDatum;
+  cyclicEdges: CyclicEdge[];
+}
+
 type WorkerTreeState = {
   input: DataTransformerInput;
   revision: string | null;
-  tree: RawNodeDatum;
+  result: DataTransformerResult;
 };
 
 function createTransformWorker(): GraphTransformWorker | null {
@@ -98,7 +103,7 @@ export function computePriorityScore(
 export function useDataTransformer(
   input: DataTransformerInput | null,
   revision: string | null,
-): RawNodeDatum | null {
+): DataTransformerResult | null {
   const workerRef = useRef<GraphTransformWorker | null>(null);
   const [workerTree, setWorkerTree] = useState<WorkerTreeState | null>(null);
 
@@ -110,10 +115,10 @@ export function useDataTransformer(
     [],
   );
 
-  const syncTree = useMemo(() => {
+  const syncResult = useMemo(() => {
     if (!input) return null;
     if (input.nodes.length >= WORKER_THRESHOLD) return null;
-    return buildTreeFromPayload(input).tree;
+    return buildTreeFromPayload(input);
   }, [input]);
 
   useEffect(() => {
@@ -128,11 +133,11 @@ export function useDataTransformer(
     }
     const worker = workerRef.current;
     void (async () => {
-      let tree: RawNodeDatum;
+      let result: BuildTreeResult;
       try {
-        tree = worker
-          ? (await runWorkerBuildTree(worker, input, controller.signal)).tree
-          : buildTreeFromPayload(input).tree;
+        result = worker
+          ? await runWorkerBuildTree(worker, input, controller.signal)
+          : buildTreeFromPayload(input);
       } catch (error) {
         if (cancelled || controller.signal.aborted) return;
         if (!worker) {
@@ -142,13 +147,13 @@ export function useDataTransformer(
         worker.terminate();
         if (workerRef.current === worker) workerRef.current = null;
         try {
-          tree = buildTreeFromPayload(input).tree;
+          result = buildTreeFromPayload(input);
         } catch (fallbackError) {
           console.error("Failed to build graph tree", fallbackError);
           return;
         }
       }
-      if (!cancelled) setWorkerTree({ input, revision, tree });
+      if (!cancelled) setWorkerTree({ input, revision, result });
     })();
 
     return () => {
@@ -157,9 +162,9 @@ export function useDataTransformer(
     };
   }, [input, revision]);
 
-  if (syncTree) return syncTree;
+  if (syncResult) return syncResult;
   if (workerTree?.input === input && workerTree.revision === revision) {
-    return workerTree.tree;
+    return workerTree.result;
   }
   return null;
 }

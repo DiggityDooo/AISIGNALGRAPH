@@ -2,7 +2,10 @@ import type { Edge, Node } from "@xyflow/react";
 import type { GraphApiPayload } from "@/components/graph-flow/fetchGraphApi";
 import type { DocumentCardData } from "@/components/visualization/flow/DocumentCardNode";
 import { accentForType, nodeTypeOf } from "@/lib/graphFlow/nodeColors";
+import { DOCUMENT_CARD_HEIGHT, DOCUMENT_CARD_WIDTH } from "@/lib/graphFlow/layoutUtils";
+import { computeDegrees, degreeBasedSize } from "@/lib/graphFlow/nodeSizing";
 import { createSignalEdge } from "@/lib/graphFlow/signalEdge";
+import { SYNTHETIC_ROOT_ID, SYNTHETIC_ROOT_LABEL } from "@/lib/graphFlow/syntheticRoot";
 
 const DEFAULT_MAX_FLOW_NODES = 24;
 const FLOW_SEED_COUNT = 8;
@@ -93,14 +96,50 @@ export function buildFlowGraphElements(
   const nodeById = new Map(payload.nodes.map((node) => [node.id, node]));
   const visibleIds = selectFlowNodeIds(payload, maxNodes);
   const outgoingCount = new Map<string, number>();
+  const inDegreeVisible = new Map<string, number>();
 
   for (const edge of payload.edges) {
     if (!visibleIds.has(edge.source) || !visibleIds.has(edge.target)) continue;
     outgoingCount.set(edge.source, (outgoingCount.get(edge.source) ?? 0) + 1);
+    inDegreeVisible.set(edge.target, (inDegreeVisible.get(edge.target) ?? 0) + 1);
   }
 
-  const nodes = payload.nodes.filter((apiNode) => visibleIds.has(apiNode.id)).map((apiNode) => {
+  // True graph degree (not capped by visibility) drives card size, matching
+  // the regular graph's degree-based sizing.
+  const degrees = computeDegrees(payload);
+  const sizeFor = (id: string) => {
+    const scale = degreeBasedSize(degrees.get(id)?.total ?? 0, {
+      min: 0.85,
+      max: 1.45,
+      base: 0.95,
+      scale: 0.12,
+    });
+    return {
+      width: Math.round(DOCUMENT_CARD_WIDTH * scale),
+      height: Math.round(DOCUMENT_CARD_HEIGHT * scale),
+    };
+  };
+
+  // Hub all top-level branches fan out from, matching Lattice/Tree modes.
+  // Dense truncated subgraphs often have no in-degree-zero node at all (every
+  // visible node has a visible parent), so fall back to the top-ranked
+  // visible nodes — capped at FLOW_SEED_COUNT — to guarantee the hub always
+  // has somewhere to branch to.
+  const trueRootIds = [...visibleIds].filter((id) => (inDegreeVisible.get(id) ?? 0) === 0);
+  const rootIds =
+    trueRootIds.length > 0
+      ? trueRootIds
+      : [...visibleIds]
+          .sort(
+            (a, b) =>
+              flowNodeScore(b, nodeById, inDegreeVisible, outgoingCount) -
+              flowNodeScore(a, nodeById, inDegreeVisible, outgoingCount),
+          )
+          .slice(0, FLOW_SEED_COUNT);
+
+  const nodes: Node<DocumentCardData>[] = payload.nodes.filter((apiNode) => visibleIds.has(apiNode.id)).map((apiNode) => {
     const nodeType = nodeTypeOf(apiNode);
+    const { width, height } = sizeFor(apiNode.id);
     return {
       id: apiNode.id,
       type: "documentCard",
@@ -115,9 +154,30 @@ export function buildFlowGraphElements(
         depth: 0,
         nodeId: apiNode.id,
         progressive: false,
+        width,
+        height,
       },
     } satisfies Node<DocumentCardData>;
   });
+
+  nodes.push({
+    id: SYNTHETIC_ROOT_ID,
+    type: "documentCard",
+    position: { x: 0, y: 0 },
+    data: {
+      label: SYNTHETIC_ROOT_LABEL,
+      nodeType: "root",
+      accentColor: accentForType("root"),
+      hasChildren: rootIds.length > 0,
+      expanded: true,
+      childCount: rootIds.length,
+      depth: 0,
+      nodeId: SYNTHETIC_ROOT_ID,
+      progressive: false,
+      width: Math.round(DOCUMENT_CARD_WIDTH * 1.7),
+      height: Math.round(DOCUMENT_CARD_HEIGHT * 1.7),
+    },
+  } satisfies Node<DocumentCardData>);
 
   const seenEdgeIds = new Map<string, number>();
   const edges = payload.edges.flatMap((edge) => {
@@ -146,6 +206,18 @@ export function buildFlowGraphElements(
       }),
     ];
   });
+
+  for (const rootId of rootIds) {
+    edges.push(
+      createSignalEdge({
+        id: `e:${SYNTHETIC_ROOT_ID}->${rootId}`,
+        source: SYNTHETIC_ROOT_ID,
+        target: rootId,
+        accentColor: "#ffffff",
+        importance: 0,
+      }),
+    );
+  }
 
   return { nodes, edges };
 }

@@ -21,6 +21,9 @@ export type DocumentCardData = {
   depth: number;
   nodeId: string;
   progressive?: boolean;
+  /** Connection-count-based card size — falls back to the default constants. */
+  width?: number;
+  height?: number;
 };
 
 export type DocumentCardNodeType = Node<DocumentCardData, "documentCard">;
@@ -38,8 +41,11 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
     childCount,
     nodeId,
     progressive = true,
+    width = DOCUMENT_CARD_WIDTH,
+    height = DOCUMENT_CARD_HEIGHT,
   } = data;
   const canExpand = hasChildren && !expanded;
+  const isHub = nodeType === "root";
   const mode = useGraphLayoutMode();
   const targetPos = mode === "tree" ? Position.Top : Position.Left;
   const sourcePos = mode === "tree" ? Position.Bottom : Position.Right;
@@ -48,14 +54,18 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
   return (
     <div
       className={`relative flex rounded-md border backdrop-blur-md transition-shadow ${
-        canExpand ? "border-slate-600/50" : "border-slate-700/50"
+        isHub
+          ? "border-2 border-white/40"
+          : canExpand
+            ? "border-slate-600/50"
+            : "border-slate-700/50"
       } bg-slate-900/60 ${
         selected ? "ring-2 ring-primary/70" : ""
       }`}
       style={{
-        width: DOCUMENT_CARD_WIDTH,
-        maxWidth: DOCUMENT_CARD_WIDTH,
-        minHeight: DOCUMENT_CARD_HEIGHT,
+        width,
+        maxWidth: width,
+        minHeight: height,
         boxShadow: glow,
       }}
     >

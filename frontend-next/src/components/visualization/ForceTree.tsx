@@ -12,6 +12,8 @@ import {
 import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
 import { type Simulation, type SimulationNodeDatum } from "d3-force";
 import { runForceLayout } from "@/lib/graphFlow/layoutUtils";
+import { degreeBasedSize } from "@/lib/graphFlow/nodeSizing";
+import type { CyclicEdge } from "@/lib/graphFlow/graphTransformTypes";
 import { select } from "d3-selection";
 import { zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
 import type { RawNodeDatum } from "react-d3-tree";
@@ -20,6 +22,8 @@ export interface ForceTreeProps {
   data: RawNodeDatum | null;
   dataRevision?: string | null;
   initialSeedCount?: number;
+  /** Cross-branch connections that fall outside the radial tree — rendered as dashed links. */
+  cyclicEdges?: CyclicEdge[];
   onVisibleCountChange?: (visible: number) => void;
   onNodeSelect?: (node: RawNodeDatum) => void;
 }
@@ -79,17 +83,15 @@ function truncate(text: string): string {
   return text.length > MAX_LABEL ? `${text.slice(0, MAX_LABEL - 1)}…` : text;
 }
 
-function radiusFor(datum: RawNodeDatum, hasChildren: boolean): number {
-  if (datum.attributes?.type === "root") return 16;
-  const importance =
-    typeof datum.attributes?.importance === "number"
-      ? datum.attributes.importance
-      : 0;
-  return Math.max(5, Math.min(13, 6 + importance * 0.6 + (hasChildren ? 2 : 0)));
+function radiusFor(datum: RawNodeDatum): number {
+  if (datum.attributes?.type === "root") return 18;
+  const degree =
+    typeof datum.attributes?.degree === "number" ? datum.attributes.degree : 0;
+  return degreeBasedSize(degree, { min: 5, max: 16, base: 5, scale: 2.1 });
 }
 
-function hitRadiusFor(datum: RawNodeDatum, hasChildren: boolean): number {
-  const visualR = radiusFor(datum, hasChildren);
+function hitRadiusFor(datum: RawNodeDatum): number {
+  const visualR = radiusFor(datum);
   return Math.max(18, visualR + 12);
 }
 
@@ -197,6 +199,7 @@ export default function ForceTree({
   data,
   dataRevision,
   initialSeedCount = 8,
+  cyclicEdges = [],
   onVisibleCountChange,
   onNodeSelect,
 }: ForceTreeProps) {
@@ -325,8 +328,7 @@ export default function ForceTree({
     const sim = runForceLayout(nodes, links, {
       chargeStrength: -540,
       collidePadding: 9,
-      collideRadius: (d) =>
-        hitRadiusFor(d.data, (d.children?.length ?? 0) > 0),
+      collideRadius: (d) => hitRadiusFor(d.data),
       linkDistance,
       linkStrength: 0.1,
       anchorStrength: 0.012,
@@ -479,6 +481,20 @@ export default function ForceTree({
     () => [...nodes].sort((a, b) => (a.depth ?? 0) - (b.depth ?? 0)),
     [nodes],
   );
+  const nodeById = useMemo(() => {
+    const map = new Map<string, SimNode>();
+    for (const n of nodes) map.set(idOf(n.data), n);
+    return map;
+  }, [nodes]);
+  const visibleCyclicLinks = useMemo(
+    () =>
+      cyclicEdges.flatMap(({ source, target }) => {
+        const s = nodeById.get(source);
+        const t = nodeById.get(target);
+        return s && t ? [{ source: s, target: t }] : [];
+      }),
+    [cyclicEdges, nodeById],
+  );
 
   return (
     <div ref={wrapRef} style={{ width: "100%", height: "100%" }}>
@@ -504,6 +520,21 @@ export default function ForceTree({
             );
           })}
 
+          {visibleCyclicLinks.map(({ source: s, target: t }, i) => {
+            const mx = (s.x! + t.x!) / 2;
+            const my = (s.y! + t.y!) / 2;
+            return (
+              <path
+                key={`cyc-${idOf(s.data)}-${idOf(t.data)}-${i}`}
+                className="signal-tree__link"
+                stroke="rgba(167,139,250,0.45)"
+                strokeWidth={1.2}
+                strokeDasharray="3 4"
+                d={`M${s.x},${s.y} Q${mx},${my} ${t.x},${t.y}`}
+              />
+            );
+          })}
+
           {nodesByDepth.map((node) => {
             const datum = node.data;
             const accent = accentFor(datum);
@@ -515,8 +546,8 @@ export default function ForceTree({
             const nodeId = idOf(datum);
             const isCollapsed = childCount > 0 && collapsed.has(nodeId);
             const frontierExpand = canExpandFrontier(node, collapsed);
-            const r = radiusFor(datum, childCount > 0);
-            const hitR = hitRadiusFor(datum, childCount > 0);
+            const r = radiusFor(datum);
+            const hitR = hitRadiusFor(datum);
             return (
               <g
                 key={nodeId}

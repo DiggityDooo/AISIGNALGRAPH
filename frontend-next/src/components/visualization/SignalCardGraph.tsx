@@ -1,46 +1,42 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import type { GraphApiPayload } from "@/components/graph-flow/fetchGraphApi";
 import CardGraphCanvas from "@/components/visualization/CardGraphCanvas";
-import { buildFlowGraphElements } from "@/lib/graphFlow/flowElements";
+import { useProgressiveGraph } from "@/hooks/useProgressiveGraph";
 import { getLayoutedElements } from "@/lib/graphFlow/layoutUtils";
 
 export interface SignalCardGraphProps {
   payload: GraphApiPayload | null;
   dataRevision: string | null;
-  maxNodes?: number;
+  initialSeedCount?: number;
   onVisibleCountChange?: (visible: number) => void;
 }
 
-export default function SignalCardGraph({
+function SignalCardGraphBody({
   payload,
   dataRevision,
-  maxNodes = 24,
+  initialSeedCount = 3,
   onVisibleCountChange,
 }: SignalCardGraphProps) {
-  const elements = useMemo(
-    () =>
-      payload
-        ? buildFlowGraphElements(payload, maxNodes)
-        : { nodes: [], edges: [] },
-    [payload, maxNodes],
-  );
+  const { graphIndex, layoutKey, fitKey, rawNodes, rawEdges, onToggleExpand } =
+    useProgressiveGraph({
+      payload,
+      dataRevision,
+      initialSeedCount,
+      onVisibleCountChange,
+    });
 
   const layouted = useMemo(
     () =>
-      getLayoutedElements(elements.nodes, elements.edges, "flow", {
+      getLayoutedElements(rawNodes, rawEdges, "flow", {
         fingerprint: dataRevision ?? undefined,
         payload,
       }),
-    [elements, dataRevision, payload],
+    [rawNodes, rawEdges, dataRevision, payload],
   );
 
-  useEffect(() => {
-    onVisibleCountChange?.(layouted.nodes.length);
-  }, [layouted.nodes.length, onVisibleCountChange]);
-
-  if (layouted.nodes.length === 0) {
+  if (!graphIndex || layouted.nodes.length === 0) {
     return (
       <div className="flex h-full items-center justify-center bg-[#050202]">
         <p className="font-mono text-xs uppercase tracking-widest text-white/35">
@@ -52,10 +48,15 @@ export default function SignalCardGraph({
 
   return (
     <CardGraphCanvas
-      key={dataRevision ?? "none"}
+      key={layoutKey}
       layoutMode="flow"
-      fitKey={dataRevision ?? "none"}
+      fitKey={fitKey}
       layouted={layouted}
+      onToggleExpand={onToggleExpand}
     />
   );
+}
+
+export default function SignalCardGraph(props: SignalCardGraphProps) {
+  return <SignalCardGraphBody key={props.dataRevision ?? "none"} {...props} />;
 }

@@ -159,6 +159,7 @@ export default function GraphFlowPage() {
           <SignalCardGraph
             payload={payload}
             dataRevision={revision}
+            initialSeedCount={3}
             onVisibleCountChange={setVisibleNodes}
           />
         )}

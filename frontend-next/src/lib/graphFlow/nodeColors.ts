@@ -18,9 +18,16 @@ export function accentForType(type: string | undefined): string {
   return TYPE_COLOR.story;
 }
 
+/**
+ * The API stamps `node_type` as a coarse "entity" | "story" bucket and puts
+ * the real category (company/model/person/year/risk/topic/...) in `type` —
+ * same shape /graph's getNodeSemanticType() reads, so prefer `type` first to
+ * match its "biggest nodes first" behavior instead of collapsing every
+ * non-story node to "entity".
+ */
 export function nodeTypeOf(node: { node_type?: string; type?: string }): string {
-  if (typeof node.node_type === "string" && node.node_type) return node.node_type;
   if (typeof node.type === "string" && node.type) return node.type;
+  if (typeof node.node_type === "string" && node.node_type) return node.node_type;
   return "story";
 }
 

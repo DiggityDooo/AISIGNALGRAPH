@@ -27,18 +27,24 @@ function toAttributes(
   return attributes;
 }
 
-/** Prefer story/entity roots with high importance and recent year. */
+/**
+ * Mild type nudge only — importance and connectivity (below) are the
+ * primary signal, matching the seeding philosophy used by Force/Flow modes
+ * and the degree-based sizing on /graph. Keep the spread small so a highly
+ * important or well-connected node of any type can outrank a low-signal
+ * "headline" node. Keys match the real `type` values the API emits
+ * (graph_node_type() in webapp/graph_store.py) — companies land in "lab" or
+ * "product" depending on their group, and dates are "year" nodes.
+ */
 const SEED_TYPE_WEIGHT: Record<string, number> = {
   story: 1,
-  entity: 0.84,
-  topic: 0.74,
-  community: 0.68,
-  person: 0.62,
-  product: 0.56,
-  lab: 0.52,
-  model: 0.5,
-  risk: 0.42,
-  year: 0.36,
+  topic: 0.95,
+  product: 0.93,
+  lab: 0.92,
+  model: 0.9,
+  person: 0.88,
+  year: 0.86,
+  risk: 0.84,
 };
 
 function seedScore(
@@ -49,12 +55,12 @@ function seedScore(
   const node = nodeById.get(id);
   if (!node) return 0;
   const type = nodeTypeOf(node);
-  const typeW = SEED_TYPE_WEIGHT[type] ?? 0.45;
+  const typeW = SEED_TYPE_WEIGHT[type] ?? 0.75;
   const imp = typeof node.importance === "number" ? node.importance : 0;
   const year = typeof node.year === "number" ? node.year : 0;
   const childCount = (childrenById.get(id) ?? []).length;
   const branchW = Math.min(childCount, 10) * 0.05;
-  return typeW * 1000 + imp * 10 + year * 0.08 + branchW * 80;
+  return typeW * 10 + imp * 10 + year * 0.08 + branchW * 80;
 }
 
 function sortChildIds(ids: string[], nodeById: Map<string, GraphApiNode>): string[] {

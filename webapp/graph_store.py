@@ -4,6 +4,8 @@ import json
 import math
 import re
 import sqlite3
+import threading
+import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date
@@ -432,6 +434,8 @@ class GraphStore:
         self._entities: dict[str, EntityRecord] = {}
         self._stories: dict[str, StoryRecord] = {}
         self._entity_lookup = self._compile_entity_lookup()
+        self._last_ingest_check: float = 0.0
+        self._ingest_lock = threading.Lock()
         self.ensure_initialized()
 
     def _compile_entity_lookup(self) -> list[dict[str, Any]]:
@@ -1903,7 +1907,44 @@ class GraphStore:
     def _db_signature(self) -> int:
         return int(self.db_path.stat().st_mtime_ns) if self.db_path.exists() else 0
 
+    # How often a live request is allowed to trigger a check for newly
+    # scraped stories. Without this, new stories only ever reached the graph
+    # at process startup (DataLoader.load_stories() previously only ran from
+    # _run_migrations_and_load) — a long-lived Cloud Run instance could stay
+    # warm across many 4x/day scraper runs and never pick up new nodes until
+    # redeployed. /api/rebuild doesn't help either: it reseeds from the
+    # static master document/seed file, not the scraper's story feed.
+    _INGEST_CHECK_INTERVAL_SECONDS = 300
+
+    def _maybe_ingest_new_stories(self) -> None:
+        # A non-blocking lock makes "is it time?" + claim atomic so concurrent
+        # requests on a threaded server (the long-lived Cloud Run instance this
+        # whole mechanism targets) can't both pass the throttle and run two
+        # ingests against the same SQLite file at once. A request that loses
+        # the race just skips — the winner is already doing the work.
+        if not self._ingest_lock.acquire(blocking=False):
+            return
+        try:
+            now = time.monotonic()
+            if now - self._last_ingest_check < self._INGEST_CHECK_INTERVAL_SECONDS:
+                return
+            self._last_ingest_check = now
+
+            from .loader import DataLoader
+
+            try:
+                conn = self._connect()
+                try:
+                    DataLoader().load_stories(conn)
+                finally:
+                    conn.close()
+            except Exception as exc:  # noqa: BLE001 - a transient GCS/network hiccup must not break graph reads.
+                logger.warning(f"Background story ingest check failed (non-fatal): {exc}")
+        finally:
+            self._ingest_lock.release()
+
     def _refresh(self) -> None:
+        self._maybe_ingest_new_stories()
         signature = self._db_signature()
         if signature == self._signature:
             return

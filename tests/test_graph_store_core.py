@@ -589,3 +589,98 @@ class TestAppendStory:
         graph_store._append_story(stories, seen, s1)
         graph_store._append_story(stories, seen, s2)
         assert len(stories) == 2
+
+
+# ---------------------------------------------------------------------------
+# _maybe_ingest_new_stories / _refresh
+#
+# Regression coverage for: new scraped stories used to only ever reach the
+# graph at process startup (DataLoader.load_stories() only ran from
+# _run_migrations_and_load). A long-lived server process would never see
+# new nodes from the scraper without a restart. _refresh() now periodically
+# re-checks for new stories on its own.
+# ---------------------------------------------------------------------------
+
+class _FakeLoader:
+    """Stand-in for webapp.loader.DataLoader — records calls, never touches
+    real GCS/local story files."""
+
+    call_count = 0
+    raise_error = False
+
+    def load_stories(self, conn):
+        type(self).call_count += 1
+        if type(self).raise_error:
+            raise RuntimeError("simulated GCS hiccup")
+        return 0
+
+
+class TestMaybeIngestNewStories:
+    @pytest.fixture(autouse=True)
+    def _patch_loader(self, monkeypatch, graph_store):
+        import webapp.loader as loader_module
+
+        _FakeLoader.call_count = 0
+        _FakeLoader.raise_error = False
+        monkeypatch.setattr(loader_module, "DataLoader", _FakeLoader)
+        # graph_store is session-scoped (shared across the whole test file),
+        # so other tests may have already advanced its throttle clock —
+        # reset it so each test here starts from "interval elapsed".
+        graph_store._last_ingest_check = 0.0
+        yield
+
+    def test_calls_loader_on_first_check(self, graph_store):
+        graph_store._maybe_ingest_new_stories()
+        assert _FakeLoader.call_count == 1
+
+    def test_throttles_repeat_calls(self, graph_store):
+        graph_store._maybe_ingest_new_stories()
+        graph_store._maybe_ingest_new_stories()
+        graph_store._maybe_ingest_new_stories()
+        assert _FakeLoader.call_count == 1
+
+    def test_checks_again_once_interval_elapses(self, graph_store):
+        graph_store._maybe_ingest_new_stories()
+        graph_store._last_ingest_check -= graph_store._INGEST_CHECK_INTERVAL_SECONDS + 1
+        graph_store._maybe_ingest_new_stories()
+        assert _FakeLoader.call_count == 2
+
+    def test_loader_failure_does_not_raise(self, graph_store):
+        _FakeLoader.raise_error = True
+        graph_store._maybe_ingest_new_stories()  # must not raise
+        assert _FakeLoader.call_count == 1
+
+    def test_refresh_triggers_ingest_check(self, graph_store):
+        graph_store.get_graph_data()
+        assert _FakeLoader.call_count == 1
+        graph_store.get_graph_data()
+        assert _FakeLoader.call_count == 1  # still throttled
+
+    def test_skips_when_another_ingest_holds_the_lock(self, graph_store):
+        # Simulate a concurrent request mid-ingest: the lock is already held,
+        # so this caller must skip rather than run a second overlapping
+        # DataLoader against the same SQLite file.
+        acquired = graph_store._ingest_lock.acquire(blocking=False)
+        assert acquired
+        try:
+            graph_store._maybe_ingest_new_stories()
+            assert _FakeLoader.call_count == 0
+        finally:
+            graph_store._ingest_lock.release()
+
+    def test_concurrent_calls_ingest_at_most_once(self, graph_store):
+        import threading
+
+        barrier = threading.Barrier(8)
+
+        def worker():
+            barrier.wait()
+            graph_store._maybe_ingest_new_stories()
+
+        threads = [threading.Thread(target=worker) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        # The non-blocking lock + throttle claim means only one thread wins.
+        assert _FakeLoader.call_count == 1

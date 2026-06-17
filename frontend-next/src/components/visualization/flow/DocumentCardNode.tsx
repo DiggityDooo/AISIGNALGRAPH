@@ -46,6 +46,7 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
   } = data;
   const canExpand = hasChildren && !expanded;
   const isHub = nodeType === "root";
+  const isSection = nodeType === "section";
   const mode = useGraphLayoutMode();
   const targetPos = mode === "tree" ? Position.Top : Position.Left;
   const sourcePos = mode === "tree" ? Position.Bottom : Position.Right;
@@ -56,9 +57,11 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
       className={`relative flex rounded-md border backdrop-blur-md transition-shadow ${
         isHub
           ? "border-2 border-white/40"
-          : canExpand
-            ? "border-slate-600/50"
-            : "border-slate-700/50"
+          : isSection
+            ? "border border-dashed border-white/30"
+            : canExpand
+              ? "border-slate-600/50"
+              : "border-slate-700/50"
       } bg-slate-900/60 ${
         selected ? "ring-2 ring-primary/70" : ""
       }`}

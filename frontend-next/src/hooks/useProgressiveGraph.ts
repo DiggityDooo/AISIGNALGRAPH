@@ -9,38 +9,23 @@ import {
   collectDescendants,
   computeVisibleIds,
   hydrateGraphIndex,
-  pickSeedIds,
   type GraphIndex,
 } from "@/lib/graphFlow/graphIndex";
 import type { GraphIndexSerializable } from "@/lib/graphFlow/graphTransformTypes";
 import { accentForType, nodeTypeOf } from "@/lib/graphFlow/nodeColors";
 import { connectionCountsFromTree, degreeBasedSize } from "@/lib/graphFlow/nodeSizing";
+import { buildNavigationChildrenById, EMPTY_NAVIGATION_OVERLAY } from "@/lib/graphFlow/navigationSeeds";
 import { createSignalEdge } from "@/lib/graphFlow/signalEdge";
 import { DOCUMENT_CARD_HEIGHT, DOCUMENT_CARD_WIDTH } from "@/lib/graphFlow/layoutUtils";
 import { SYNTHETIC_ROOT_ID, SYNTHETIC_ROOT_LABEL } from "@/lib/graphFlow/syntheticRoot";
 
 const INDEX_WORKER_THRESHOLD = 80;
 
-/**
- * childrenById merged with the synthetic root → real-roots mapping.
- *
- * The hub's children are capped to the top-ranked `rootCap` roots (see
- * `pickSeedIds`/`seedScore`) rather than the full `index.rootIds` list, so a
- * corpus with dozens of in-degree-zero roots still only ever attaches a
- * handful of first-level branch cards under the hub. Without this cap,
- * expanding the hub (which happens by default on first paint) would reveal
- * every root as a visible-but-collapsed card instead of the intended top N.
- */
-function buildEffectiveChildrenById(index: GraphIndex, rootCap: number): Map<string, string[]> {
-  const map = new Map(index.childrenById);
-  if (!map.has(SYNTHETIC_ROOT_ID)) {
-    map.set(SYNTHETIC_ROOT_ID, pickSeedIds(index, rootCap));
-  }
-  return map;
-}
-
-/** nodeById merged with a synthetic "AI Signal Graph" hub node. */
-function buildEffectiveNodeById(index: GraphIndex): Map<string, GraphApiNode> {
+/** nodeById merged with a synthetic "AI Signal Graph" hub node and the navigation section cards. */
+function buildEffectiveNodeById(
+  index: GraphIndex,
+  sectionNodes: ReadonlyMap<string, GraphApiNode>,
+): Map<string, GraphApiNode> {
   const map = new Map(index.nodeById);
   if (!map.has(SYNTHETIC_ROOT_ID)) {
     map.set(SYNTHETIC_ROOT_ID, {
@@ -49,6 +34,9 @@ function buildEffectiveNodeById(index: GraphIndex): Map<string, GraphApiNode> {
       node_type: "root",
       type: "root",
     });
+  }
+  for (const [id, node] of sectionNodes) {
+    if (!map.has(id)) map.set(id, node);
   }
   return map;
 }
@@ -154,8 +142,9 @@ export function buildCardGraphElements(
   seedIds: string[],
   expandedIds: Set<string>,
   childrenById: Map<string, string[]>,
+  sectionNodes: ReadonlyMap<string, GraphApiNode>,
 ): { nodes: Node<DocumentCardData>[]; edges: Edge[] } {
-  const nodeById = buildEffectiveNodeById(index);
+  const nodeById = buildEffectiveNodeById(index, sectionNodes);
   const connectionCounts = connectionCountsFromTree(childrenById, index.cyclicEdges);
 
   const visibleIds = computeVisibleIds(seedIds, expandedIds, childrenById);
@@ -324,9 +313,9 @@ export function useProgressiveGraph({
       : null);
 
   // Always start from the single "AI Signal Graph" hub, matching Lattice
-  // mode — initialSeedCount now controls how many of the hub's top-ranked
-  // direct branches are attached (visible-but-collapsed) under the hub, not
-  // how many parallel roots exist or which nodes start expanded.
+  // mode — initialSeedCount is the per-section fan-out cap (years/labs/
+  // topics shown under Timeline/Organizations/Themes), not how many parallel
+  // roots exist or which nodes start expanded. See navigationSeeds.ts.
   const seedIds = useMemo(
     () => (graphIndex ? [SYNTHETIC_ROOT_ID] : []),
     [graphIndex],
@@ -334,10 +323,10 @@ export function useProgressiveGraph({
 
   // Only the hub itself starts expanded. computeVisibleIds() reveals a
   // node's children whenever that node is in expandedIds with no cap of its
-  // own, so expanding any root here would also reveal grandchildren on first
-  // paint. The top-N ranked roots still become visible (as collapsed "+N"
-  // cards) because buildEffectiveChildrenById() caps the hub's children to
-  // pickSeedIds(graphIndex, initialSeedCount) — see buildCardGraphElements.
+  // own, so expanding any node here would also reveal grandchildren on first
+  // paint. The three navigation sections still become visible (as
+  // collapsed "+N" cards) because buildEffectiveChildrenById() attaches them
+  // as the hub's children — see navigationSeeds.ts.
   const defaultExpandedIds = useMemo(() => {
     if (!graphIndex) return new Set<string>();
     return new Set([SYNTHETIC_ROOT_ID]);
@@ -362,21 +351,34 @@ export function useProgressiveGraph({
     [dataRevision, seedIds],
   );
 
-  // Computed once per (graphIndex, initialSeedCount) pair rather than inside
-  // buildCardGraphElements/onToggleExpand directly, since deriving it re-ranks
-  // every root via pickSeedIds/seedScore — no need to redo that sort on every
-  // expand/collapse toggle or render when neither input changed.
-  const effectiveChildrenById = useMemo(() => {
-    if (!graphIndex) return new Map<string, string[]>();
-    return buildEffectiveChildrenById(graphIndex, initialSeedCount);
-  }, [graphIndex, initialSeedCount]);
+  // The hub's children are the three navigation sections (Timeline,
+  // Organizations, Themes) — not `pickSeedIds(index.rootIds)`. In production
+  // every in-degree-zero root is an orphan labor/job-market story (no
+  // `event_date`, so no `year -> story` edge), not a meaningful top-level
+  // navigation item. See docs/claude-graph-navigation-seeds-plan.md.
+  //
+  // Computed once per (graphIndex, payload, initialSeedCount) tuple rather
+  // than inside buildCardGraphElements/onToggleExpand directly, since
+  // deriving it re-ranks years/labs/topics and rebuilds the mention/timeline
+  // edge reverse indexes — no need to redo that on every expand/collapse
+  // toggle or render when none of those inputs changed.
+  const navigationOverlay = useMemo(() => {
+    if (!graphIndex || !payload) return EMPTY_NAVIGATION_OVERLAY;
+    return buildNavigationChildrenById(payload, graphIndex.nodeById, graphIndex.childrenById, initialSeedCount);
+  }, [graphIndex, payload, initialSeedCount]);
 
   const { nodes: rawNodes, edges: rawEdges } = useMemo(() => {
     if (!graphIndex || seedIds.length === 0) {
       return { nodes: [] as Node<DocumentCardData>[], edges: [] as Edge[] };
     }
-    return buildCardGraphElements(graphIndex, seedIds, expandedIds, effectiveChildrenById);
-  }, [graphIndex, seedIds, expandedIds, effectiveChildrenById]);
+    return buildCardGraphElements(
+      graphIndex,
+      seedIds,
+      expandedIds,
+      navigationOverlay.childrenById,
+      navigationOverlay.sectionNodes,
+    );
+  }, [graphIndex, seedIds, expandedIds, navigationOverlay]);
 
   useEffect(() => {
     onVisibleCountChange?.(rawNodes.length);
@@ -385,11 +387,11 @@ export function useProgressiveGraph({
   const onToggleExpand = useCallback(
     (nodeId: string) => {
       if (!graphIndex) return;
-      const children = effectiveChildrenById.get(nodeId) ?? [];
+      const children = navigationOverlay.childrenById.get(nodeId) ?? [];
       if (children.length === 0) return;
-      setExpandedIds((prev) => toggleExpanded(nodeId, prev, effectiveChildrenById));
+      setExpandedIds((prev) => toggleExpanded(nodeId, prev, navigationOverlay.childrenById));
     },
-    [graphIndex, effectiveChildrenById],
+    [graphIndex, navigationOverlay],
   );
 
   return {

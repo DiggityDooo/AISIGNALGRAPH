@@ -1,6 +1,7 @@
 /** Accent colors keyed by graph node type — shared across flow renderers. */
 export const TYPE_COLOR: Record<string, string> = {
   root: "#94a3b8",
+  section: "#e2e8f0",
   story: "#00e0ff",
   entity: "#7c5cff",
   lab: "#ff5c8a",

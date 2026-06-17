@@ -2,6 +2,8 @@
 
 > For Claude/agents editing graph behavior in `/graph/flow`.
 > Keep these modes separate. They are intentionally different.
+>
+> **Startup seeds / hub children:** see `docs/claude-graph-navigation-seeds-plan.md` — that doc explains why orphan stories (e.g. Junior Software Engineer) must not be first-level hub cards and how Timeline / Organizations / Themes sections should work.
 
 ---
 
@@ -63,21 +65,20 @@
 - Relationship reading mode in left-to-right direction.
 - Should be compact like Tree, but oriented as a flow.
 
-### Runtime (current)
+### Runtime
 - Component: `SignalCardGraph`
+- Hook: `useProgressiveGraph` (same as Tree)
 - Layout: `getLayoutedElements(..., "flow")` (`LR`, left-to-right)
-- Data build currently from `buildFlowGraphElements(...)`
-- Current behavior uses static selection cap (`maxNodes`, default 24), not true progressive expansion
+- Interaction: double-tap expand/collapse via `onToggleExpand`
+- Seed default from route: `initialSeedCount={3}` (fan-out per section — see navigation seeds plan)
 
-### Expected first paint (target)
-- Should mirror Tree's compact startup:
-  - hub + a few top branches
-  - no large subgraph dump
-  - grow only as user asks
+### Expected first paint (strict)
+- Same navigation as Tree: hub + 3 **section** cards (Timeline, Organizations, Themes).
+- Not orphan stories. Not 20+ card dump.
+- Grow only as user expands.
 
 ### Gap to close
-- Flow is currently a capped static slice.
-- Desired direction is progressive parity with Tree behavior, while keeping LR layout.
+- Hub children still come from `pickSeedIds(index.rootIds)` until `navigationSeeds.ts` lands — see `claude-graph-navigation-seeds-plan.md`.
 
 ---
 

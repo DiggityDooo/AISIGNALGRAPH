@@ -7,26 +7,42 @@
 
 ---
 
-## LATTICE Mode (ForceTree)
+## LATTICE Mode (SigmaLatticeGraph)
 
 ### Purpose
-- Exploratory, high-level constellation view.
+- Exploratory, full-corpus constellation view — every live node/edge at once,
+  same engine `/graph` uses, embedded in React.
 - Good for scanning global structure and jumping to interesting clusters.
 
 ### Runtime
-- Component: `ForceTree`
-- Layout: D3 force/radial style (not dagre card layout)
-- Interaction: frontier click/expand behavior specific to ForceTree
-- Seed default: `initialSeedCount={8}`
+- Component: `SigmaLatticeGraph`
+- Renderer: `sigma` (WebGL) over a `graphology` graph built from the full
+  `/api/graph` payload — no cap, no progressive disclosure. SVG/D3-force
+  (the old `ForceTree`) couldn't hold the full corpus at interactive
+  framerate past a few hundred nodes; WebGL can.
+- Layout: `graphology-layout-forceatlas2`, run once (bounded iterations) on
+  mount, not a continuous per-frame simulation — the "run quick" lever is
+  not re-laying-out every frame, not the renderer.
+- Sizing/coloring: reused from `nodeSizing.ts` (`degreeBasedSize`/
+  `computeDegrees`) and `nodeColors.ts` (`accentForType`/`nodeTypeOf`) — same
+  helpers Tree/Flow use, so Lattice stays visually consistent with them.
+- Interaction: click a node to highlight it + its direct neighbors (dims
+  everything else) — the "tree feature" here, since nothing needs to be
+  hidden for performance anymore, navigation is about attention, not
+  visibility. Double-click uses Sigma's native zoom-toward-click. A
+  "View in 3D" link (`buildLatticeFocusHref`, `latticeBridge.ts`) on the
+  focused-node overlay still jumps to the full `/graph` 3D experience,
+  unchanged convention.
 
 ### Expected first paint
-- Can show a broader cluster than Tree/Flow.
-- This mode is allowed to feel "network-like" and less strictly hierarchical.
+- Shows the entire live corpus, not a curated subset — this mode is
+  intentionally NOT progressive-disclosure like Tree/Flow.
 
 ### Guardrails
-- Do not force Lattice constraints onto Tree/Flow.
-- Do not reuse Lattice seed defaults for Tree/Flow.
-- Keep Lattice as the exploratory mode; Tree/Flow are progressive card modes.
+- Do not force Lattice constraints onto Tree/Flow, or vice versa.
+- Do not give Lattice a seed-count/fan-out cap — full corpus is the point.
+- Keep Lattice as the exploratory, full-graph mode; Tree/Flow are
+  progressive card modes.
 
 ---
 
@@ -77,8 +93,10 @@
 - Not orphan stories. Not 20+ card dump.
 - Grow only as user expands.
 
-### Gap to close
-- Hub children still come from `pickSeedIds(index.rootIds)` until `navigationSeeds.ts` lands — see `claude-graph-navigation-seeds-plan.md`.
+### Status
+- Navigation sections landed (`navigationSeeds.ts`) — hub children are
+  Timeline/Organizations/Themes, not `pickSeedIds(index.rootIds)`. See
+  `claude-graph-navigation-seeds-plan.md` for the full history/rationale.
 
 ---
 
@@ -122,11 +140,12 @@
 
 ## File Map (for fast edits)
 
-- `frontend-next/src/components/visualization/ForceTree.tsx` -> Lattice mode behavior
+- `frontend-next/src/components/visualization/SigmaLatticeGraph.tsx` -> Lattice mode (Sigma/WebGL, full corpus)
 - `frontend-next/src/components/visualization/ProgressiveTreeGraph.tsx` -> Tree wiring
-- `frontend-next/src/hooks/useProgressiveGraph.ts` -> Tree progressive state model
 - `frontend-next/src/components/visualization/SignalCardGraph.tsx` -> Flow wiring
-- `frontend-next/src/lib/graphFlow/flowElements.ts` -> Flow static selection logic
+- `frontend-next/src/hooks/useProgressiveGraph.ts` -> Tree/Flow progressive state model (both modes share this hook)
+- `frontend-next/src/lib/graphFlow/navigationSeeds.ts` -> Tree/Flow hub section picker (Timeline/Organizations/Themes)
 - `frontend-next/src/lib/graphFlow/layoutUtils.ts` -> Tree vs Flow orientation (`TB` vs `LR`)
-- `frontend-next/src/components/visualization/CardGraphCanvas.tsx` -> shared card canvas
+- `frontend-next/src/components/visualization/CardGraphCanvas.tsx` -> shared card canvas (Tree/Flow only)
+- `frontend-next/src/lib/graphFlow/nodeSizing.ts` / `nodeColors.ts` -> sizing/coloring shared across all three modes
 

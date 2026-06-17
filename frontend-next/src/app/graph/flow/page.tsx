@@ -1,14 +1,13 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useGraphData } from "@/hooks/useGraphData";
-import { useDataTransformer } from "@/hooks/useDataTransformer";
 import { isGraphFlowEnabled } from "@/lib/graphFlow/featureFlag";
 
-// d3-force + browser layout APIs; keep it out of SSR/export.
-const ForceTree = dynamic(
-  () => import("@/components/visualization/ForceTree"),
+// sigma/WebGL renderer; keep it out of SSR/export.
+const SigmaLatticeGraph = dynamic(
+  () => import("@/components/visualization/SigmaLatticeGraph"),
   { ssr: false },
 );
 
@@ -37,16 +36,6 @@ export default function GraphFlowPage() {
     refreshMs: GRAPH_REFRESH_MS,
   });
 
-  const graphInput = useMemo(
-    () => (payload ? { nodes: payload.nodes, edges: payload.edges } : null),
-    [payload],
-  );
-
-  const tree = useDataTransformer(
-    viewMode === "force" ? graphInput : null,
-    revision,
-  );
-
   if (!enabled) {
     return (
       <div className="relative w-full h-screen bg-[#050202] flex items-center justify-center">
@@ -63,8 +52,6 @@ export default function GraphFlowPage() {
         ? "bg-primary/20 text-primary border-primary/40 font-bold"
         : "bg-transparent text-muted hover:text-white border-white/5 hover:border-white/10"
     }`;
-
-  const needsTreeData = viewMode === "force";
 
   return (
     <div className="relative w-full h-screen bg-[#050202] overflow-hidden pt-20">
@@ -122,15 +109,7 @@ export default function GraphFlowPage() {
             Failed to load signal graph — {error.message}
           </p>
         )}
-        {!error && loading && needsTreeData && !tree && (
-          <p
-            role="status"
-            className="font-mono text-sm text-primary p-8 tracking-widest uppercase animate-pulse"
-          >
-            Synthesizing signal tree…
-          </p>
-        )}
-        {!error && loading && (viewMode === "flow" || viewMode === "tree") && !payload && (
+        {!error && loading && !payload && (
           <p
             role="status"
             className="font-mono text-sm text-primary p-8 tracking-widest uppercase animate-pulse"
@@ -138,12 +117,10 @@ export default function GraphFlowPage() {
             Loading signal graph…
           </p>
         )}
-        {viewMode === "force" && tree && (
-          <ForceTree
-            data={tree.tree}
-            cyclicEdges={tree.cyclicEdges}
+        {viewMode === "force" && payload && (
+          <SigmaLatticeGraph
+            payload={payload}
             dataRevision={revision}
-            initialSeedCount={8}
             onVisibleCountChange={setVisibleNodes}
           />
         )}

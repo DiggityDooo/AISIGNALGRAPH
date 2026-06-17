@@ -2,8 +2,8 @@ import type { GraphApiPayload } from "@/components/graph-flow/fetchGraphApi";
 
 /**
  * Stable revision key for graph payloads. Node metadata matters because labels,
- * colors, importance-driven animation, and ForceTree attributes all derive from
- * it even when node IDs and edge endpoints are unchanged.
+ * colors, and importance-driven animation all derive from it even when node
+ * IDs and edge endpoints are unchanged.
  */
 export function graphPayloadFingerprint(payload: GraphApiPayload): string {
   let primary = 0x811c9dc5;

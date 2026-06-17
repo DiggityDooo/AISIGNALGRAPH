@@ -87,18 +87,20 @@ test("Full video walkthrough of today's changes", async ({ page, context }) => {
   await page.goto("/graph/flow", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page.waitForTimeout(6000); // Let force sim settle
 
-  // Try interacting with the ForceTree SVG
+  // Switch to the Sigma/WebGL Lattice mode and interact with its canvas.
   try {
-    // Wait for the SVG to actually appear in the DOM
-    const svgLocator = page.locator("svg").first();
-    await svgLocator.waitFor({ state: "attached", timeout: 15_000 });
-    const svgBox = await svgLocator.boundingBox();
+    await page.click("#toggle-layout-force", { timeout: 15_000 });
+    // Wait for the WebGL canvas to mount (Lattice renders into <canvas>, not SVG).
+    const canvasLocator = page.locator("canvas").first();
+    await canvasLocator.waitFor({ state: "attached", timeout: 15_000 });
+    await page.waitForTimeout(3000); // ForceAtlas2 layout + Sigma mount
+    const canvasBox = await canvasLocator.boundingBox();
 
-    if (svgBox && svgBox.width > 100 && svgBox.height > 100) {
-      const cx = svgBox.x + svgBox.width / 2;
-      const cy = svgBox.y + svgBox.height / 2;
+    if (canvasBox && canvasBox.width > 100 && canvasBox.height > 100) {
+      const cx = canvasBox.x + canvasBox.width / 2;
+      const cy = canvasBox.y + canvasBox.height / 2;
 
-      // Click nodes to show expand/collapse + sibling focus
+      // Click nodes to show focus / neighbor highlight
       await page.mouse.click(cx + 80, cy - 40);
       await page.waitForTimeout(2500);
 

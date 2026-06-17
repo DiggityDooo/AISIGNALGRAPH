@@ -5,7 +5,9 @@
  * exactly as served by the Flask `GraphStore` (the scraper's source of truth)
  * without mutating its schema or content. Shape transformation into the
  * hierarchical structure required by `react-d3-tree` happens downstream in
- * `useDataTransformer`.
+ * `buildGraphIndexFromPayload` (graphTransform.ts), used by Tree/Flow's
+ * `useProgressiveGraph`. Lattice consumes this flat payload directly into a
+ * `graphology` graph (SigmaLatticeGraph.tsx) — no hierarchy transform needed.
  */
 
 export interface GraphApiNode {

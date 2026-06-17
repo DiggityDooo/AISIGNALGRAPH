@@ -21,10 +21,21 @@ import { SYNTHETIC_ROOT_ID, SYNTHETIC_ROOT_LABEL } from "@/lib/graphFlow/synthet
 
 const INDEX_WORKER_THRESHOLD = 80;
 
-/** childrenById merged with the synthetic root → real-roots mapping. */
-function buildEffectiveChildrenById(index: GraphIndex): Map<string, string[]> {
+/**
+ * childrenById merged with the synthetic root → real-roots mapping.
+ *
+ * The hub's children are capped to the top-ranked `rootCap` roots (see
+ * `pickSeedIds`/`seedScore`) rather than the full `index.rootIds` list, so a
+ * corpus with dozens of in-degree-zero roots still only ever attaches a
+ * handful of first-level branch cards under the hub. Without this cap,
+ * expanding the hub (which happens by default on first paint) would reveal
+ * every root as a visible-but-collapsed card instead of the intended top N.
+ */
+function buildEffectiveChildrenById(index: GraphIndex, rootCap: number): Map<string, string[]> {
   const map = new Map(index.childrenById);
-  if (!map.has(SYNTHETIC_ROOT_ID)) map.set(SYNTHETIC_ROOT_ID, index.rootIds);
+  if (!map.has(SYNTHETIC_ROOT_ID)) {
+    map.set(SYNTHETIC_ROOT_ID, pickSeedIds(index, rootCap));
+  }
   return map;
 }
 
@@ -142,9 +153,9 @@ export function buildCardGraphElements(
   index: GraphIndex,
   seedIds: string[],
   expandedIds: Set<string>,
+  childrenById: Map<string, string[]>,
 ): { nodes: Node<DocumentCardData>[]; edges: Edge[] } {
   const nodeById = buildEffectiveNodeById(index);
-  const childrenById = buildEffectiveChildrenById(index);
   const connectionCounts = connectionCountsFromTree(childrenById, index.cyclicEdges);
 
   const visibleIds = computeVisibleIds(seedIds, expandedIds, childrenById);
@@ -314,17 +325,23 @@ export function useProgressiveGraph({
 
   // Always start from the single "AI Signal Graph" hub, matching Lattice
   // mode — initialSeedCount now controls how many of the hub's top-ranked
-  // direct branches are expanded by default, not how many parallel roots exist.
+  // direct branches are attached (visible-but-collapsed) under the hub, not
+  // how many parallel roots exist or which nodes start expanded.
   const seedIds = useMemo(
     () => (graphIndex ? [SYNTHETIC_ROOT_ID] : []),
     [graphIndex],
   );
 
+  // Only the hub itself starts expanded. computeVisibleIds() reveals a
+  // node's children whenever that node is in expandedIds with no cap of its
+  // own, so expanding any root here would also reveal grandchildren on first
+  // paint. The top-N ranked roots still become visible (as collapsed "+N"
+  // cards) because buildEffectiveChildrenById() caps the hub's children to
+  // pickSeedIds(graphIndex, initialSeedCount) — see buildCardGraphElements.
   const defaultExpandedIds = useMemo(() => {
     if (!graphIndex) return new Set<string>();
-    const rankedRoots = pickSeedIds(graphIndex, initialSeedCount);
-    return new Set([SYNTHETIC_ROOT_ID, ...rankedRoots]);
-  }, [graphIndex, initialSeedCount]);
+    return new Set([SYNTHETIC_ROOT_ID]);
+  }, [graphIndex]);
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const defaultsAppliedRef = useRef(false);
@@ -345,12 +362,21 @@ export function useProgressiveGraph({
     [dataRevision, seedIds],
   );
 
+  // Computed once per (graphIndex, initialSeedCount) pair rather than inside
+  // buildCardGraphElements/onToggleExpand directly, since deriving it re-ranks
+  // every root via pickSeedIds/seedScore — no need to redo that sort on every
+  // expand/collapse toggle or render when neither input changed.
+  const effectiveChildrenById = useMemo(() => {
+    if (!graphIndex) return new Map<string, string[]>();
+    return buildEffectiveChildrenById(graphIndex, initialSeedCount);
+  }, [graphIndex, initialSeedCount]);
+
   const { nodes: rawNodes, edges: rawEdges } = useMemo(() => {
     if (!graphIndex || seedIds.length === 0) {
       return { nodes: [] as Node<DocumentCardData>[], edges: [] as Edge[] };
     }
-    return buildCardGraphElements(graphIndex, seedIds, expandedIds);
-  }, [graphIndex, seedIds, expandedIds]);
+    return buildCardGraphElements(graphIndex, seedIds, expandedIds, effectiveChildrenById);
+  }, [graphIndex, seedIds, expandedIds, effectiveChildrenById]);
 
   useEffect(() => {
     onVisibleCountChange?.(rawNodes.length);
@@ -359,12 +385,11 @@ export function useProgressiveGraph({
   const onToggleExpand = useCallback(
     (nodeId: string) => {
       if (!graphIndex) return;
-      const childrenById = buildEffectiveChildrenById(graphIndex);
-      const children = childrenById.get(nodeId) ?? [];
+      const children = effectiveChildrenById.get(nodeId) ?? [];
       if (children.length === 0) return;
-      setExpandedIds((prev) => toggleExpanded(nodeId, prev, childrenById));
+      setExpandedIds((prev) => toggleExpanded(nodeId, prev, effectiveChildrenById));
     },
-    [graphIndex],
+    [graphIndex, effectiveChildrenById],
   );
 
   return {

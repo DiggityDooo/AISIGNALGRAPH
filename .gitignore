@@ -34,6 +34,8 @@ wheels/
 *.egg
 MANIFEST
 .pytest_cache/
+.coverage
+htmlcov/
 
 # Node / Frontend
 node_modules/

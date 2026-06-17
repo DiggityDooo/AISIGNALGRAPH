@@ -82,15 +82,20 @@ export function getLayoutedElements<T extends Record<string, unknown>>(
   }
 
   const { rankdir, nodesep, ranksep } = LAYOUT_CONFIG[mode];
-  const width = DOCUMENT_CARD_WIDTH;
-  const height = DOCUMENT_CARD_HEIGHT;
+
+  const sizeOf = (node: Node<T>): { width: number; height: number } => {
+    const data = node.data as { width?: unknown; height?: unknown } | undefined;
+    const width = typeof data?.width === "number" ? data.width : DOCUMENT_CARD_WIDTH;
+    const height = typeof data?.height === "number" ? data.height : DOCUMENT_CARD_HEIGHT;
+    return { width, height };
+  };
 
   const graph = new dagre.graphlib.Graph();
   graph.setDefaultEdgeLabel(() => ({}));
   graph.setGraph({ rankdir, nodesep, ranksep });
 
   for (const node of nodes) {
-    graph.setNode(node.id, { width, height });
+    graph.setNode(node.id, sizeOf(node));
   }
   for (const edge of edges) {
     graph.setEdge(edge.source, edge.target);
@@ -100,6 +105,7 @@ export function getLayoutedElements<T extends Record<string, unknown>>(
 
   const layoutedNodes = nodes.map((node) => {
     const positioned = graph.node(node.id);
+    const { width, height } = sizeOf(node);
     const cx = typeof positioned?.x === "number" ? positioned.x : 0;
     const cy = typeof positioned?.y === "number" ? positioned.y : 0;
     return {

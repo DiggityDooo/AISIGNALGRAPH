@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Edge, type Node } from "@xyflow/react";
-import type { GraphApiPayload } from "@/components/graph-flow/fetchGraphApi";
+import type { GraphApiNode, GraphApiPayload } from "@/components/graph-flow/fetchGraphApi";
 import type { DocumentCardData } from "@/components/visualization/flow/DocumentCardNode";
 import {
   buildGraphIndex,
@@ -14,9 +14,33 @@ import {
 } from "@/lib/graphFlow/graphIndex";
 import type { GraphIndexSerializable } from "@/lib/graphFlow/graphTransformTypes";
 import { accentForType, nodeTypeOf } from "@/lib/graphFlow/nodeColors";
+import { connectionCountsFromTree, degreeBasedSize } from "@/lib/graphFlow/nodeSizing";
 import { createSignalEdge } from "@/lib/graphFlow/signalEdge";
+import { DOCUMENT_CARD_HEIGHT, DOCUMENT_CARD_WIDTH } from "@/lib/graphFlow/layoutUtils";
+import { SYNTHETIC_ROOT_ID, SYNTHETIC_ROOT_LABEL } from "@/lib/graphFlow/syntheticRoot";
 
 const INDEX_WORKER_THRESHOLD = 80;
+
+/** childrenById merged with the synthetic root → real-roots mapping. */
+function buildEffectiveChildrenById(index: GraphIndex): Map<string, string[]> {
+  const map = new Map(index.childrenById);
+  if (!map.has(SYNTHETIC_ROOT_ID)) map.set(SYNTHETIC_ROOT_ID, index.rootIds);
+  return map;
+}
+
+/** nodeById merged with a synthetic "AI Signal Graph" hub node. */
+function buildEffectiveNodeById(index: GraphIndex): Map<string, GraphApiNode> {
+  const map = new Map(index.nodeById);
+  if (!map.has(SYNTHETIC_ROOT_ID)) {
+    map.set(SYNTHETIC_ROOT_ID, {
+      id: SYNTHETIC_ROOT_ID,
+      label: SYNTHETIC_ROOT_LABEL,
+      node_type: "root",
+      type: "root",
+    });
+  }
+  return map;
+}
 
 type GraphTransformWorker = Worker;
 type WorkerIndexState = {
@@ -119,7 +143,11 @@ export function buildCardGraphElements(
   seedIds: string[],
   expandedIds: Set<string>,
 ): { nodes: Node<DocumentCardData>[]; edges: Edge[] } {
-  const visibleIds = computeVisibleIds(seedIds, expandedIds, index.childrenById);
+  const nodeById = buildEffectiveNodeById(index);
+  const childrenById = buildEffectiveChildrenById(index);
+  const connectionCounts = connectionCountsFromTree(childrenById, index.cyclicEdges);
+
+  const visibleIds = computeVisibleIds(seedIds, expandedIds, childrenById);
   const depthById = new Map<string, number>();
   const queue = seedIds.map((id) => ({ id, depth: 0 }));
   while (queue.length > 0) {
@@ -127,7 +155,7 @@ export function buildCardGraphElements(
     if (depthById.has(id)) continue;
     depthById.set(id, depth);
     if (!expandedIds.has(id)) continue;
-    for (const childId of index.childrenById.get(id) ?? []) {
+    for (const childId of childrenById.get(id) ?? []) {
       if (!visibleIds.has(childId)) continue;
       queue.push({ id: childId, depth: depth + 1 });
     }
@@ -138,15 +166,24 @@ export function buildCardGraphElements(
   const treeEdgeKeys = new Set<string>();
 
   for (const id of visibleIds) {
-    const apiNode = index.nodeById.get(id);
+    const apiNode = nodeById.get(id);
     if (!apiNode) continue;
-    const children = index.childrenById.get(id) ?? [];
+    const children = childrenById.get(id) ?? [];
     const nodeType = nodeTypeOf(apiNode);
     const accentColor = accentForType(nodeType);
     const importance =
       typeof apiNode.importance === "number" ? apiNode.importance : 0;
     const expanded = expandedIds.has(id);
     const depth = depthById.get(id) ?? 0;
+    const isHub = id === SYNTHETIC_ROOT_ID;
+    const scale = isHub
+      ? 1.7
+      : degreeBasedSize(connectionCounts.get(id) ?? 0, {
+          min: 0.85,
+          max: 1.45,
+          base: 0.95,
+          scale: 0.12,
+        });
 
     nodes.push({
       id,
@@ -161,6 +198,8 @@ export function buildCardGraphElements(
         childCount: children.length,
         depth,
         nodeId: id,
+        width: Math.round(DOCUMENT_CARD_WIDTH * scale),
+        height: Math.round(DOCUMENT_CARD_HEIGHT * scale),
       },
     });
 
@@ -185,7 +224,7 @@ export function buildCardGraphElements(
     if (!visibleIds.has(source) || !visibleIds.has(target)) continue;
     const key = `${source}->${target}`;
     if (treeEdgeKeys.has(key)) continue;
-    const sourceNode = index.nodeById.get(source);
+    const sourceNode = nodeById.get(source);
     const imp = typeof sourceNode?.importance === "number" ? sourceNode.importance : 0;
     const depth = depthById.get(source) ?? 0;
     edges.push(
@@ -273,12 +312,28 @@ export function useProgressiveGraph({
       ? workerIndex.index
       : null);
 
-  const seedIds = useMemo(() => {
-    if (!graphIndex) return [];
-    return pickSeedIds(graphIndex, initialSeedCount);
+  // Always start from the single "AI Signal Graph" hub, matching Lattice
+  // mode — initialSeedCount now controls how many of the hub's top-ranked
+  // direct branches are expanded by default, not how many parallel roots exist.
+  const seedIds = useMemo(
+    () => (graphIndex ? [SYNTHETIC_ROOT_ID] : []),
+    [graphIndex],
+  );
+
+  const defaultExpandedIds = useMemo(() => {
+    if (!graphIndex) return new Set<string>();
+    const rankedRoots = pickSeedIds(graphIndex, initialSeedCount);
+    return new Set([SYNTHETIC_ROOT_ID, ...rankedRoots]);
   }, [graphIndex, initialSeedCount]);
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const defaultsAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (!graphIndex || defaultsAppliedRef.current) return;
+    defaultsAppliedRef.current = true;
+    setExpandedIds(defaultExpandedIds);
+  }, [graphIndex, defaultExpandedIds]);
 
   const layoutKey = useMemo(() => {
     const expanded = [...expandedIds].sort().join(",");
@@ -304,11 +359,10 @@ export function useProgressiveGraph({
   const onToggleExpand = useCallback(
     (nodeId: string) => {
       if (!graphIndex) return;
-      const children = graphIndex.childrenById.get(nodeId) ?? [];
+      const childrenById = buildEffectiveChildrenById(graphIndex);
+      const children = childrenById.get(nodeId) ?? [];
       if (children.length === 0) return;
-      setExpandedIds((prev) =>
-        toggleExpanded(nodeId, prev, graphIndex.childrenById),
-      );
+      setExpandedIds((prev) => toggleExpanded(nodeId, prev, childrenById));
     },
     [graphIndex],
   );

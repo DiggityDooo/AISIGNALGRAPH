@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from scraper.extractor import StoryExtractor
+from scraper.extractor import GeminiRateLimitError, StoryExtractor
 
 
 @pytest.fixture
@@ -95,3 +95,16 @@ def test_missing_api_key_raises():
     with patch.dict("os.environ", {"GEMINI_API_KEY": ""}):
         with pytest.raises(ValueError):
             StoryExtractor()
+
+
+def test_extract_raises_gemini_rate_limit_error_on_429(extractor):
+    from google.genai import errors as genai_errors
+    api_error = genai_errors.APIError(
+        code=429,
+        response_json={"message": "Rate limit exceeded"}
+    )
+    extractor.client.models.generate_content = MagicMock(side_effect=api_error)
+    with pytest.raises(GeminiRateLimitError):
+        extractor.extract_story(
+            title="t", text="x", source_name="s", date="2026-01-01"
+        )

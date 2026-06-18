@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, type CSSProperties } from "react";
 import Link from "next/link";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { useGraphLayoutMode } from "@/components/visualization/flow/GraphLayoutContext";
@@ -24,6 +24,11 @@ export type DocumentCardData = {
   /** Connection-count-based card size — falls back to the default constants. */
   width?: number;
   height?: number;
+  /**
+   * Stagger delay (ms) for the slide-down reveal. Set only on children freshly
+   * revealed by an expand; undefined means "already on screen" → no animation.
+   */
+  revealDelayMs?: number;
 };
 
 export type DocumentCardNodeType = Node<DocumentCardData, "documentCard">;
@@ -43,6 +48,7 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
     progressive = true,
     width = DOCUMENT_CARD_WIDTH,
     height = DOCUMENT_CARD_HEIGHT,
+    revealDelayMs,
   } = data;
   const canExpand = hasChildren && !expanded;
   const isHub = nodeType === "root";
@@ -51,6 +57,16 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
   const targetPos = mode === "tree" ? Position.Top : Position.Left;
   const sourcePos = mode === "tree" ? Position.Bottom : Position.Right;
   const glow = glowShadowForAccent(accentColor);
+  const isRevealing = typeof revealDelayMs === "number";
+  const style: CSSProperties = {
+    width,
+    maxWidth: width,
+    minHeight: height,
+    boxShadow: glow,
+  };
+  if (isRevealing) {
+    (style as Record<string, string>)["--card-reveal-delay"] = `${revealDelayMs}ms`;
+  }
 
   return (
     <div
@@ -64,13 +80,8 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
               : "border-slate-700/50"
       } bg-slate-900/60 ${
         selected ? "ring-2 ring-primary/70" : ""
-      }`}
-      style={{
-        width,
-        maxWidth: width,
-        minHeight: height,
-        boxShadow: glow,
-      }}
+      }${isRevealing ? " card-reveal" : ""}`}
+      style={style}
     >
       <span
         className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-md"
@@ -103,13 +114,15 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
         <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-white/38">
           {nodeType}
         </p>
-        <Link
-          href={buildLatticeFocusHref(nodeId)}
-          className="nodrag nopan mt-0.5 w-fit rounded border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider text-cyan-300/90 hover:bg-cyan-500/20"
-          onClick={(event) => event.stopPropagation()}
-        >
-          View in Lattice
-        </Link>
+        {nodeType !== "load_more" && (
+          <Link
+            href={buildLatticeFocusHref(nodeId)}
+            className="nodrag nopan mt-0.5 w-fit rounded border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider text-cyan-300/90 hover:bg-cyan-500/20"
+            onClick={(event) => event.stopPropagation()}
+          >
+            View in Lattice
+          </Link>
+        )}
         <div className="flex flex-col gap-1" aria-hidden>
           <span className="h-1 w-full rounded-full bg-white/8" />
           <span className="h-1 w-[80%] rounded-full bg-white/6" />

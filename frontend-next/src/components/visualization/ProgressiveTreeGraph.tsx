@@ -19,13 +19,21 @@ function ProgressiveTreeGraphBody({
   initialSeedCount = 3,
   onVisibleCountChange,
 }: ProgressiveTreeGraphProps) {
-  const { graphIndex, layoutKey, fitKey, rawNodes, rawEdges, onToggleExpand } =
-    useProgressiveGraph({
-      payload,
-      dataRevision,
-      initialSeedCount,
-      onVisibleCountChange,
-    });
+  const {
+    graphIndex,
+    layoutKey,
+    fitKey,
+    focusKey,
+    focusNodeIds,
+    rawNodes,
+    rawEdges,
+    onToggleExpand,
+  } = useProgressiveGraph({
+    payload,
+    dataRevision,
+    initialSeedCount,
+    onVisibleCountChange,
+  });
 
   const layouted = useMemo(
     () =>
@@ -51,6 +59,8 @@ function ProgressiveTreeGraphBody({
       key={layoutKey}
       layoutMode="tree"
       fitKey={fitKey}
+      focusKey={focusKey}
+      focusNodeIds={focusNodeIds}
       layouted={layouted}
       onToggleExpand={onToggleExpand}
     />

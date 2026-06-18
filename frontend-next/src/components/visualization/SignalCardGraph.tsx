@@ -19,13 +19,21 @@ function SignalCardGraphBody({
   initialSeedCount = 3,
   onVisibleCountChange,
 }: SignalCardGraphProps) {
-  const { graphIndex, layoutKey, fitKey, rawNodes, rawEdges, onToggleExpand } =
-    useProgressiveGraph({
-      payload,
-      dataRevision,
-      initialSeedCount,
-      onVisibleCountChange,
-    });
+  const {
+    graphIndex,
+    layoutKey,
+    fitKey,
+    focusKey,
+    focusNodeIds,
+    rawNodes,
+    rawEdges,
+    onToggleExpand,
+  } = useProgressiveGraph({
+    payload,
+    dataRevision,
+    initialSeedCount,
+    onVisibleCountChange,
+  });
 
   const layouted = useMemo(
     () =>
@@ -51,6 +59,8 @@ function SignalCardGraphBody({
       key={layoutKey}
       layoutMode="flow"
       fitKey={fitKey}
+      focusKey={focusKey}
+      focusNodeIds={focusNodeIds}
       layouted={layouted}
       onToggleExpand={onToggleExpand}
     />

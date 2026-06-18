@@ -34,10 +34,10 @@ const samplePayload = {
     { id: "entity:small-lab", label: "Small Lab", type: "lab", importance: 2 },
 
     // Topics — including job-role catalog entries that must be excluded.
-    { id: "entity:reasoning", label: "Reasoning Models", type: "topic", importance: 5 },
-    { id: "entity:chips", label: "Chip Wars", type: "topic", importance: 5 },
-    { id: "entity:job-role-cashier", label: "Cashier", type: "topic", importance: 4 },
-    { id: "entity:job-role-junior-swe", label: "Junior Software Engineer", type: "topic", importance: 4 },
+    { id: "entity:reasoning", label: "Reasoning Models", type: "topic", category: "topic", importance: 5 },
+    { id: "entity:chips", label: "Chip Wars", type: "topic", category: "topic", importance: 5 },
+    { id: "entity:job-role-cashier", label: "Cashier", type: "topic", category: "job_role", importance: 4 },
+    { id: "entity:job-role-junior-swe", label: "Junior Software Engineer", type: "topic", category: "job_role", importance: 4 },
 
     // Real stories that get linked to years/labs/topics via edges.
     { id: "story:2024-gpt5", label: "GPT-5 launches", type: "story", importance: 5, year: 2024 },
@@ -148,14 +148,14 @@ test("section nodes are synthetic and labeled for every NAVIGATION_SECTIONS entr
   }
 });
 
-test("fan-out cap limits how many years/labs/topics each section attaches", () => {
+test("fan-out cap limits how many years/labs/topics each section attaches and appends load-more", () => {
   const overlay = buildNavigationChildrenById(samplePayload, nodeById, baseChildrenById, 1);
-  assert.equal(overlay.childrenById.get(SECTION_TIMELINE_ID).length, 1);
-  assert.equal(overlay.childrenById.get(SECTION_ORGANIZATIONS_ID).length, 1);
-  assert.equal(overlay.childrenById.get(SECTION_THEMES_ID).length, 1);
+  assert.deepEqual(overlay.childrenById.get(SECTION_TIMELINE_ID), ["entity:year-2026", `load-more:section:${SECTION_TIMELINE_ID}`]);
+  assert.deepEqual(overlay.childrenById.get(SECTION_ORGANIZATIONS_ID), ["entity:openai", `load-more:section:${SECTION_ORGANIZATIONS_ID}`]);
+  assert.deepEqual(overlay.childrenById.get(SECTION_THEMES_ID), ["entity:reasoning", `load-more:section:${SECTION_THEMES_ID}`]);
 });
 
-test("fan-out cap also limits a single year's attached stories (no 80+ card dump)", () => {
+test("fan-out cap also limits a single year's attached stories (no 80+ card dump) and appends load-more", () => {
   const busyYearPayload = {
     nodes: [
       { id: "entity:year-2024", label: "2024", type: "year", importance: 5 },
@@ -177,8 +177,22 @@ test("fan-out cap also limits a single year's attached stories (no 80+ card dump
     1,
   );
   assert.deepEqual(overlay.childrenById.get(SECTION_TIMELINE_ID), ["entity:year-2024"]);
-  assert.equal(overlay.childrenById.get("entity:year-2024").length, 1);
-  assert.equal(overlay.childrenById.get("entity:year-2024")[0], "story:s1");
+  assert.deepEqual(overlay.childrenById.get("entity:year-2024"), ["story:s1", "load-more:story:entity:year-2024"]);
+});
+
+test("custom limits override default fan-out thresholds and hide load-more when fully shown", () => {
+  const overlay = buildNavigationChildrenById(
+    samplePayload,
+    nodeById,
+    baseChildrenById,
+    1,
+    1,
+    { [SECTION_TIMELINE_ID]: 3, "entity:openai": 2 }
+  );
+  // SECTION_TIMELINE_ID has 3 total years, customLimit is 3, so all are shown, no load-more
+  assert.deepEqual(overlay.childrenById.get(SECTION_TIMELINE_ID), ["entity:year-2026", "entity:year-2025", "entity:year-2024"]);
+  // entity:openai has 2 total stories, customLimit is 2, so all are shown, no load-more
+  assert.deepEqual(overlay.childrenById.get("entity:openai"), ["story:2024-gpt5", "story:2025-o4"]);
 });
 
 test("year children come from real timeline edges, not a possibly-incomplete base tree", () => {
@@ -205,20 +219,32 @@ test("year children come from real timeline edges, not a possibly-incomplete bas
   assert.deepEqual(overlay.childrenById.get("entity:year-2024"), ["story:s1"]);
 });
 
-test("isJobRoleTopic regex anchors every alternative, not just the first/last", () => {
+test("isJobRoleTopic excludes nodes categorized as job_role", () => {
   const genuineTheme = {
     id: "entity:collaborative-ai",
     label: "Collaborative AI",
     type: "topic",
+    category: "topic",
+    importance: 5,
+  };
+  const jobRoleNode = {
+    id: "entity:job-role-engineer",
+    label: "Junior Software Engineer",
+    type: "topic",
+    category: "job_role",
     importance: 5,
   };
   const payload = {
-    nodes: [genuineTheme],
+    nodes: [genuineTheme, jobRoleNode],
     edges: [],
   };
   const seeds = pickTopicSeeds(payload, 10);
   assert.ok(
     seeds.includes(genuineTheme.id),
-    "a label merely containing the substring 'labor' (as in 'Collaborative') must not be excluded",
+    "genuine theme must be included"
+  );
+  assert.ok(
+    !seeds.includes(jobRoleNode.id),
+    "job role node must be excluded"
   );
 });

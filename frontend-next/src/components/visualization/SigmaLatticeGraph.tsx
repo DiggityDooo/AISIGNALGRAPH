@@ -33,7 +33,7 @@ const VISUALS = {
   labelGridCellSize: 120,
   labelRenderedSizeThreshold: 10,
   minEdgeThickness: 0.4,
-  unfocusedNodeColor: "rgba(120, 120, 120, 0.12)",
+  unfocusedNodeColor: "rgba(150, 150, 150, 0.35)",
   focusedEdgeColor: "rgba(180, 180, 180, 0.45)",
   focusedEdgeSize: 1.2,
 } as const;
@@ -126,33 +126,7 @@ export default function SigmaLatticeGraph({
     if (!container || !payload || payload.nodes.length === 0) return;
 
     const { graph, newNodeCount } = buildGraph(payload, positionsRef.current);
-
-    // Skip the (synchronous, main-thread) layout entirely when topology is
-    // unchanged — the common poll case where only node metadata shifted —
-    // reusing exact saved positions for zero reshuffle. Otherwise run
-    // ForceAtlas2 with Barnes-Hut so repulsion is O(n log n), not O(n²):
-    // inferSettings only enables it above 2000 nodes, well over our corpus.
-    if (newNodeCount > 0) {
-      const settings = {
-        ...forceAtlas2.inferSettings(graph),
-        barnesHutOptimize: true,
-        gravity: 0.03,
-        scalingRatio: 100,
-        strongGravityMode: false,
-        outboundAttractionDistribution: true,
-        linLogMode: true,
-        adjustSizes: true,
-        slowDown: 2,
-      };
-      forceAtlas2.assign(graph, { iterations: LAYOUT_ITERATIONS, settings });
-    }
-
-    // Persist the resolved positions for the next rebuild.
-    const nextPositions: SavedPositions = new Map();
-    graph.forEachNode((nodeId, attrs) => {
-      nextPositions.set(nodeId, { x: attrs.x as number, y: attrs.y as number });
-    });
-    positionsRef.current = nextPositions;
+    let animationFrameId: number | null = null;
 
     const renderer = new Sigma(graph, container, {
       renderLabels: true,
@@ -165,6 +139,48 @@ export default function SigmaLatticeGraph({
       labelRenderedSizeThreshold: VISUALS.labelRenderedSizeThreshold,
       minEdgeThickness: VISUALS.minEdgeThickness,
     });
+
+    // Run progressive ForceAtlas2 layout over multiple animation frames
+    // so the main thread remains fully interactive and responsive.
+    if (newNodeCount > 0) {
+      setBuilding(true);
+      const settings = {
+        ...forceAtlas2.inferSettings(graph),
+        barnesHutOptimize: true,
+        gravity: 0.03,
+        scalingRatio: 100,
+        strongGravityMode: false,
+        outboundAttractionDistribution: true,
+        linLogMode: true,
+        adjustSizes: true,
+        slowDown: 2,
+      };
+
+      let currentIteration = 0;
+      const CHUNK_SIZE = 10;
+
+      const runLayoutStep = () => {
+        if (currentIteration >= LAYOUT_ITERATIONS) {
+          setBuilding(false);
+          // Persist the resolved positions for the next rebuild.
+          const nextPositions: SavedPositions = new Map();
+          graph.forEachNode((nodeId, attrs) => {
+            nextPositions.set(nodeId, { x: attrs.x as number, y: attrs.y as number });
+          });
+          positionsRef.current = nextPositions;
+          return;
+        }
+
+        forceAtlas2.assign(graph, { iterations: CHUNK_SIZE, settings });
+        renderer.refresh();
+        currentIteration += CHUNK_SIZE;
+        animationFrameId = requestAnimationFrame(runLayoutStep);
+      };
+
+      animationFrameId = requestAnimationFrame(runLayoutStep);
+    } else {
+      setBuilding(false);
+    }
 
     renderer.setSetting("nodeReducer", (nodeId, data) => {
       const focus = focusRef.current;
@@ -184,16 +200,20 @@ export default function SigmaLatticeGraph({
       return { ...data, hidden: true };
     });
 
-    // "Tree feature" here: everything stays visible (no need to hide nodes
-    // for performance, that's the point of WebGL) — click focuses a node's
-    // direct neighborhood instead, mirroring Tree mode's "expand a branch"
-    // feel. Double-click uses Sigma's native zoom-toward-click behavior as
-    // the "drill in" gesture — no custom camera animation needed for that.
+    // Click focuses a node's neighborhood and centers camera on selection
     renderer.on("clickNode", ({ node }) => {
       focusRef.current = { id: node, neighbors: new Set(graph.neighbors(node)) };
-      setFocusedNode(graph.getNodeAttributes(node) as GraphApiNode);
+      const nodeAttrs = graph.getNodeAttributes(node) as GraphApiNode & { x: number; y: number };
+      setFocusedNode(nodeAttrs);
       renderer.refresh();
+
+      // Smoothly zoom in and center the viewport on the selected node
+      renderer.getCamera().animate(
+        { x: nodeAttrs.x, y: nodeAttrs.y, ratio: 0.2 },
+        { duration: 500 }
+      );
     });
+
     renderer.on("clickStage", () => {
       focusRef.current = { id: null, neighbors: new Set() };
       setFocusedNode(null);
@@ -201,9 +221,11 @@ export default function SigmaLatticeGraph({
     });
 
     onVisibleCountChangeRef.current?.(graph.order);
-    setBuilding(false);
 
     return () => {
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
       renderer.kill();
       focusRef.current = { id: null, neighbors: new Set() };
       setFocusedNode(null);

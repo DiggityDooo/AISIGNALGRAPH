@@ -12,6 +12,7 @@ export const TYPE_COLOR: Record<string, string> = {
   product: "#a78bfa",
   year: "#94a3b8",
   community: "#f97316",
+  load_more: "#fb7185",
 };
 
 export function accentForType(type: string | undefined): string {

@@ -31,15 +31,40 @@ const nodeTypes = { documentCard: DocumentCardNode };
 const edgeTypes = { signal: SignalEdge };
 const defaultEdgeOptions = { type: "signal" as const };
 
-function AutoFit({ fitKey }: { fitKey: string }) {
+function AutoFit({
+  fitKey,
+  focusKey,
+  focusNodeIds,
+}: {
+  fitKey: string;
+  focusKey?: string;
+  focusNodeIds?: string[];
+}) {
   const { fitView } = useReactFlow();
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void fitView({ padding: 0.2, duration: 800 });
-    }, 40);
+    const focused = focusNodeIds && focusNodeIds.length > 0;
+    // On expand, scroll + zoom to frame just the parent and its newly
+    // revealed children; otherwise (first paint, collapse) fit the whole
+    // graph. The short delay lets React Flow measure freshly-mounted nodes;
+    // the eased camera then travels as the cards slide into place.
+    const timer = window.setTimeout(
+      () => {
+        if (focused) {
+          void fitView({
+            nodes: focusNodeIds.map((id) => ({ id })),
+            padding: 0.6,
+            duration: 700,
+            maxZoom: 1.1,
+          });
+        } else {
+          void fitView({ padding: 0.2, duration: 800 });
+        }
+      },
+      focused ? 120 : 40,
+    );
     return () => window.clearTimeout(timer);
-  }, [fitKey, fitView]);
+  }, [fitKey, focusKey, focusNodeIds, fitView]);
 
   return null;
 }
@@ -47,6 +72,8 @@ function AutoFit({ fitKey }: { fitKey: string }) {
 function CardGraphCanvasInner({
   layoutMode,
   fitKey,
+  focusKey,
+  focusNodeIds,
   layouted,
   onToggleExpand,
 }: CardGraphCanvasProps) {
@@ -104,7 +131,7 @@ function CardGraphCanvasInner({
             pannable
             zoomable
           />
-          <AutoFit fitKey={fitKey} />
+          <AutoFit fitKey={fitKey} focusKey={focusKey} focusNodeIds={focusNodeIds} />
         </ReactFlow>
       </div>
     </GraphLayoutProvider>
@@ -114,6 +141,10 @@ function CardGraphCanvasInner({
 export interface CardGraphCanvasProps {
   layoutMode: LayoutMode;
   fitKey: string;
+  /** Stable per-expand key so the camera re-frames on each reveal. */
+  focusKey?: string;
+  /** Parent + newly revealed children to center on; empty → fit whole graph. */
+  focusNodeIds?: string[];
   layouted: { nodes: Node<DocumentCardData>[]; edges: Edge[] };
   onToggleExpand?: (nodeId: string) => void;
 }

@@ -390,6 +390,7 @@ class EntityRecord:
     mention_count: int
     stories: list[dict[str, Any]]
     links: list[dict[str, Any]]
+    category: str
 
     @property
     def excerpt(self) -> str:
@@ -464,6 +465,7 @@ class GraphStore:
             "importance": node["importance"],
             "timeline_month": node["timeline_month"],
             "year": node["year"],
+            "category": node.get("category"),
         }
         return {key: value for key, value in compact.items() if value not in (None, "")}
 
@@ -1042,6 +1044,8 @@ class GraphStore:
                     """
                 )
                 self._ensure_cluster_columns(conn)
+                from webapp.db import run_migrations
+                run_migrations(conn)
                 conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("schema_version", SCHEMA_VERSION))
                 row = conn.execute("SELECT value FROM meta WHERE key = 'source_signature'").fetchone()
                 count = conn.execute("SELECT COUNT(*) FROM stories").fetchone()[0]
@@ -1058,6 +1062,43 @@ class GraphStore:
                 payload = self._build_payload_from_master_document(cancel_event=cancel_event)
             elif self.seed_path.exists():
                 payload = json.loads(self.seed_path.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    # Append supplemental model stories to ensure model-release kind is present
+                    stories = payload.setdefault("stories", [])
+                    seen_story_ids = {s["id"] for s in stories}
+                    for story in self._supplemental_model_stories():
+                        if story["id"] not in seen_story_ids:
+                            stories.append(story)
+
+                    # Ensure any entity referenced by supplemental stories exists in payload["entities"]
+                    entities = payload.setdefault("entities", [])
+                    seen_entity_ids = {e["id"] for e in entities}
+                    entity_defs = {item["id"]: item for item in ENTITY_DEFINITIONS}
+                    for story in stories:
+                        ent_ids = story.get("entities", story.get("entity_ids", []))
+                        for ent_id in ent_ids:
+                            if ent_id not in seen_entity_ids and ent_id in entity_defs:
+                                ent_record = self._entity_record(entity_defs[ent_id])
+                                entities.append(ent_record)
+                                seen_entity_ids.add(ent_id)
+
+                    if "story_entities" not in payload or "story_tags" not in payload:
+                        story_entities = []
+                        story_tags = []
+                        for story in stories:
+                            story_id = story.get("id")
+                            if story_id:
+                                ent_ids = story.get("entities", story.get("entity_ids", []))
+                                for ent_id in ent_ids:
+                                    story_entities.append((story_id, ent_id))
+                                for tag in story.get("tags", []):
+                                    story_tags.append((story_id, tag))
+                        if "story_entities" not in payload:
+                            payload["story_entities"] = story_entities
+                        if "story_tags" not in payload:
+                            payload["story_tags"] = story_tags
+                    if "entity_links" not in payload:
+                        payload["entity_links"] = self._build_entity_links(stories, payload.get("story_entities", []))
             else:
                 raise GraphStoreError(
                     f"No dataset source was found. Set AI_MASTER_DOC_PATH or add a seed file at {self.seed_path}."
@@ -1091,12 +1132,63 @@ class GraphStore:
                 conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("source_path", str(self.source_path)))
                 conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("schema_version", SCHEMA_VERSION))
 
+                for ent in payload.get("entities", []):
+                    if "category" not in ent or ent["category"] is None:
+                        name = ent.get("name", "")
+                        ent_id = ent.get("id", "")
+                        ent_type = ent.get("type", ent.get("entity_type", ""))
+                        group_name = ent.get("group", ent.get("group_name", ""))
+                        job_role_pattern = re.compile(
+                            r"\b(?:job[\s-]?role|labor|career|salary|hiring|layoff|displacement|workforce|employment)\b",
+                            re.IGNORECASE
+                        )
+                        if ent_id.startswith("job-role-") or job_role_pattern.search(name) or job_role_pattern.search(ent_id):
+                            ent["category"] = "job_role"
+                        elif ent_type == "company" or (group_name and group_name.lower() in {"labs", "companies", "platforms", "infrastructure", "capital"}):
+                            ent["category"] = "organization"
+                        else:
+                            ent["category"] = "topic"
+
+                    # Ensure all binding parameter keys are present in the dictionary
+                    ent.setdefault("id", "")
+                    ent.setdefault("name", "")
+                    ent.setdefault("type", ent.get("entity_type", ""))
+                    ent.setdefault("group", ent.get("group_name", ""))
+                    ent.setdefault("description", "")
+                    ent.setdefault("importance", 0)
+
                 conn.executemany(
-                    "INSERT INTO entities (id, name, entity_type, group_name, description, importance) VALUES (:id, :name, :type, :group, :description, :importance)",
+                    "INSERT INTO entities (id, name, entity_type, group_name, description, importance, category) VALUES (:id, :name, :type, :group, :description, :importance, :category)",
                     payload["entities"],
                 )
+                for story in payload.get("stories", []):
+                    date = story.get("date", story.get("event_date", ""))
+                    year = story.get("year")
+                    if year is None and date:
+                        try:
+                            year = int(date[:4])
+                        except ValueError:
+                            pass
+                    story["year"] = year
+
+                    if "era" not in story or not story["era"]:
+                        if year is not None:
+                            from scraper.sources import classify_era
+                            story["era"] = classify_era(year)
+                        else:
+                            story["era"] = "frontier"
+
+                    story.setdefault("id", "")
+                    story.setdefault("title", "")
+                    story.setdefault("kind", "")
+                    story.setdefault("status", "")
+                    story.setdefault("date", date)
+                    story.setdefault("summary", "")
+                    story.setdefault("details", "")
+                    story.setdefault("importance", 1)
+
                 conn.executemany(
-                    "INSERT INTO stories (id, title, kind, status, event_date, summary, details, importance) VALUES (:id, :title, :kind, :status, :date, :summary, :details, :importance)",
+                    "INSERT INTO stories (id, title, kind, status, event_date, summary, details, importance, era, year) VALUES (:id, :title, :kind, :status, :date, :summary, :details, :importance, :era, :year)",
                     payload["stories"],
                 )
                 conn.executemany("INSERT INTO story_entities (story_id, entity_id) VALUES (?, ?)", payload["story_entities"])
@@ -1877,6 +1969,23 @@ class GraphStore:
         return sorted(set(matches))
 
     def _entity_record(self, item: dict[str, Any]) -> dict[str, Any]:
+        category = item.get("category")
+        if not category:
+            name = item.get("name", "")
+            ent_id = item.get("id", "")
+            ent_type = item.get("type", item.get("entity_type", ""))
+            group_name = item.get("group", item.get("group_name", ""))
+            job_role_pattern = re.compile(
+                r"\b(?:job[\s-]?role|labor|career|salary|hiring|layoff|displacement|workforce|employment)\b",
+                re.IGNORECASE
+            )
+            if ent_id.startswith("job-role-") or job_role_pattern.search(name) or job_role_pattern.search(ent_id):
+                category = "job_role"
+            elif ent_type == "company" or (group_name and group_name.lower() in {"labs", "companies", "platforms", "infrastructure", "capital"}):
+                category = "organization"
+            else:
+                category = "topic"
+
         return {
             "id": item["id"],
             "name": item["name"],
@@ -1884,7 +1993,9 @@ class GraphStore:
             "group": item["group"],
             "description": item["description"],
             "importance": item["importance"],
+            "category": category,
         }
+
 
     def _build_entity_links(self, stories: list[dict[str, Any]], story_entities: list[tuple[str, str]]) -> list[dict[str, Any]]:
         story_to_entities: dict[str, list[str]] = defaultdict(list)
@@ -2040,6 +2151,7 @@ class GraphStore:
                 mention_count=sum(item.importance for item in stories) or len(stories),
                 stories=[{"id": story.id, "title": story.title, "kind": story.kind, "status": story.status, "event_date": story.event_date} for story in stories],
                 links=links_by_entity[row["id"]],
+                category=row["category"] if "category" in row.keys() else "topic",
             )
 
         self._entities = entity_records
@@ -2330,6 +2442,7 @@ class GraphStore:
                 "out_degree": 0,
                 "year": entity.name if entity.entity_type == "year" else "",
                 "details_html": entity.description,
+                "category": entity.category,
             }
             nodes.append(node)
             node_by_id[node["id"]] = node
@@ -2386,6 +2499,8 @@ class GraphStore:
             for entity_ref in story.entities:
                 target = self._entities.get(entity_ref["id"])
                 if target is None:
+                    continue
+                if target.entity_type == "year":
                     continue
                 target_type = graph_node_type(target.entity_type, target.group_name)
                 edges.append(

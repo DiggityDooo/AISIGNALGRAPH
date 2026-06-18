@@ -24,6 +24,11 @@ def _is_retryable(exc: BaseException) -> bool:
     return False
 
 
+class GeminiRateLimitError(Exception):
+    """Raised when Gemini API rate limit or quota is exceeded and retry fails."""
+    pass
+
+
 class StoryExtractor:
     MODEL = "gemini-3.1-flash-lite"
     MAX_TOKENS = 900
@@ -51,6 +56,12 @@ class StoryExtractor:
         prompt = self._build_prompt(title, text, source_name, date, is_historical)
         try:
             raw = self._call_api(prompt)
+        except genai_errors.APIError as exc:
+            if exc.code == 429:
+                logger.error("Gemini API Rate limit / quota exceeded: {}", exc)
+                raise GeminiRateLimitError("Gemini API rate limit or quota exceeded.") from exc
+            logger.error("Extractor API call failed for '{}': {}", title, exc)
+            return None
         except Exception as exc:
             logger.error("Extractor API call failed for '{}': {}", title, exc)
             return None

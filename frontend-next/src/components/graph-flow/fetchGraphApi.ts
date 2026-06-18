@@ -20,6 +20,7 @@ export interface GraphApiNode {
   importance?: number;
   timeline_month?: string;
   year?: number;
+  category?: string;
   // The compact endpoint strips empty values; unknown extras may appear.
   [key: string]: unknown;
 }

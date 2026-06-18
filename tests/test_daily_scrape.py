@@ -501,3 +501,28 @@ class TestScraperMain:
             result = main()
         # Should proceed (not skip) and return 0 since no new stories
         assert result == 0
+
+    def test_main_aborts_on_gemini_rate_limit(self):
+        from scraper.daily_scrape import main
+        from scraper.extractor import GeminiRateLimitError
+
+        mock_storage = MagicMock()
+        mock_storage.load_state.return_value = {
+            "status": "idle",
+        }
+        mock_storage.load_stories.return_value = []
+        mock_storage.save_state.return_value = True
+
+        with patch("scraper.daily_scrape.StoryStorage", return_value=mock_storage), \
+             patch("scraper.daily_scrape.RateLimiter"), \
+             patch("scraper.daily_scrape.SecurityValidator"), \
+             patch("scraper.daily_scrape.StoryExtractor"), \
+             patch("scraper.daily_scrape.DedupEngine"), \
+             patch("scraper.daily_scrape.scrape_rss_source", side_effect=GeminiRateLimitError("rate limit")), \
+             patch.dict("os.environ", {"GEMINI_API_KEY": "test-key"}, clear=False):
+            result = main()
+
+        assert result == 1
+        calls = [call[0][0] for call in mock_storage.save_state.call_args_list]
+        error_call = next(c for c in calls if c.get("status") == "error")
+        assert error_call["error"] == "Gemini API rate limit or daily quota exceeded"

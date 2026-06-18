@@ -21,21 +21,8 @@ const DEFAULT_SECTION_FAN_OUT = 3;
  * many years/labs/topics a section itself attaches. */
 const DEFAULT_STORY_FAN_OUT = 5;
 
-/**
- * The API's `/api/graph` payload only ever exposes `type === "topic"` for
- * both genuine AI themes (Reasoning Models, Chip Wars, ...) and the ~49
- * "job-role-*" catalog entries (Cashier, Junior Software Engineer, ...) —
- * there's no separate `group`/`category` field to tell them apart (the
- * compact endpoint strips it). Filter on label/id text instead. The
- * alternation is grouped so `\b...\b` anchors every branch, not just the
- * first/last — otherwise "labor"/"career"/etc. would match as unanchored
- * substrings (e.g. wrongly excluding a topic titled "Collaborative AI").
- */
-const JOB_ROLE_PATTERN =
-  /\b(?:job[\s-]?role|labor|career|salary|hiring|layoff|displacement|workforce|employment)\b/i;
-
 function isJobRoleTopic(node: GraphApiNode): boolean {
-  return JOB_ROLE_PATTERN.test(node.label ?? "") || JOB_ROLE_PATTERN.test(node.id);
+  return node.category === "job_role";
 }
 
 function importanceOf(node: GraphApiNode | undefined): number {
@@ -162,15 +149,44 @@ export function buildNavigationChildrenById(
   baseChildrenById: ReadonlyMap<string, string[]>,
   sectionFanOut = DEFAULT_SECTION_FAN_OUT,
   storyFanOut = DEFAULT_STORY_FAN_OUT,
+  customLimits: Record<string, number> = {},
 ): NavigationOverlay {
   const childrenById = new Map(baseChildrenById);
   const sectionNodes = new Map<string, GraphApiNode>();
   const mentionedBy = buildMentionedByIndex(payload);
   const timelineByYear = buildTimelineIndex(payload);
 
-  const yearIds = pickYearSeeds(payload, sectionFanOut);
-  const labIds = pickEntitySeeds(payload, "lab", sectionFanOut, mentionedBy);
-  const topicIds = pickEntitySeeds(payload, "topic", sectionFanOut, mentionedBy, isJobRoleTopic);
+  const allYearIds = payload.nodes
+    .filter((node) => nodeTypeOf(node) === "year")
+    .sort((a, b) => numericLabel(b) - numericLabel(a))
+    .map((node) => node.id);
+
+  const allLabIds = payload.nodes
+    .filter((node) => nodeTypeOf(node) === "lab")
+    .sort((a, b) => {
+      const byImportance = importanceOf(b) - importanceOf(a);
+      if (byImportance !== 0) return byImportance;
+      return (mentionedBy.get(b.id)?.length ?? 0) - (mentionedBy.get(a.id)?.length ?? 0);
+    })
+    .map((node) => node.id);
+
+  const allTopicIds = payload.nodes
+    .filter((node) => nodeTypeOf(node) === "topic" && !isJobRoleTopic(node))
+    .sort((a, b) => {
+      const byImportance = importanceOf(b) - importanceOf(a);
+      if (byImportance !== 0) return byImportance;
+      return (mentionedBy.get(b.id)?.length ?? 0) - (mentionedBy.get(a.id)?.length ?? 0);
+    })
+    .map((node) => node.id);
+
+  const yearLimit = customLimits[SECTION_TIMELINE_ID] ?? sectionFanOut;
+  const labLimit = customLimits[SECTION_ORGANIZATIONS_ID] ?? sectionFanOut;
+  const topicLimit = customLimits[SECTION_THEMES_ID] ?? sectionFanOut;
+
+  const yearIds = allYearIds.slice(0, yearLimit);
+  const labIds = allLabIds.slice(0, labLimit);
+  const topicIds = allTopicIds.slice(0, topicLimit);
+
   const sectionSeedIds: Record<string, string[]> = {
     [SECTION_TIMELINE_ID]: yearIds,
     [SECTION_ORGANIZATIONS_ID]: labIds,
@@ -178,8 +194,34 @@ export function buildNavigationChildrenById(
   };
 
   childrenById.set(SYNTHETIC_ROOT_ID, NAVIGATION_SECTIONS.map((section) => section.id));
+
   for (const section of NAVIGATION_SECTIONS) {
-    childrenById.set(section.id, sectionSeedIds[section.id]);
+    const seeds = [...sectionSeedIds[section.id]];
+    let totalCount = 0;
+    let limit = 0;
+    if (section.id === SECTION_TIMELINE_ID) {
+      totalCount = allYearIds.length;
+      limit = yearLimit;
+    } else if (section.id === SECTION_ORGANIZATIONS_ID) {
+      totalCount = allLabIds.length;
+      limit = labLimit;
+    } else if (section.id === SECTION_THEMES_ID) {
+      totalCount = allTopicIds.length;
+      limit = topicLimit;
+    }
+
+    if (totalCount > limit) {
+      const loadMoreId = `load-more:section:${section.id}`;
+      seeds.push(loadMoreId);
+      sectionNodes.set(loadMoreId, {
+        id: loadMoreId,
+        label: `Load More (+${totalCount - limit})`,
+        node_type: "load_more",
+        type: "load_more",
+      });
+    }
+
+    childrenById.set(section.id, seeds);
     sectionNodes.set(section.id, {
       id: section.id,
       label: section.label,
@@ -189,16 +231,37 @@ export function buildNavigationChildrenById(
   }
 
   for (const yearId of yearIds) {
-    childrenById.set(
-      yearId,
-      rankByImportance(nodeById, timelineByYear.get(yearId) ?? []).slice(0, storyFanOut),
-    );
+    const allStories = rankByImportance(nodeById, timelineByYear.get(yearId) ?? []);
+    const limit = customLimits[yearId] ?? storyFanOut;
+    const stories = allStories.slice(0, limit);
+    if (allStories.length > limit) {
+      const loadMoreId = `load-more:story:${yearId}`;
+      stories.push(loadMoreId);
+      sectionNodes.set(loadMoreId, {
+        id: loadMoreId,
+        label: `Load More (+${allStories.length - limit})`,
+        node_type: "load_more",
+        type: "load_more",
+      });
+    }
+    childrenById.set(yearId, stories);
   }
+
   for (const entityId of [...labIds, ...topicIds]) {
-    childrenById.set(
-      entityId,
-      rankByImportance(nodeById, mentionedBy.get(entityId) ?? []).slice(0, storyFanOut),
-    );
+    const allStories = rankByImportance(nodeById, mentionedBy.get(entityId) ?? []);
+    const limit = customLimits[entityId] ?? storyFanOut;
+    const stories = allStories.slice(0, limit);
+    if (allStories.length > limit) {
+      const loadMoreId = `load-more:story:${entityId}`;
+      stories.push(loadMoreId);
+      sectionNodes.set(loadMoreId, {
+        id: loadMoreId,
+        label: `Load More (+${allStories.length - limit})`,
+        node_type: "load_more",
+        type: "load_more",
+      });
+    }
+    childrenById.set(entityId, stories);
   }
 
   return { childrenById, sectionNodes };

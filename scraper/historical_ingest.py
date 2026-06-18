@@ -21,7 +21,7 @@ import requests
 from loguru import logger
 
 from scraper.dedup import DedupEngine
-from scraper.extractor import StoryExtractor
+from scraper.extractor import GeminiRateLimitError, StoryExtractor
 from scraper.security.rate_limiter import RateLimiter
 from scraper.security.sanitizer import html_to_plain_text
 from scraper.security.validator import SecurityValidator
@@ -203,9 +203,12 @@ def main() -> int:
             rate_limiter = RateLimiter()
             validator = SecurityValidator(rate_limiter)
             extractor = StoryExtractor(api_key=api_key)
-            wayback = ingest_wayback(year_from, year_to, validator, dedup, extractor)
-            logger.info("Wayback backfill contributed {} stories.", len(wayback))
-            new_stories.extend(wayback)
+            try:
+                wayback = ingest_wayback(year_from, year_to, validator, dedup, extractor)
+                logger.info("Wayback backfill contributed {} stories.", len(wayback))
+                new_stories.extend(wayback)
+            except GeminiRateLimitError as exc:
+                logger.error("Historical backfill aborted due to Gemini API rate limit: {}", exc)
 
     if not new_stories:
         logger.info("Nothing new to ingest.")

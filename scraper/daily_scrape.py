@@ -17,7 +17,7 @@ import requests
 from loguru import logger
 
 from scraper.dedup import DedupEngine
-from scraper.extractor import StoryExtractor
+from scraper.extractor import GeminiRateLimitError, StoryExtractor
 from scraper.security.rate_limiter import RateLimiter
 from scraper.security.sanitizer import html_to_plain_text
 from scraper.security.validator import SecurityValidator
@@ -189,15 +189,22 @@ def main() -> int:
     session.max_redirects = 3
 
     all_new: list[dict] = []
-    for source in RSS_SOURCES:
-        try:
-            new_stories = scrape_rss_source(
-                source, validator, rate_limiter, dedup, extractor, session
-            )
-            all_new.extend(new_stories)
-        except Exception as exc:
-            logger.error("Source {} failed entirely: {}", source["name"], exc)
-            continue  # never let one bad source crash the run
+    aborted = False
+    try:
+        for source in RSS_SOURCES:
+            try:
+                new_stories = scrape_rss_source(
+                    source, validator, rate_limiter, dedup, extractor, session
+                )
+                all_new.extend(new_stories)
+            except GeminiRateLimitError:
+                raise
+            except Exception as exc:
+                logger.error("Source {} failed entirely: {}", source["name"], exc)
+                continue  # never let one bad source crash the run
+    except GeminiRateLimitError as exc:
+        logger.error("Scrape run aborted due to Gemini API rate limit / quota exhaustion: {}", exc)
+        aborted = True
 
     duration = time.monotonic() - start_time
 
@@ -213,6 +220,20 @@ def main() -> int:
                 }
             )
             return 1
+
+    if aborted:
+        storage.save_state(
+            {
+                "status": "error",
+                "started_at": started_iso,
+                "last_scrape_iso": _now_iso(),
+                "error": "Gemini API rate limit or daily quota exceeded",
+                "stories_added": len(all_new),
+                "stories_total": len(existing_stories) + len(all_new),
+                "scrape_duration_s": round(duration, 2),
+            }
+        )
+        return 1
 
     storage.save_state(
         {

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, type CSSProperties } from "react";
 import Link from "next/link";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { useGraphLayoutMode } from "@/components/visualization/flow/GraphLayoutContext";
@@ -53,13 +53,7 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
 
   return (
     <div
-      className={`relative flex rounded-md border backdrop-blur-md transition-shadow ${
-        isHub
-          ? "border-2 border-white/40"
-          : canExpand
-            ? "border-slate-600/50"
-            : "border-slate-700/50"
-      } bg-slate-900/60 ${
+      className={`glass-card relative flex rounded-xl transition-shadow ${
         selected ? "ring-2 ring-primary/70" : ""
       }`}
       style={{
@@ -67,10 +61,19 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
         maxWidth: width,
         minHeight: height,
         boxShadow: glow,
-      }}
+        borderWidth: isHub ? 2 : 1,
+        "--glass-accent": accentColor,
+      } as CSSProperties}
     >
       <span
-        className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-md"
+        className="absolute inset-0 rounded-xl pointer-events-none"
+        style={{
+          background: "linear-gradient(160deg, rgba(255,255,255,0.10) 0%, transparent 40%)",
+        }}
+        aria-hidden
+      />
+      <span
+        className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl"
         style={{ backgroundColor: accentColor }}
         aria-hidden
       />

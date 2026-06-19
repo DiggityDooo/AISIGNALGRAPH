@@ -125,11 +125,12 @@ export function buildFlowGraphElements(
   // visible node has a visible parent), so fall back to the top-ranked
   // visible nodes — capped at FLOW_SEED_COUNT — to guarantee the hub always
   // has somewhere to branch to.
-  const trueRootIds = [...visibleIds].filter((id) => (inDegreeVisible.get(id) ?? 0) === 0);
+  const branchableIds = [...visibleIds].filter((id) => id !== SYNTHETIC_ROOT_ID);
+  const trueRootIds = branchableIds.filter((id) => (inDegreeVisible.get(id) ?? 0) === 0);
   const rootIds =
     trueRootIds.length > 0
       ? trueRootIds
-      : [...visibleIds]
+      : branchableIds
           .sort(
             (a, b) =>
               flowNodeScore(b, nodeById, inDegreeVisible, outgoingCount) -
@@ -137,28 +138,30 @@ export function buildFlowGraphElements(
           )
           .slice(0, FLOW_SEED_COUNT);
 
-  const nodes: Node<DocumentCardData>[] = payload.nodes.filter((apiNode) => visibleIds.has(apiNode.id)).map((apiNode) => {
-    const nodeType = nodeTypeOf(apiNode);
-    const { width, height } = sizeFor(apiNode.id);
-    return {
-      id: apiNode.id,
-      type: "documentCard",
-      position: { x: 0, y: 0 },
-      data: {
-        label: apiNode.label ?? apiNode.id,
-        nodeType,
-        accentColor: accentForType(nodeType),
-        hasChildren: false,
-        expanded: true,
-        childCount: outgoingCount.get(apiNode.id) ?? 0,
-        depth: 0,
-        nodeId: apiNode.id,
-        progressive: false,
-        width,
-        height,
-      },
-    } satisfies Node<DocumentCardData>;
-  });
+  const nodes: Node<DocumentCardData>[] = payload.nodes
+    .filter((apiNode) => visibleIds.has(apiNode.id) && apiNode.id !== SYNTHETIC_ROOT_ID)
+    .map((apiNode) => {
+      const nodeType = nodeTypeOf(apiNode);
+      const { width, height } = sizeFor(apiNode.id);
+      return {
+        id: apiNode.id,
+        type: "documentCard",
+        position: { x: 0, y: 0 },
+        data: {
+          label: apiNode.label ?? apiNode.id,
+          nodeType,
+          accentColor: accentForType(nodeType),
+          hasChildren: false,
+          expanded: true,
+          childCount: outgoingCount.get(apiNode.id) ?? 0,
+          depth: 0,
+          nodeId: apiNode.id,
+          progressive: false,
+          width,
+          height,
+        },
+      } satisfies Node<DocumentCardData>;
+    });
 
   nodes.push({
     id: SYNTHETIC_ROOT_ID,

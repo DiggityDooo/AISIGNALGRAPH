@@ -1,7 +1,12 @@
 "use strict";
 
 const READY_CHECK_INTERVAL_MS = 100;
-const READY_CHECK_ATTEMPTS = 50;
+// Mobile devices (slower CPUs, throttled networks, more main-thread contention
+// from site-wide background canvases/animations) can take noticeably longer
+// than desktop to finish their first layout pass after the dynamic Sigma/
+// graphology chunks resolve. Give the dimension check more runway than the
+// other (near-instant) readiness conditions before giving up.
+const READY_CHECK_ATTEMPTS = 80;
 const CONTAINER_SIZE_TIMEOUT_MS = READY_CHECK_INTERVAL_MS * READY_CHECK_ATTEMPTS;
 const DEFAULT_ACTIVE_YEAR = 2026;
 const DEFAULT_GLOW_COLOR = "#ff3148";
@@ -715,32 +720,73 @@ export async function initGephiLite(options = {}) {
     return new Promise((resolve, reject) => {
       let attempts = 0;
       let intervalId = null;
+      let resizeObserver = null;
+      let observedContainer = null;
+
+      const finish = (callback) => {
+        if (intervalId !== null) {
+          window.clearInterval(intervalId);
+          intervalId = null;
+        }
+        if (resizeObserver) {
+          resizeObserver.disconnect();
+          resizeObserver = null;
+        }
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+        callback();
+      };
+
+      // The #sigma-container dimension check is the one readiness condition
+      // that can legitimately still be false the moment everything else is
+      // ready (layout hasn't settled yet on a slow device). Watch it directly
+      // so we resolve the instant it gains size instead of waiting up to
+      // READY_CHECK_INTERVAL_MS for the next poll to notice.
+      const ensureContainerObserved = (container) => {
+        if (!container || container === observedContainer || typeof ResizeObserver === "undefined") {
+          return;
+        }
+        if (resizeObserver) {
+          resizeObserver.disconnect();
+        }
+        observedContainer = container;
+        resizeObserver = new ResizeObserver(() => evaluate());
+        resizeObserver.observe(container);
+      };
 
       const evaluate = () => {
+        // A backgrounded tab/app (phone locked, app switched) suspends layout and
+        // timers; don't burn the readiness budget on attempts we couldn't observe.
+        if (document.hidden) {
+          return;
+        }
+
         const runtime = collectRuntimeReadiness();
+        ensureContainerObserved(runtime.refs.container);
 
         if (runtime.missing.length === 0) {
-          if (intervalId !== null) {
-            window.clearInterval(intervalId);
-          }
-          resolve(runtime);
+          finish(() => resolve(runtime));
           return;
         }
 
         attempts += 1;
         if (attempts > READY_CHECK_ATTEMPTS) {
-          if (intervalId !== null) {
-            window.clearInterval(intervalId);
-          }
-
-          reject(
-            new Error(
-              `Gephi Lite initialization timed out after ${CONTAINER_SIZE_TIMEOUT_MS}ms. Missing: ${runtime.missing.join(", ")}`
+          finish(() =>
+            reject(
+              new Error(
+                `Gephi Lite initialization timed out after ${CONTAINER_SIZE_TIMEOUT_MS}ms. Missing: ${runtime.missing.join(", ")}`
+              )
             )
           );
         }
       };
 
+      const onVisibilityChange = () => {
+        if (!document.hidden) {
+          evaluate();
+        }
+      };
+
+      document.addEventListener("visibilitychange", onVisibilityChange);
       intervalId = window.setInterval(evaluate, READY_CHECK_INTERVAL_MS);
       evaluate();
     });

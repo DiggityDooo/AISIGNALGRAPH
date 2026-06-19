@@ -63,28 +63,30 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
     maxWidth: width,
     minHeight: height,
     boxShadow: glow,
+    borderWidth: isHub ? 2 : 1,
+    borderStyle: isSection ? "dashed" : "solid",
   };
+  (style as Record<string, string>)["--glass-accent"] = accentColor;
   if (isRevealing) {
     (style as Record<string, string>)["--card-reveal-delay"] = `${revealDelayMs}ms`;
   }
 
   return (
     <div
-      className={`relative flex rounded-md border backdrop-blur-md transition-shadow ${
-        isHub
-          ? "border-2 border-white/40"
-          : isSection
-            ? "border border-dashed border-white/30"
-            : canExpand
-              ? "border-slate-600/50"
-              : "border-slate-700/50"
-      } bg-slate-900/60 ${
+      className={`glass-card relative flex rounded-xl transition-shadow ${
         selected ? "ring-2 ring-primary/70" : ""
       }${isRevealing ? " card-reveal" : ""}`}
       style={style}
     >
       <span
-        className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-md"
+        className="absolute inset-0 rounded-xl pointer-events-none"
+        style={{
+          background: "linear-gradient(160deg, rgba(255,255,255,0.10) 0%, transparent 40%)",
+        }}
+        aria-hidden
+      />
+      <span
+        className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl"
         style={{ backgroundColor: accentColor }}
         aria-hidden
       />

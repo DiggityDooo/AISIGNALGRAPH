@@ -1795,8 +1795,9 @@ export async function initGephiLite(options = {}) {
     state.threeModule = THREE;
 
     const rect = refs.threeContainer.getBoundingClientRect();
-    const width = rect.width;
-    const height = rect.height;
+    if (rect.width === 0 && rect.height === 0) return;
+    const width = Math.max(rect.width, 1);
+    const height = Math.max(rect.height, 1);
 
     // Scene
     const scene = new THREE.Scene();

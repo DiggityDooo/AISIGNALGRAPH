@@ -262,11 +262,11 @@ export default function GraphPage() {
               `}
             >
               <div className="flex flex-col gap-4">
-                <label className="font-mono text-[9px] text-muted uppercase tracking-widest">Global Search</label>
+                <label htmlFor="graph-search" className="font-mono text-[9px] text-muted uppercase tracking-widest">Global Search</label>
                 <input id="graph-search" type="search" placeholder="Find node..." className="glass-panel w-full bg-white/5 px-3 py-2 text-xs font-mono outline-none focus:border-primary/50 transition-colors" />
               </div>
               <div className="flex flex-col gap-4">
-                <label className="font-mono text-[9px] text-muted uppercase tracking-widest">Vision Lens</label>
+                <label htmlFor="graph-lens" className="font-mono text-[9px] text-muted uppercase tracking-widest">Vision Lens</label>
                 <select id="graph-lens" className="glass-panel w-full bg-[#0A0000] px-3 py-2 text-xs font-mono outline-none border-white/10">
                   <option value="global">Global View</option>
                   <option value="local">Local Neighborhood</option>
@@ -374,14 +374,14 @@ export default function GraphPage() {
           <footer id="hud-bottom" className="relative z-10 p-4 md:p-6 border-t border-white/5 bg-black/40 backdrop-blur-md flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex flex-col sm:flex-row items-center gap-6 md:gap-12 w-full md:w-auto">
               <div className="flex flex-col gap-2 w-full sm:w-auto">
-                <label className="font-mono text-[9px] text-muted uppercase tracking-widest">Timeline Filter</label>
+                <label htmlFor="year-filter" className="font-mono text-[9px] text-muted uppercase tracking-widest">Timeline Filter</label>
                 <div className="flex items-center gap-4">
                   <input id="year-filter" type="range" min="2020" max="2026" defaultValue="2026" className="flex-1 sm:w-48 accent-primary h-1 bg-white/10 rounded-lg appearance-none cursor-pointer" />
                   <span id="year-value" className="font-mono text-sm text-primary">2026</span>
                 </div>
               </div>
               <div className="flex flex-col gap-2 w-full sm:w-auto">
-                <label className="font-mono text-[9px] text-muted uppercase tracking-widest">Signal Speed</label>
+                <label htmlFor="signal-speed" className="font-mono text-[9px] text-muted uppercase tracking-widest">Signal Speed</label>
                 <input id="signal-speed" type="range" min="0.5" max="3" defaultValue="1" step="0.1" className="flex-1 sm:w-32 accent-secondary h-1 bg-white/10 rounded-lg appearance-none cursor-pointer" />
               </div>
             </div>

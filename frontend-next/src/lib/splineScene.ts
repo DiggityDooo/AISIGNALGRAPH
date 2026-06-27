@@ -52,7 +52,7 @@ const BUILD_TIME_VIEWER_URL =
 
 const PROD_SCENE_CONFIG_PATH = "/static/spline-scene.json";
 const DEV_SCENE_CONFIG_PATH = "/spline-scene.json";
-const PROD_GRAPH_SCENE_CONFIG_PATH = "/static/spline-graph-scene.json";
+const PROD_GRAPH_SCENE_CONFIG_PATH = "/static/hub/spline-graph-scene.json";
 const DEV_GRAPH_SCENE_CONFIG_PATH = "/spline-graph-scene.json";
 
 const VIEWER_CODE_RE = /\.splinecode(?:\?.*)?$/i;

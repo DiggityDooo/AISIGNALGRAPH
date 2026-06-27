@@ -49,6 +49,9 @@ export async function initGephiLite(options = {}) {
   const SigmaLib = options.SigmaLib || window.Sigma || window.sigma?.Sigma || window.sigma;
   const GraphCtor = options.GraphCtor || window.graphology?.Graph || window.graphology;
   const forceAtlas2 = options.forceAtlas2 || window.forceAtlas2;
+  const graphPayloadFingerprint = options.graphPayloadFingerprint;
+  const graphTopologyFingerprint = options.graphTopologyFingerprint;
+  const graphRefreshMs = Number(options.graphRefreshMs) || 0;
   const onReady = typeof options.onReady === "function" ? options.onReady : null;
   const onError = typeof options.onError === "function" ? options.onError : null;
 
@@ -502,7 +505,13 @@ export async function initGephiLite(options = {}) {
     cameraDirty: false,
     animateFrame: 0,
     pageHidden: false,
-    animationPaused: false
+    animationPaused: false,
+    savedNodePositions: new Map(),
+    dataRevision: null,
+    topologyRevision: null,
+    lastVisibleIds: null,
+    pollInFlight: false,
+    pollTimerId: null
   };
 
   let resizeRafId = null;
@@ -556,6 +565,109 @@ export async function initGephiLite(options = {}) {
     return year * 12 + month;
   }
 
+  function visibleIdsEqual(left, right) {
+    if (!left || !right || left.size !== right.size) {
+      return false;
+    }
+    for (const id of left) {
+      if (!right.has(id)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function captureNodePositions(graph) {
+    if (!graph) {
+      return;
+    }
+    graph.forEachNode((nodeId, attrs) => {
+      if (Number.isFinite(attrs.x) && Number.isFinite(attrs.y)) {
+        state.savedNodePositions.set(nodeId, { x: attrs.x, y: attrs.y });
+      }
+    });
+  }
+
+  function fingerprintPayload(data) {
+    if (
+      typeof graphPayloadFingerprint !== "function" ||
+      typeof graphTopologyFingerprint !== "function"
+    ) {
+      return { revision: null, topologyRevision: null };
+    }
+    const payload = {
+      nodes: data.nodes || [],
+      edges: data.edges || []
+    };
+    return {
+      revision: graphPayloadFingerprint(payload),
+      topologyRevision: graphTopologyFingerprint(payload)
+    };
+  }
+
+  function applyNormalizedGraphData(data) {
+    state.nodes = (data.nodes || []).map((node) => ({
+      ...node,
+      semanticType: getNodeSemanticType(node)
+    }));
+    state.edges = data.edges || [];
+    state.communities = data.communities || [];
+  }
+
+  function applyGraphMetadataPatch() {
+    const graph = state.graph;
+    if (!graph) {
+      return;
+    }
+
+    state.filteredNodes.forEach((node) => {
+      if (!graph.hasNode(node.id)) {
+        return;
+      }
+      const color = getCanvasNodeColor(node);
+      graph.mergeNodeAttributes(node.id, {
+        ...node,
+        label: node.label || node.id,
+        color
+      });
+    });
+    applyDegreeBasedNodeSizes(graph);
+    state.renderer?.refresh();
+  }
+
+  function patch3DSceneMetadata() {
+    const THREE = state.threeModule;
+    if (!THREE || !state.threeNodeMeshes.length) {
+      return;
+    }
+
+    const nodeById = new Map(state.filteredNodes.map((node) => [node.id, node]));
+    state.threeNodeMeshes.forEach((mesh) => {
+      const nodeId = mesh.userData.nodeId;
+      if (!nodeId) {
+        return;
+      }
+      const node = nodeById.get(nodeId);
+      if (!node) {
+        return;
+      }
+
+      const colorKey = getNodeSemanticType(node);
+      const colorHex = CONFIG.nodeColors[colorKey] || "#3793ff";
+      const color = new THREE.Color(colorHex);
+      mesh.userData.nodeData = node;
+      mesh.userData.baseColor = colorHex;
+
+      if (mesh.userData.isGlow) {
+        mesh.material.color.copy(color);
+        return;
+      }
+
+      mesh.material.color.copy(color);
+      mesh.material.emissive.copy(color);
+    });
+  }
+
   function addManagedListener(target, eventName, handler, listenerOptions) {
     if (!target || typeof target.addEventListener !== "function") {
       return;
@@ -600,6 +712,11 @@ export async function initGephiLite(options = {}) {
       resizeRafId = null;
     }
     stopAnimationLoop();
+
+    if (state.pollTimerId !== null) {
+      window.clearInterval(state.pollTimerId);
+      state.pollTimerId = null;
+    }
 
     // Clean up 3D scene
     destroy3DScene();
@@ -1157,10 +1274,29 @@ export async function initGephiLite(options = {}) {
     });
   }
 
-  async function rebuildFromFilters() {
+  async function rebuildFromFilters(options = {}) {
+    const { metadataOnly = false } = options;
     state.filteredNodes = filteredNodesByState();
     const visibleIds = new Set(state.filteredNodes.map((node) => node.id));
     state.filteredEdges = filteredEdgesByNodes(visibleIds);
+    const sameVisible = visibleIdsEqual(state.lastVisibleIds, visibleIds);
+    state.lastVisibleIds = visibleIds;
+
+    const patchOnly = metadataOnly && sameVisible;
+
+    if (patchOnly && state.is3DMode && state.threeScene) {
+      buildGraph({ mountRenderer: false, skipLayout: true });
+      patch3DSceneMetadata();
+      updateStats({ animate: false });
+      return false;
+    }
+
+    if (patchOnly && state.renderer && state.graph) {
+      applyGraphMetadataPatch();
+      updateStats({ animate: false });
+      return true;
+    }
+
     if (state.is3DMode) {
       // Rebuild the filtered graph data without remounting Sigma so the 3D scene stays in sync.
       buildGraph({ mountRenderer: false });
@@ -1172,22 +1308,29 @@ export async function initGephiLite(options = {}) {
   }
 
   // --- Graph Engine ---
+  async function fetchGraphApiRaw() {
+    const dataset = appRoot.dataset.datasetName || "";
+    const baseUrl =
+      typeof window !== "undefined" && window.location.hostname === "localhost"
+        ? "http://localhost:8080"
+        : "";
+    const response = await fetch(`${baseUrl}/api/graph?dataset=${dataset}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
   async function loadGraphData() {
     const dataset = appRoot.dataset.datasetName || "";
     console.log(`Gephi Lite: Fetching graph data for dataset: ${dataset}`);
 
     try {
-      const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:8080' : '';
-      const response = await fetch(`${baseUrl}/api/graph?dataset=${dataset}`);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data = await response.json();
-
-      state.nodes = (data.nodes || []).map((node) => ({
-        ...node,
-        semanticType: getNodeSemanticType(node)
-      }));
-      state.edges = data.edges || [];
-      state.communities = data.communities || [];
+      const data = await fetchGraphApiRaw();
+      const { revision, topologyRevision } = fingerprintPayload(data);
+      state.dataRevision = revision;
+      state.topologyRevision = topologyRevision;
+      applyNormalizedGraphData(data);
 
       state.filteredNodes = [...state.nodes];
       state.filteredEdges = [...state.edges];
@@ -1199,29 +1342,80 @@ export async function initGephiLite(options = {}) {
     }
   }
 
+  async function pollGraphData() {
+    if (state.destroyed || state.pollInFlight) {
+      return;
+    }
+
+    state.pollInFlight = true;
+    try {
+      const data = await fetchGraphApiRaw();
+      const { revision, topologyRevision } = fingerprintPayload(data);
+      if (!revision || revision === state.dataRevision) {
+        return;
+      }
+
+      applyNormalizedGraphData(data);
+      state.dataRevision = revision;
+
+      const topologyUnchanged =
+        topologyRevision && topologyRevision === state.topologyRevision;
+
+      if (topologyUnchanged) {
+        const hasRenderer = await rebuildFromFilters({ metadataOnly: true });
+        if (hasRenderer && !state.is3DMode && !state.pageHidden) {
+          ensureAnimationLoop();
+        }
+        onReady?.({ nodes: state.nodes.length, edges: state.edges.length });
+        return;
+      }
+
+      state.topologyRevision = topologyRevision;
+      state.filteredNodes = filteredNodesByState();
+      const visibleIds = new Set(state.filteredNodes.map((node) => node.id));
+      state.filteredEdges = filteredEdgesByNodes(visibleIds);
+      const hasRenderer = await rebuildFromFilters();
+      if (hasRenderer && !state.is3DMode && !state.pageHidden) {
+        ensureAnimationLoop();
+      }
+      onReady?.({ nodes: state.nodes.length, edges: state.edges.length });
+    } catch (error) {
+      console.warn("Gephi Lite: Poll refresh failed.", error);
+    } finally {
+      state.pollInFlight = false;
+    }
+  }
+
   async function buildGraph(options = {}) {
-    const { mountRenderer = true } = options;
+    const { mountRenderer = true, skipLayout = false } = options;
     console.log("Gephi Lite: Building graph...");
     if (!state.filteredNodes.length) {
       console.warn("Gephi Lite: No nodes to render.");
+      captureNodePositions(state.graph);
       destroyRenderer();
       updateStats();
       return false;
     }
 
+    captureNodePositions(state.graph);
     destroyRenderer();
 
     const graph = new GraphCtor({ multi: true });
+    let newNodeCount = 0;
     state.filteredNodes.forEach((node) => {
       const color = getCanvasNodeColor(node);
+      const saved = state.savedNodePositions.get(node.id);
+      if (!saved) {
+        newNodeCount += 1;
+      }
       if (!graph.hasNode(node.id)) {
         graph.addNode(node.id, {
           ...node,
           label: node.label || node.id,
           size: 2,
           color,
-          x: Math.random() * 100,
-          y: Math.random() * 100,
+          x: saved ? saved.x : Math.random() * 100,
+          y: saved ? saved.y : Math.random() * 100,
           type: "circle"
         });
       }
@@ -1275,10 +1469,13 @@ export async function initGephiLite(options = {}) {
       slowDown: 2
     };
     const isFiltered = state.filteredNodes.length < state.nodes.length;
-    const iterations = isFiltered ? 40 : 120;
-    console.time("FA2-Layout");
-    forceAtlas2.assign(graph, { iterations, settings: spreadSettings });
-    console.timeEnd("FA2-Layout");
+    const shouldLayout = !skipLayout && newNodeCount > 0;
+    if (shouldLayout) {
+      const iterations = isFiltered ? 40 : 120;
+      console.time("FA2-Layout");
+      forceAtlas2.assign(graph, { iterations, settings: spreadSettings });
+      console.timeEnd("FA2-Layout");
+    }
 
     resetBubblePhysics(graph);
 
@@ -1947,11 +2144,15 @@ export async function initGephiLite(options = {}) {
 
     // Mouse interaction
     let hoveredMesh = null;
+    const intersectableMeshes = nodeMeshes.filter((mesh) => !mesh.userData.isGlow);
+    let raycastTick = 0;
+    let mouseDirty = true;
 
     addManagedListener(renderer.domElement, "mousemove", (event) => {
       const canvasRect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((event.clientX - canvasRect.left) / canvasRect.width) * 2 - 1;
       mouse.y = -((event.clientY - canvasRect.top) / canvasRect.height) * 2 + 1;
+      mouseDirty = true;
     });
 
     addManagedListener(renderer.domElement, "click", () => {
@@ -1975,26 +2176,25 @@ export async function initGephiLite(options = {}) {
       state.threeAnimFrameId = requestAnimationFrame(animate3D);
       pulseTime += 0.01;
 
-      // Raycasting for hover
-      raycaster.setFromCamera(mouse, camera);
-      const intersectable = nodeMeshes.filter(m => !m.userData.isGlow);
-      const intersects = raycaster.intersectObjects(intersectable);
+      raycastTick += 1;
+      if (mouseDirty || raycastTick % 3 === 0) {
+        mouseDirty = false;
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(intersectableMeshes, false);
 
-      if (intersects.length > 0) {
-        const newHover = intersects[0].object;
-        if (hoveredMesh !== newHover) {
-          // Reset previous
-          if (hoveredMesh) {
-            hoveredMesh.material.emissiveIntensity = 0.6;
-            hoveredMesh.scale.setScalar(1);
+        if (intersects.length > 0) {
+          const newHover = intersects[0].object;
+          if (hoveredMesh !== newHover) {
+            if (hoveredMesh) {
+              hoveredMesh.material.emissiveIntensity = 0.6;
+              hoveredMesh.scale.setScalar(1);
+            }
+            hoveredMesh = newHover;
+            hoveredMesh.material.emissiveIntensity = 1.2;
+            hoveredMesh.scale.setScalar(1.5);
+            renderer.domElement.style.cursor = "pointer";
           }
-          hoveredMesh = newHover;
-          hoveredMesh.material.emissiveIntensity = 1.2;
-          hoveredMesh.scale.setScalar(1.5);
-          renderer.domElement.style.cursor = "pointer";
-        }
-      } else {
-        if (hoveredMesh) {
+        } else if (hoveredMesh) {
           hoveredMesh.material.emissiveIntensity = 0.6;
           hoveredMesh.scale.setScalar(1);
           hoveredMesh = null;
@@ -2004,10 +2204,11 @@ export async function initGephiLite(options = {}) {
 
       // Subtle pulse on all nodes
       nodeMeshes.forEach((mesh, i) => {
-        if (mesh !== hoveredMesh) {
-          const pulse = 1 + Math.sin(pulseTime + i * 0.3) * 0.04;
-          mesh.scale.setScalar(pulse);
+        if (mesh.userData.isGlow || mesh === hoveredMesh) {
+          return;
         }
+        const pulse = 1 + Math.sin(pulseTime + i * 0.3) * 0.04;
+        mesh.scale.setScalar(pulse);
       });
 
       controls.update();
@@ -2121,6 +2322,12 @@ export async function initGephiLite(options = {}) {
       startAnimationLoop();
     }
     onReady?.({ nodes: state.nodes.length, edges: state.edges.length });
+
+    if (graphRefreshMs > 0) {
+      state.pollTimerId = window.setInterval(() => {
+        void pollGraphData();
+      }, graphRefreshMs);
+    }
 
     const focusParams = new URLSearchParams(window.location.search);
     const focusId = focusParams.get("focus");

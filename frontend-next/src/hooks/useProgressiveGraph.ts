@@ -117,6 +117,8 @@ function runWorkerBuildIndex(
 export interface UseProgressiveGraphOptions {
   payload: GraphApiPayload | null;
   dataRevision: string | null;
+  /** Topology-only revision; layout/remount keys use this instead of dataRevision. */
+  topologyRevision?: string | null;
   initialSeedCount?: number;
   onVisibleCountChange?: (visible: number) => void;
 }
@@ -252,9 +254,11 @@ export function buildCardGraphElements(
 export function useProgressiveGraph({
   payload,
   dataRevision,
+  topologyRevision,
   initialSeedCount = 3,
   onVisibleCountChange,
 }: UseProgressiveGraphOptions) {
+  const layoutRevision = topologyRevision ?? dataRevision;
   const workerRef = useRef<GraphTransformWorker | null>(null);
   const workerFailedRef = useRef(false);
   const [workerIndex, setWorkerIndex] = useState<WorkerIndexState | null>(null);
@@ -356,12 +360,12 @@ export function useProgressiveGraph({
   } | null>(null);
   const nonceRef = useRef(0);
   const defaultsAppliedRef = useRef(false);
-  const previousRevisionRef = useRef<string | null>(null);
+  const previousTopologyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!graphIndex) return;
-    if (dataRevision !== previousRevisionRef.current) {
-      previousRevisionRef.current = dataRevision;
+    if (layoutRevision !== previousTopologyRef.current) {
+      previousTopologyRef.current = layoutRevision;
       defaultsAppliedRef.current = false;
       setCustomLimits({});
       setExpandedIds(defaultExpandedIds);
@@ -370,7 +374,7 @@ export function useProgressiveGraph({
     if (defaultsAppliedRef.current) return;
     defaultsAppliedRef.current = true;
     setExpandedIds(defaultExpandedIds);
-  }, [graphIndex, defaultExpandedIds, dataRevision]);
+  }, [graphIndex, defaultExpandedIds, layoutRevision]);
 
   // customLimits must be part of the key: "load more" only grows a section via
   // setCustomLimits (expandedIds is untouched), and the canvas remounts on
@@ -382,12 +386,12 @@ export function useProgressiveGraph({
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
       .map(([id, limit]) => `${id}=${limit}`)
       .join(",");
-    return `${dataRevision ?? "none"}:${seedIds.join(",")}:${expanded}:${limits}`;
-  }, [dataRevision, seedIds, expandedIds, customLimits]);
+    return `${layoutRevision ?? "none"}:${seedIds.join(",")}:${expanded}:${limits}`;
+  }, [layoutRevision, seedIds, expandedIds, customLimits]);
 
   const fitKey = useMemo(
-    () => `${dataRevision ?? "none"}:${seedIds.join(",")}`,
-    [dataRevision, seedIds],
+    () => `${layoutRevision ?? "none"}:${seedIds.join(",")}`,
+    [layoutRevision, seedIds],
   );
 
   // The hub's children are the three navigation sections (Timeline,

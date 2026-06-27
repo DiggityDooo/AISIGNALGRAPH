@@ -4,6 +4,13 @@ import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import Sigma from "sigma";
 import { useEffect, useEffectEvent } from "react";
+import {
+  graphPayloadFingerprint,
+  graphTopologyFingerprint,
+} from "@/lib/graphFlow/graphFingerprint";
+
+/** Match /graph/flow poll cadence — metadata refresh without full reshuffle. */
+const GRAPH_REFRESH_MS = 30_000;
 
 type GraphStats = {
   nodes: number;
@@ -55,6 +62,9 @@ export default function GraphRuntime({ onReady, onError }: GraphRuntimeProps) {
           SigmaLib: Sigma,
           GraphCtor: Graph,
           forceAtlas2,
+          graphPayloadFingerprint,
+          graphTopologyFingerprint,
+          graphRefreshMs: GRAPH_REFRESH_MS,
           onReady: (stats: GraphStats) => emitReady(stats),
           onError: (error: unknown) => emitError(error),
         });

@@ -152,6 +152,49 @@ class TestStats:
 
 
 # ---------------------------------------------------------------------------
+# /api/graph/ingest-status
+# ---------------------------------------------------------------------------
+
+class TestIngestStatus:
+    def test_returns_200(self, api_client):
+        response = api_client.get("/api/graph/ingest-status")
+        assert response.status_code == 200
+
+    def test_response_structure(self, api_client):
+        data = api_client.get("/api/graph/ingest-status").get_json()
+        assert data["status"] == "ok"
+        for field in (
+            "last_ingest_at",
+            "last_ingest_inserted",
+            "stories_in_db",
+            "stories_in_source",
+            "last_error",
+            "source_backend",
+            "scrape",
+        ):
+            assert field in data, f"Missing field: {field}"
+
+    def test_scrape_subobject_keys(self, api_client):
+        scrape = api_client.get("/api/graph/ingest-status").get_json()["scrape"]
+        for field in (
+            "last_scrape_at",
+            "status",
+            "error",
+            "stories_total",
+            "stories_added",
+        ):
+            assert field in scrape
+
+    def test_stories_in_db_positive(self, api_client):
+        data = api_client.get("/api/graph/ingest-status").get_json()
+        assert data["stories_in_db"] > 0
+
+    def test_no_cache_header(self, api_client):
+        response = api_client.get("/api/graph/ingest-status")
+        assert response.headers.get("Cache-Control") == "no-cache"
+
+
+# ---------------------------------------------------------------------------
 # /api/graph/era/<era> — cache header and node shape
 # ---------------------------------------------------------------------------
 

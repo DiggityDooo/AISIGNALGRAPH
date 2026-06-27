@@ -8,7 +8,9 @@ entity_links).
 
 import re
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
@@ -45,6 +47,14 @@ _TYPE_TO_ENTITY_TYPE = {
 }
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+META_INGEST_AT = "ingest_last_at"
+META_INGEST_INSERTED = "ingest_last_inserted"
+META_INGEST_ERROR = "ingest_last_error"
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _slugify(name: str) -> str:
@@ -85,12 +95,56 @@ class DataLoader:
 
     def load_stories(self, conn: sqlite3.Connection) -> int:
         """Load scraped stories not yet in the DB (dedup by source_url/id)."""
-        stories = self.storage.load_stories()
+        try:
+            stories = self.storage.load_stories()
+        except Exception as exc:
+            logger.error("Loader: failed to read stories from storage: {}", exc)
+            raise
+
         if not stories:
+            logger.info("Loader: storage returned no stories.")
+            self._record_ingest(conn, inserted=0)
             return 0
-        return max(self._insert_stories(conn, stories), 0)
+
+        logger.info("Loader: read {} stories from storage.", len(stories))
+        inserted = self._insert_stories(conn, stories)
+        if inserted < 0:
+            logger.error(
+                "Loader: failed to insert stories from storage ({} fetched).",
+                len(stories),
+            )
+            self._record_ingest(conn, inserted=0, error="insert batch failed")
+            return -1
+        if inserted == 0:
+            logger.info(
+                "Loader: all {} fetched stories already present in database.",
+                len(stories),
+            )
+        self._record_ingest(conn, inserted=inserted)
+        return inserted
 
     # -- internals -----------------------------------------------------------
+
+    @staticmethod
+    def _record_ingest(
+        conn: sqlite3.Connection, *, inserted: int, error: str | None = None
+    ) -> None:
+        conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+            (META_INGEST_AT, _now_iso()),
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+            (META_INGEST_INSERTED, str(inserted)),
+        )
+        if error:
+            conn.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                (META_INGEST_ERROR, error),
+            )
+        else:
+            conn.execute("DELETE FROM meta WHERE key = ?", (META_INGEST_ERROR,))
+        conn.commit()
 
     def _read_json_file(self, path: Path) -> list[dict]:
         import json
@@ -256,3 +310,35 @@ class DataLoader:
                     """,
                     (source_id, target_id, relation),
                 )
+
+
+def get_ingest_status(
+    conn: sqlite3.Connection, storage: StoryStorage | None = None
+) -> dict[str, Any]:
+    """Scraper↔app ingest diagnostics for /api/graph/ingest-status."""
+    store = storage if storage is not None else StoryStorage()
+    meta = {
+        row[0]: row[1]
+        for row in conn.execute(
+            "SELECT key, value FROM meta WHERE key LIKE 'ingest_%'"
+        ).fetchall()
+    }
+    stories_in_db = conn.execute("SELECT COUNT(*) FROM stories").fetchone()[0]
+    source_stories = store.load_stories()
+    scrape_state = store.load_state()
+    last_inserted_raw = meta.get(META_INGEST_INSERTED)
+    return {
+        "last_ingest_at": meta.get(META_INGEST_AT),
+        "last_ingest_inserted": int(last_inserted_raw) if last_inserted_raw else 0,
+        "stories_in_db": stories_in_db,
+        "stories_in_source": len(source_stories),
+        "last_error": meta.get(META_INGEST_ERROR),
+        "source_backend": "gcs" if store.bucket_name else "local",
+        "scrape": {
+            "last_scrape_at": scrape_state.get("last_scrape_iso"),
+            "status": scrape_state.get("status"),
+            "error": scrape_state.get("error"),
+            "stories_total": scrape_state.get("stories_total"),
+            "stories_added": scrape_state.get("stories_added"),
+        },
+    }

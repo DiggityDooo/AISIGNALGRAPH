@@ -214,6 +214,23 @@ def stories_search():
     )
 
 
+@api_bp.get("/graph/ingest-status")
+def graph_ingest_status():
+    """Scraper↔app ingest diagnostics: last load time, counts, scrape state."""
+    from webapp.loader import get_ingest_status
+
+    try:
+        with _connect() as conn:
+            payload = get_ingest_status(conn)
+    except sqlite3.DatabaseError:
+        current_app.logger.exception("graph_ingest_status failed")
+        return _error("database error", 500)
+
+    response = jsonify({"status": "ok", **payload})
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @api_bp.get("/stats")
 def stats():
     try:

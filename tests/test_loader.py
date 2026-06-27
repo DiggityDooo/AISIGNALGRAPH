@@ -121,3 +121,36 @@ def test_fts_search_works_after_load(conn, tmp_path):
         "SELECT story_id FROM stories_fts WHERE stories_fts MATCH '\"test\"'"
     ).fetchall()
     assert len(rows) == 1
+
+
+def test_load_stories_records_ingest_meta(conn, tmp_path):
+    loader = _loader_with_stories(tmp_path, [STORY])
+    loader.load_stories(conn)
+    meta = {
+        row[0]: row[1]
+        for row in conn.execute(
+            "SELECT key, value FROM meta WHERE key LIKE 'ingest_%'"
+        ).fetchall()
+    }
+    assert meta["ingest_last_at"]
+    assert meta["ingest_last_inserted"] == "1"
+    assert "ingest_last_error" not in meta
+
+
+def test_get_ingest_status_reports_counts(conn, tmp_path):
+    from webapp.loader import get_ingest_status
+
+    loader = _loader_with_stories(tmp_path, [STORY])
+    loader.load_stories(conn)
+    status = get_ingest_status(conn, storage=loader.storage)
+    assert status["stories_in_db"] == 1
+    assert status["stories_in_source"] == 1
+    assert status["last_ingest_inserted"] == 1
+    assert status["source_backend"] == "local"
+    assert status["scrape"] == {
+        "last_scrape_at": None,
+        "status": None,
+        "error": None,
+        "stories_total": None,
+        "stories_added": None,
+    }

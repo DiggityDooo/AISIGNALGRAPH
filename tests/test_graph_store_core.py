@@ -607,12 +607,13 @@ class _FakeLoader:
 
     call_count = 0
     raise_error = False
+    insert_count = 0
 
     def load_stories(self, conn):
         type(self).call_count += 1
         if type(self).raise_error:
             raise RuntimeError("simulated GCS hiccup")
-        return 0
+        return type(self).insert_count
 
 
 class TestMaybeIngestNewStories:
@@ -622,6 +623,7 @@ class TestMaybeIngestNewStories:
 
         _FakeLoader.call_count = 0
         _FakeLoader.raise_error = False
+        _FakeLoader.insert_count = 0
         monkeypatch.setattr(loader_module, "DataLoader", _FakeLoader)
         # graph_store is session-scoped (shared across the whole test file),
         # so other tests may have already advanced its throttle clock —
@@ -684,3 +686,58 @@ class TestMaybeIngestNewStories:
             t.join()
         # The non-blocking lock + throttle claim means only one thread wins.
         assert _FakeLoader.call_count == 1
+
+
+class TestStartupIngestStories:
+    @pytest.fixture(autouse=True)
+    def _patch_loader(self, monkeypatch, graph_store):
+        import webapp.loader as loader_module
+
+        _FakeLoader.call_count = 0
+        _FakeLoader.raise_error = False
+        _FakeLoader.insert_count = 0
+        monkeypatch.setattr(loader_module, "DataLoader", _FakeLoader)
+        graph_store._last_ingest_check = 0.0
+        graph_store._signature = 123
+        graph_store._graph_data_cache = {"nodes": [], "edges": []}
+        yield
+
+    def test_startup_ingest_always_runs(self, graph_store):
+        assert graph_store.ingest_stories_at_startup() == 0
+        assert _FakeLoader.call_count == 1
+        graph_store.ingest_stories_at_startup()
+        assert _FakeLoader.call_count == 2
+
+    def test_startup_ingest_invalidates_cache_on_insert(self, graph_store):
+        _FakeLoader.insert_count = 3
+        assert graph_store.ingest_stories_at_startup() == 3
+        assert graph_store._signature is None
+        assert graph_store._graph_data_cache is None
+
+    def test_startup_ingest_primes_background_throttle(self, graph_store):
+        graph_store.ingest_stories_at_startup()
+        graph_store._maybe_ingest_new_stories()
+        assert _FakeLoader.call_count == 1
+
+    def test_startup_ingest_failure_returns_negative(self, graph_store):
+        _FakeLoader.raise_error = True
+        assert graph_store.ingest_stories_at_startup() == -1
+
+    def test_create_app_runs_startup_ingest(self, monkeypatch):
+        import webapp
+
+        calls: list[str] = []
+
+        def track_startup_ingest(store_self):
+            calls.append("startup")
+            return 0
+
+        monkeypatch.setattr(
+            webapp.graph_store.GraphStore,
+            "ingest_stories_at_startup",
+            track_startup_ingest,
+        )
+
+        app = webapp.create_app()
+        assert app.extensions["graph_store"] is not None
+        assert calls == ["startup"]

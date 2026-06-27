@@ -5,7 +5,10 @@ import {
   fetchGraphApi,
   type GraphApiPayload,
 } from "@/components/graph-flow/fetchGraphApi";
-import { graphPayloadFingerprint } from "@/lib/graphFlow/graphFingerprint";
+import {
+  graphPayloadFingerprint,
+  graphTopologyFingerprint,
+} from "@/lib/graphFlow/graphFingerprint";
 
 export interface UseGraphDataOptions {
   /** Dataset name forwarded to `/api/graph?dataset=`. */
@@ -19,8 +22,10 @@ export interface UseGraphDataOptions {
 
 export interface UseGraphDataResult {
   payload: GraphApiPayload | null;
-  /** Revision string; stable across polls when scraper data unchanged. */
+  /** Full semantic revision; stable across polls when scraper data unchanged. */
   revision: string | null;
+  /** Topology-only revision; stable when only labels/importance/etc. change. */
+  topologyRevision: string | null;
   loading: boolean;
   error: Error | null;
 }
@@ -36,9 +41,11 @@ export function useGraphData(
   const { dataset, refreshMs = 0 } = options;
   const [payload, setPayload] = useState<GraphApiPayload | null>(null);
   const [revision, setRevision] = useState<string | null>(null);
+  const [topologyRevision, setTopologyRevision] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const revisionRef = useRef<string | null>(null);
+  const topologyRevisionRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,10 +57,15 @@ export function useGraphData(
         if (cancelled) return;
 
         const fp = graphPayloadFingerprint(next);
+        const topo = graphTopologyFingerprint(next);
         if (fp !== revisionRef.current) {
           revisionRef.current = fp;
           setPayload(next);
           setRevision(fp);
+        }
+        if (topo !== topologyRevisionRef.current) {
+          topologyRevisionRef.current = topo;
+          setTopologyRevision(topo);
         }
         setError(null);
       } catch (err) {
@@ -78,5 +90,5 @@ export function useGraphData(
     };
   }, [dataset, refreshMs]);
 
-  return { payload, revision, loading, error };
+  return { payload, revision, topologyRevision, loading, error };
 }

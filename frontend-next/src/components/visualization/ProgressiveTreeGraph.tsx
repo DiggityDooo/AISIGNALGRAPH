@@ -9,6 +9,7 @@ import { getLayoutedElements } from "@/lib/graphFlow/layoutUtils";
 export interface ProgressiveTreeGraphProps {
   payload: GraphApiPayload | null;
   dataRevision: string | null;
+  topologyRevision?: string | null;
   initialSeedCount?: number;
   onVisibleCountChange?: (visible: number) => void;
 }
@@ -16,6 +17,7 @@ export interface ProgressiveTreeGraphProps {
 function ProgressiveTreeGraphBody({
   payload,
   dataRevision,
+  topologyRevision,
   initialSeedCount = 3,
   onVisibleCountChange,
 }: ProgressiveTreeGraphProps) {
@@ -31,6 +33,7 @@ function ProgressiveTreeGraphBody({
   } = useProgressiveGraph({
     payload,
     dataRevision,
+    topologyRevision,
     initialSeedCount,
     onVisibleCountChange,
   });
@@ -38,10 +41,9 @@ function ProgressiveTreeGraphBody({
   const layouted = useMemo(
     () =>
       getLayoutedElements(rawNodes, rawEdges, "tree", {
-        fingerprint: dataRevision ?? undefined,
-        payload,
+        fingerprint: topologyRevision ?? dataRevision ?? undefined,
       }),
-    [rawNodes, rawEdges, dataRevision, payload],
+    [rawNodes, rawEdges, dataRevision, topologyRevision],
   );
 
   if (!graphIndex || layouted.nodes.length === 0) {
@@ -69,6 +71,6 @@ function ProgressiveTreeGraphBody({
 
 export default function ProgressiveTreeGraph(props: ProgressiveTreeGraphProps) {
   return (
-    <ProgressiveTreeGraphBody key={props.dataRevision ?? "none"} {...props} />
+    <ProgressiveTreeGraphBody key={props.topologyRevision ?? props.dataRevision ?? "none"} {...props} />
   );
 }

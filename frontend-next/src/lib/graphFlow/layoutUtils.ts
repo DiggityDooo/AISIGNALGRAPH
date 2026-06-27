@@ -78,7 +78,21 @@ export function getLayoutedElements<T extends Record<string, unknown>>(
   if (cached) {
     layoutCache.delete(cacheKey);
     layoutCache.set(cacheKey, cached);
-    return { nodes: cached.nodes as Node<T>[], edges: cached.edges };
+    const positionedById = new Map(
+      cached.nodes.map((node) => [node.id, { position: node.position, style: node.style }]),
+    );
+    return {
+      nodes: nodes.map((node) => {
+        const positioned = positionedById.get(node.id);
+        if (!positioned) return node;
+        return {
+          ...node,
+          style: positioned.style,
+          position: positioned.position,
+        };
+      }) as Node<T>[],
+      edges,
+    };
   }
 
   const { rankdir, nodesep, ranksep } = LAYOUT_CONFIG[mode];

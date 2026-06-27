@@ -58,9 +58,19 @@ test("getLayoutedElements keeps disconnected nodes at finite positions", () => {
 test("getLayoutedElements returns cached layout for identical graph signature", () => {
   clearLayoutCache();
   const first = getLayoutedElements(nodes, edges, "flow", { fingerprint: "fp-test" });
-  const second = getLayoutedElements(nodes, edges, "flow", { fingerprint: "fp-test" });
-  assert.equal(first.nodes, second.nodes);
-  assert.equal(first.edges, second.edges);
+  const refreshedNodes = nodes.map((node) => ({
+    ...node,
+    data: { ...node.data, label: `${node.data.label}!` },
+  }));
+  const second = getLayoutedElements(refreshedNodes, edges, "flow", { fingerprint: "fp-test" });
+  for (const id of ["a", "b"]) {
+    const fromFirst = first.nodes.find((node) => node.id === id);
+    const fromSecond = second.nodes.find((node) => node.id === id);
+    assert.deepEqual(fromFirst.position, fromSecond.position);
+    assert.deepEqual(fromFirst.style, fromSecond.style);
+    assert.equal(fromSecond.data.label, `${fromFirst.data.label}!`);
+  }
+  assert.equal(second.edges, edges);
 });
 
 test("getLayoutedElements does not reuse layout when edge endpoints change", () => {

@@ -2027,6 +2027,41 @@ class GraphStore:
     # static master document/seed file, not the scraper's story feed.
     _INGEST_CHECK_INTERVAL_SECONDS = 300
 
+    def ingest_stories_at_startup(self) -> int:
+        """Mandatory GCS/local story rehydrate before serving graph API."""
+        self._last_ingest_check = time.monotonic()
+        return self._run_story_ingest(context="startup")
+
+    def _run_story_ingest(self, *, context: str) -> int:
+        """Load scraped stories from storage into SQLite.
+
+        Returns the number of newly inserted stories, or -1 on failure.
+        """
+        from .loader import DataLoader
+
+        try:
+            conn = self._connect()
+            try:
+                inserted = DataLoader().load_stories(conn)
+            finally:
+                conn.close()
+        except Exception as exc:  # noqa: BLE001 - ingest must not break graph reads.
+            logger.error("Story ingest failed ({}): {}", context, exc)
+            return -1
+
+        if inserted < 0:
+            logger.error("Story ingest failed ({}): database insert rolled back", context)
+            return -1
+
+        if inserted > 0:
+            logger.info("Story ingest ok ({}): {} new stories inserted", context, inserted)
+            self._signature = None
+            self._graph_data_cache = None
+        else:
+            logger.info("Story ingest ok ({}): no new stories (0 inserted)", context)
+
+        return inserted
+
     def _maybe_ingest_new_stories(self) -> None:
         # A non-blocking lock makes "is it time?" + claim atomic so concurrent
         # requests on a threaded server (the long-lived Cloud Run instance this
@@ -2040,17 +2075,7 @@ class GraphStore:
             if now - self._last_ingest_check < self._INGEST_CHECK_INTERVAL_SECONDS:
                 return
             self._last_ingest_check = now
-
-            from .loader import DataLoader
-
-            try:
-                conn = self._connect()
-                try:
-                    DataLoader().load_stories(conn)
-                finally:
-                    conn.close()
-            except Exception as exc:  # noqa: BLE001 - a transient GCS/network hiccup must not break graph reads.
-                logger.warning(f"Background story ingest check failed (non-fatal): {exc}")
+            self._run_story_ingest(context="background")
         finally:
             self._ingest_lock.release()
 
@@ -2500,6 +2525,7 @@ class GraphStore:
                 target = self._entities.get(entity_ref["id"])
                 if target is None:
                     continue
+                # Chronology is encoded by year->story timeline edges above.
                 if target.entity_type == "year":
                     continue
                 target_type = graph_node_type(target.entity_type, target.group_name)

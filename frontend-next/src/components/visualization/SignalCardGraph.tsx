@@ -9,6 +9,7 @@ import { getLayoutedElements } from "@/lib/graphFlow/layoutUtils";
 export interface SignalCardGraphProps {
   payload: GraphApiPayload | null;
   dataRevision: string | null;
+  topologyRevision?: string | null;
   initialSeedCount?: number;
   onVisibleCountChange?: (visible: number) => void;
 }
@@ -16,6 +17,7 @@ export interface SignalCardGraphProps {
 function SignalCardGraphBody({
   payload,
   dataRevision,
+  topologyRevision,
   initialSeedCount = 3,
   onVisibleCountChange,
 }: SignalCardGraphProps) {
@@ -31,6 +33,7 @@ function SignalCardGraphBody({
   } = useProgressiveGraph({
     payload,
     dataRevision,
+    topologyRevision,
     initialSeedCount,
     onVisibleCountChange,
   });
@@ -38,10 +41,9 @@ function SignalCardGraphBody({
   const layouted = useMemo(
     () =>
       getLayoutedElements(rawNodes, rawEdges, "flow", {
-        fingerprint: dataRevision ?? undefined,
-        payload,
+        fingerprint: topologyRevision ?? dataRevision ?? undefined,
       }),
-    [rawNodes, rawEdges, dataRevision, payload],
+    [rawNodes, rawEdges, dataRevision, topologyRevision],
   );
 
   if (!graphIndex || layouted.nodes.length === 0) {
@@ -68,5 +70,7 @@ function SignalCardGraphBody({
 }
 
 export default function SignalCardGraph(props: SignalCardGraphProps) {
-  return <SignalCardGraphBody key={props.dataRevision ?? "none"} {...props} />;
+  return (
+    <SignalCardGraphBody key={props.topologyRevision ?? props.dataRevision ?? "none"} {...props} />
+  );
 }

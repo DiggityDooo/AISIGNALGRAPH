@@ -3,6 +3,13 @@ export type SplineSceneConfig = {
   sceneUrl?: string;
 };
 
+export type SplineGraphMode = "treeFlow" | "lattice";
+
+export type SplineGraphSceneConfig = {
+  treeFlow?: SplineSceneConfig;
+  lattice?: SplineSceneConfig;
+};
+
 export type SplineViewerState = "idle" | "loading" | "ready" | "failed";
 
 /** Run work after first paint so LCP can settle on static hero assets. */
@@ -45,6 +52,8 @@ const BUILD_TIME_VIEWER_URL =
 
 const PROD_SCENE_CONFIG_PATH = "/static/spline-scene.json";
 const DEV_SCENE_CONFIG_PATH = "/spline-scene.json";
+const PROD_GRAPH_SCENE_CONFIG_PATH = "/static/spline-graph-scene.json";
+const DEV_GRAPH_SCENE_CONFIG_PATH = "/spline-graph-scene.json";
 
 const VIEWER_CODE_RE = /\.splinecode(?:\?.*)?$/i;
 const PUBLIC_SPLINE_RE = /my\.spline\.design/i;
@@ -120,6 +129,39 @@ async function fetchSceneConfig(path: string): Promise<SplineSceneConfig | null>
   } catch {
     return null;
   }
+}
+
+function resolveGraphViewerUrlFromBundle(
+  config: SplineGraphSceneConfig | null,
+  mode: SplineGraphMode,
+): string {
+  if (!config) {
+    return "";
+  }
+
+  const modeConfig = config[mode];
+  return modeConfig ? resolveViewerUrlFromConfig(modeConfig) : "";
+}
+
+export async function resolveSplineGraphViewerUrl(
+  mode: SplineGraphMode,
+): Promise<string> {
+  const prodConfig = (await fetchSceneConfig(
+    PROD_GRAPH_SCENE_CONFIG_PATH,
+  )) as SplineGraphSceneConfig | null;
+  const prodUrl = resolveGraphViewerUrlFromBundle(prodConfig, mode);
+  if (prodUrl) {
+    return prodUrl;
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    const devConfig = (await fetchSceneConfig(
+      DEV_GRAPH_SCENE_CONFIG_PATH,
+    )) as SplineGraphSceneConfig | null;
+    return resolveGraphViewerUrlFromBundle(devConfig, mode);
+  }
+
+  return "";
 }
 
 export async function resolveSplineViewerUrl(): Promise<string> {

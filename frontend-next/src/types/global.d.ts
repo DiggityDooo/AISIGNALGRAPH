@@ -8,6 +8,7 @@ declare module "react" {
           url?: string;
           loading?: "lazy" | "eager";
           "events-target"?: "global" | "local";
+          background?: string;
         },
         HTMLElement
       >;

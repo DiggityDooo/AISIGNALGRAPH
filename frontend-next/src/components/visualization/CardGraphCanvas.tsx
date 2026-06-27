@@ -42,29 +42,35 @@ function AutoFit({
 }) {
   const { fitView } = useReactFlow();
 
+  // Initial load / data revision — fit the whole graph. Skipped when
+  // focusKey is set: layoutKey remounts on expand would otherwise re-run
+  // this and jump the camera away from the node being opened.
   useEffect(() => {
-    const focused = focusNodeIds && focusNodeIds.length > 0;
-    // On expand, scroll + zoom to frame just the parent and its newly
-    // revealed children; otherwise (first paint, collapse) fit the whole
-    // graph. The short delay lets React Flow measure freshly-mounted nodes;
-    // the eased camera then travels as the cards slide into place.
-    const timer = window.setTimeout(
-      () => {
-        if (focused) {
-          void fitView({
-            nodes: focusNodeIds.map((id) => ({ id })),
-            padding: 0.6,
-            duration: 700,
-            maxZoom: 1.1,
-          });
-        } else {
-          void fitView({ padding: 0.2, duration: 800 });
-        }
-      },
-      focused ? 120 : 40,
-    );
+    if (focusKey) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      void fitView({ padding: 0.2, duration: 800 });
+    }, 40);
     return () => window.clearTimeout(timer);
-  }, [fitKey, focusKey, focusNodeIds, fitView]);
+  }, [fitKey, focusKey, fitView]);
+
+  // Expand — ease toward the parent node only; fitKey stays unchanged.
+  useEffect(() => {
+    const parentId = focusNodeIds?.[0];
+    if (!focusKey || !parentId) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      void fitView({
+        nodes: [{ id: parentId }],
+        padding: 0.7,
+        duration: 700,
+        maxZoom: 1.1,
+      });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [focusKey, focusNodeIds, fitView]);
 
   return null;
 }

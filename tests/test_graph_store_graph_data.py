@@ -70,6 +70,60 @@ class TestGetGraphData:
         assert isinstance(data["communities"], list)
 
 
+class TestGraphYearEdgePruning:
+    """Phase 2a: chronology uses year->story timeline edges only."""
+
+    def test_no_story_to_year_mention_edges(self, graph_store):
+        data = graph_store.get_graph_data()
+        year_node_ids = {n["id"] for n in data["nodes"] if n.get("type") == "year"}
+        story_year_mentions = [
+            edge
+            for edge in data["edges"]
+            if edge["flow_kind"] == "mention"
+            and edge["source"].startswith("story:")
+            and edge["target"] in year_node_ids
+        ]
+        assert story_year_mentions == []
+
+    def test_year_to_story_timeline_edges_preserved(self, graph_store):
+        data = graph_store.get_graph_data()
+        year_node_ids = {n["id"] for n in data["nodes"] if n.get("type") == "year"}
+        story_node_ids = {n["id"] for n in data["nodes"] if n["node_type"] == "story"}
+        timeline_edges = [
+            edge
+            for edge in data["edges"]
+            if edge["flow_kind"] == "timeline"
+            and edge["source"] in year_node_ids
+            and edge["target"] in story_node_ids
+        ]
+        assert len(timeline_edges) > 0
+        assert all(edge["flow_kind"] == "timeline" for edge in timeline_edges)
+
+    def test_stories_with_year_entities_still_link_via_timeline(self, graph_store):
+        """Seed links stories to year-* entities; timeline edges replace mention edges."""
+        from tests.conftest import MINIMAL_SEED
+
+        data = graph_store.get_graph_data()
+        year_node_ids = {n["id"] for n in data["nodes"] if n.get("type") == "year"}
+        for story_id, entity_id in MINIMAL_SEED["story_entities"]:
+            if not entity_id.startswith("year-"):
+                continue
+            year_node_id = f"entity:{entity_id}"
+            if year_node_id not in year_node_ids:
+                continue
+            story_node_id = f"story:{story_id}"
+            if story_node_id not in {n["id"] for n in data["nodes"]}:
+                continue
+            timeline = [
+                e
+                for e in data["edges"]
+                if e["flow_kind"] == "timeline"
+                and e["source"] == year_node_id
+                and e["target"] == story_node_id
+            ]
+            assert len(timeline) == 1
+
+
 # ---------------------------------------------------------------------------
 # get_graph_data_by_era
 # ---------------------------------------------------------------------------

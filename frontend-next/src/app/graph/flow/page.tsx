@@ -22,6 +22,11 @@ const ProgressiveTreeGraph = dynamic(
   { ssr: false },
 );
 
+const SplineGraphBackground = dynamic(
+  () => import("@/components/hero/SplineGraphBackground"),
+  { ssr: false },
+);
+
 // Re-fetch every 30s so scraper/database updates surface without a reload.
 const GRAPH_REFRESH_MS = 30_000;
 
@@ -32,7 +37,7 @@ export default function GraphFlowPage() {
   const [visibleNodes, setVisibleNodes] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>("tree");
 
-  const { payload, revision, loading, error } = useGraphData({
+  const { payload, revision, topologyRevision, loading, error } = useGraphData({
     refreshMs: GRAPH_REFRESH_MS,
   });
 
@@ -47,7 +52,7 @@ export default function GraphFlowPage() {
   }
 
   const modeButtonClass = (active: boolean) =>
-    `glass-panel px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider transition-all border ${
+    `glass-panel px-5 py-2.5 font-mono text-sm uppercase tracking-wider transition-all border ${
       active
         ? "bg-primary/20 text-primary border-primary/40 font-bold"
         : "bg-transparent text-muted hover:text-white border-white/5 hover:border-white/10"
@@ -101,45 +106,57 @@ export default function GraphFlowPage() {
       </header>
 
       <div className="absolute inset-0 pt-32">
-        {error && (
-          <p
-            role="alert"
-            className="font-mono text-sm text-secondary p-8 tracking-widest uppercase"
-          >
-            Failed to load signal graph — {error.message}
-          </p>
+        {viewMode === "force" && (
+          <SplineGraphBackground mode="lattice" />
         )}
-        {!error && loading && !payload && (
-          <p
-            role="status"
-            className="font-mono text-sm text-primary p-8 tracking-widest uppercase animate-pulse"
-          >
-            Loading signal graph…
-          </p>
+        {(viewMode === "tree" || viewMode === "flow") && (
+          <SplineGraphBackground mode="treeFlow" />
         )}
-        {viewMode === "force" && payload && (
-          <SigmaLatticeGraph
-            payload={payload}
-            dataRevision={revision}
-            onVisibleCountChange={setVisibleNodes}
-          />
-        )}
-        {viewMode === "tree" && payload && (
-          <ProgressiveTreeGraph
-            payload={payload}
-            dataRevision={revision}
-            initialSeedCount={3}
-            onVisibleCountChange={setVisibleNodes}
-          />
-        )}
-        {viewMode === "flow" && payload && (
-          <SignalCardGraph
-            payload={payload}
-            dataRevision={revision}
-            initialSeedCount={3}
-            onVisibleCountChange={setVisibleNodes}
-          />
-        )}
+
+        <div className="relative z-10 h-full">
+          {error && (
+            <p
+              role="alert"
+              className="font-mono text-sm text-secondary p-8 tracking-widest uppercase"
+            >
+              Failed to load signal graph — {error.message}
+            </p>
+          )}
+          {!error && loading && !payload && (
+            <p
+              role="status"
+              className="font-mono text-sm text-primary p-8 tracking-widest uppercase animate-pulse"
+            >
+              Loading signal graph…
+            </p>
+          )}
+          {viewMode === "force" && payload && (
+            <SigmaLatticeGraph
+              payload={payload}
+              dataRevision={revision}
+              topologyRevision={topologyRevision}
+              onVisibleCountChange={setVisibleNodes}
+            />
+          )}
+          {viewMode === "tree" && payload && (
+            <ProgressiveTreeGraph
+              payload={payload}
+              dataRevision={revision}
+              topologyRevision={topologyRevision}
+              initialSeedCount={3}
+              onVisibleCountChange={setVisibleNodes}
+            />
+          )}
+          {viewMode === "flow" && payload && (
+            <SignalCardGraph
+              payload={payload}
+              dataRevision={revision}
+              topologyRevision={topologyRevision}
+              initialSeedCount={3}
+              onVisibleCountChange={setVisibleNodes}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

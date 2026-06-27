@@ -55,7 +55,7 @@ def create_app() -> Flask:
         app.logger.exception("Failed to initialize AI Signal Graph services: %s", exc)
 
     if graph_store is not None:
-        _run_migrations_and_load(app, db_path)
+        _run_migrations_and_load(app, graph_store)
 
     try:
         from .routes.api import api_bp
@@ -433,28 +433,43 @@ def create_app() -> Flask:
 
     return app
 
-def _run_migrations_and_load(app: Flask, db_path: Path) -> None:
-    """Apply schema migrations, then ingest seed + scraped stories."""
+def _run_migrations_and_load(app: Flask, graph_store: GraphStore) -> None:
+    """Apply schema migrations, seed corpus, then mandatory GCS story rehydrate."""
     import sqlite3
 
+    seeded = 0
     try:
         from .db import run_migrations
         from .loader import DataLoader
 
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(graph_store.db_path)
         try:
             run_migrations(conn)
             loader = DataLoader()
             seeded = loader.load_seed(conn)
-            loaded = loader.load_stories(conn)
-            if seeded or loaded:
-                app.logger.info(
-                    "Data load complete: %d seed + %d scraped stories.", seeded, loaded
-                )
         finally:
             conn.close()
     except Exception as exc:  # noqa: BLE001
-        app.logger.exception("Migrations/data load failed (non-fatal): %s", exc)
+        app.logger.exception("Startup seed/migration failed (non-fatal): %s", exc)
+
+    try:
+        loaded = graph_store.ingest_stories_at_startup()
+    except Exception as exc:  # noqa: BLE001
+        app.logger.exception("Startup story ingest failed (non-fatal): %s", exc)
+        loaded = -1
+
+    if loaded < 0:
+        app.logger.error(
+            "Startup data load incomplete: seed=%d, scraped_inserted=FAILED "
+            "(graph may be stale until next ingest cycle).",
+            seeded,
+        )
+    else:
+        app.logger.info(
+            "Startup data load complete: seed=%d, scraped_inserted=%d.",
+            seeded,
+            loaded,
+        )
 
 
 def _default_job_state() -> JobState:

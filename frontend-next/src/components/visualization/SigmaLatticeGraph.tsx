@@ -8,10 +8,19 @@ import type { GraphApiNode, GraphApiPayload } from "@/components/graph-flow/fetc
 import { accentForType, nodeTypeOf } from "@/lib/graphFlow/nodeColors";
 import { degreeBasedSize } from "@/lib/graphFlow/nodeSizing";
 import { buildLatticeFocusHref } from "@/lib/graphFlow/latticeBridge";
+import {
+  applyLayoutPositions,
+  LAYOUT_ITERATIONS,
+  latticeLayoutSettings,
+  PROGRESSIVE_CHUNK_SIZE,
+  serializeGraphForLayout,
+  type LatticeLayoutPositions,
+} from "@/lib/graphFlow/latticeLayout";
 
 export interface SigmaLatticeGraphProps {
   payload: GraphApiPayload | null;
   dataRevision?: string | null;
+  topologyRevision?: string | null;
   onVisibleCountChange?: (visible: number) => void;
 }
 
@@ -38,9 +47,107 @@ const VISUALS = {
   focusedEdgeSize: 1.2,
 } as const;
 
-const LAYOUT_ITERATIONS = 120;
-
 type SavedPositions = Map<string, { x: number; y: number }>;
+type LayoutWorker = Worker;
+
+function createLayoutWorker(): LayoutWorker | null {
+  if (typeof Worker === "undefined") return null;
+  try {
+    return new Worker(new URL("../../lib/graphFlow/latticeLayout.worker.ts", import.meta.url), {
+      type: "module",
+    });
+  } catch {
+    return null;
+  }
+}
+
+function runWorkerLayout(
+  worker: LayoutWorker,
+  input: ReturnType<typeof serializeGraphForLayout>,
+  signal: AbortSignal,
+): Promise<LatticeLayoutPositions> {
+  const requestId = crypto.randomUUID();
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      worker.removeEventListener("message", onMessage);
+      worker.removeEventListener("error", onError);
+      worker.removeEventListener("messageerror", onMessageError);
+      signal.removeEventListener("abort", onAbort);
+    };
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as {
+        type: string;
+        requestId: string;
+        positions?: LatticeLayoutPositions;
+        message?: string;
+      };
+      if (data.requestId !== requestId) return;
+      cleanup();
+      if (data.type === "error") reject(new Error(data.message ?? "layout worker error"));
+      else resolve(data.positions as LatticeLayoutPositions);
+    };
+    const onError = (event: ErrorEvent) => {
+      cleanup();
+      reject(event.error instanceof Error ? event.error : new Error(event.message));
+    };
+    const onMessageError = () => {
+      cleanup();
+      reject(new Error("Lattice layout worker returned an unreadable message"));
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("Lattice layout cancelled", "AbortError"));
+    };
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    worker.addEventListener("message", onMessage);
+    worker.addEventListener("error", onError);
+    worker.addEventListener("messageerror", onMessageError);
+    signal.addEventListener("abort", onAbort, { once: true });
+    try {
+      worker.postMessage({ type: "layout", requestId, input });
+    } catch (error) {
+      cleanup();
+      reject(error);
+    }
+  });
+}
+
+function runProgressiveLayout(
+  graph: Graph,
+  renderer: Sigma,
+  onComplete: (positions: SavedPositions) => void,
+): () => void {
+  const settings = latticeLayoutSettings(graph);
+  let currentIteration = 0;
+  let animationFrameId: number | null = null;
+
+  const runLayoutStep = () => {
+    if (currentIteration >= LAYOUT_ITERATIONS) {
+      const nextPositions: SavedPositions = new Map();
+      graph.forEachNode((nodeId, attrs) => {
+        nextPositions.set(nodeId, { x: attrs.x as number, y: attrs.y as number });
+      });
+      onComplete(nextPositions);
+      return;
+    }
+
+    forceAtlas2.assign(graph, { iterations: PROGRESSIVE_CHUNK_SIZE, settings });
+    renderer.refresh();
+    currentIteration += PROGRESSIVE_CHUNK_SIZE;
+    animationFrameId = requestAnimationFrame(runLayoutStep);
+  };
+
+  animationFrameId = requestAnimationFrame(runLayoutStep);
+
+  return () => {
+    if (animationFrameId !== null) {
+      cancelAnimationFrame(animationFrameId);
+    }
+  };
+}
 
 /**
  * Builds a fresh graphology Graph from the full payload — every node/edge,
@@ -95,9 +202,36 @@ function buildGraph(
   return { graph, newNodeCount };
 }
 
+function applyNodeMetadata(graph: Graph, payload: GraphApiPayload): void {
+  for (const node of payload.nodes) {
+    if (!node.id || !graph.hasNode(node.id)) continue;
+    graph.mergeNodeAttributes(node.id, {
+      ...node,
+      label: node.label ?? node.id,
+      color: accentForType(nodeTypeOf(node)),
+      size: degreeBasedSize(graph.degree(node.id), { min: 2, max: 8 }),
+    });
+  }
+}
+
+function mountSigmaRenderer(graph: Graph, container: HTMLDivElement): Sigma {
+  return new Sigma(graph, container, {
+    renderLabels: true,
+    labelSize: VISUALS.labelSize,
+    labelColor: { color: VISUALS.labelColor },
+    defaultNodeColor: VISUALS.defaultNodeColor,
+    defaultEdgeColor: VISUALS.edgeColor,
+    labelGridCellSize: VISUALS.labelGridCellSize,
+    labelDensity: VISUALS.labelDensity,
+    labelRenderedSizeThreshold: VISUALS.labelRenderedSizeThreshold,
+    minEdgeThickness: VISUALS.minEdgeThickness,
+  });
+}
+
 export default function SigmaLatticeGraph({
   payload,
   dataRevision,
+  topologyRevision,
   onVisibleCountChange,
 }: SigmaLatticeGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -110,6 +244,11 @@ export default function SigmaLatticeGraph({
   /** Node positions persisted across rebuilds so a poll-driven data refresh
    * doesn't reshuffle the whole lattice. */
   const positionsRef = useRef<SavedPositions>(new Map());
+  const rendererRef = useRef<Sigma | null>(null);
+  const graphRef = useRef<Graph | null>(null);
+  const mountedTopologyRef = useRef<string | null>(null);
+  const layoutWorkerRef = useRef<LayoutWorker | null>(null);
+  const layoutWorkerFailedRef = useRef(false);
   /** Callback kept in a ref so its identity isn't an effect dependency —
    * otherwise a new closure from the parent would tear down and rebuild the
    * entire Sigma/WebGL instance + layout. */
@@ -121,116 +260,136 @@ export default function SigmaLatticeGraph({
     onVisibleCountChangeRef.current = onVisibleCountChange;
   }, [onVisibleCountChange]);
 
+  useEffect(
+    () => () => {
+      layoutWorkerRef.current?.terminate();
+      layoutWorkerRef.current = null;
+      layoutWorkerFailedRef.current = false;
+    },
+    [],
+  );
+
+  // Metadata-only poll updates: patch labels/colors/sizes without remounting Sigma
+  // or re-running ForceAtlas2 when topology is unchanged.
+  useEffect(() => {
+    const graph = graphRef.current;
+    const renderer = rendererRef.current;
+    if (!graph || !renderer || !payload) return;
+    if (mountedTopologyRef.current !== (topologyRevision ?? null)) return;
+
+    applyNodeMetadata(graph, payload);
+    renderer.refresh();
+  }, [payload, dataRevision, topologyRevision]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !payload || payload.nodes.length === 0) return;
 
-    const { graph, newNodeCount } = buildGraph(payload, positionsRef.current);
-    let animationFrameId: number | null = null;
+    let cancelled = false;
+    let cancelProgressiveLayout: (() => void) | null = null;
+    const controller = new AbortController();
 
-    const renderer = new Sigma(graph, container, {
-      renderLabels: true,
-      labelSize: VISUALS.labelSize,
-      labelColor: { color: VISUALS.labelColor },
-      defaultNodeColor: VISUALS.defaultNodeColor,
-      defaultEdgeColor: VISUALS.edgeColor,
-      labelGridCellSize: VISUALS.labelGridCellSize,
-      labelDensity: VISUALS.labelDensity,
-      labelRenderedSizeThreshold: VISUALS.labelRenderedSizeThreshold,
-      minEdgeThickness: VISUALS.minEdgeThickness,
-    });
+    void (async () => {
+      const topologyKey = topologyRevision ?? null;
+      mountedTopologyRef.current = topologyKey;
 
-    // Run progressive ForceAtlas2 layout over multiple animation frames
-    // so the main thread remains fully interactive and responsive.
-    if (newNodeCount > 0) {
-      setBuilding(true);
-      const settings = {
-        ...forceAtlas2.inferSettings(graph),
-        barnesHutOptimize: true,
-        gravity: 0.03,
-        scalingRatio: 100,
-        strongGravityMode: false,
-        outboundAttractionDistribution: true,
-        linLogMode: true,
-        adjustSizes: true,
-        slowDown: 2,
-      };
+      const { graph, newNodeCount } = buildGraph(payload, positionsRef.current);
+      graphRef.current = graph;
 
-      let currentIteration = 0;
-      const CHUNK_SIZE = 10;
+      let useProgressiveFallback = false;
 
-      const runLayoutStep = () => {
-        if (currentIteration >= LAYOUT_ITERATIONS) {
-          setBuilding(false);
-          // Persist the resolved positions for the next rebuild.
-          const nextPositions: SavedPositions = new Map();
-          graph.forEachNode((nodeId, attrs) => {
-            nextPositions.set(nodeId, { x: attrs.x as number, y: attrs.y as number });
-          });
-          positionsRef.current = nextPositions;
-          return;
+      if (newNodeCount > 0) {
+        setBuilding(true);
+
+        if (!layoutWorkerRef.current && !layoutWorkerFailedRef.current) {
+          layoutWorkerRef.current = createLayoutWorker();
         }
+        const worker = layoutWorkerRef.current;
 
-        forceAtlas2.assign(graph, { iterations: CHUNK_SIZE, settings });
+        try {
+          const positions = worker
+            ? await runWorkerLayout(worker, serializeGraphForLayout(graph), controller.signal)
+            : await Promise.reject(new Error("layout worker unavailable"));
+          if (cancelled || controller.signal.aborted) return;
+          applyLayoutPositions(graph, positions);
+          positionsRef.current = new Map(Object.entries(positions));
+        } catch {
+          if (cancelled || controller.signal.aborted) return;
+          if (worker) {
+            worker.terminate();
+            if (layoutWorkerRef.current === worker) layoutWorkerRef.current = null;
+            layoutWorkerFailedRef.current = true;
+          }
+          useProgressiveFallback = true;
+        }
+      }
+
+      if (cancelled) return;
+
+      const renderer = mountSigmaRenderer(graph, container);
+      rendererRef.current = renderer;
+
+      if (newNodeCount > 0 && useProgressiveFallback) {
+        cancelProgressiveLayout = runProgressiveLayout(graph, renderer, (nextPositions) => {
+          if (cancelled) return;
+          positionsRef.current = nextPositions;
+          setBuilding(false);
+        });
+      } else {
+        setBuilding(false);
+      }
+
+      renderer.setSetting("nodeReducer", (nodeId, data) => {
+        const focus = focusRef.current;
+        if (!focus.id) return data;
+        if (nodeId === focus.id || focus.neighbors.has(nodeId)) {
+          return { ...data, zIndex: 999, highlighted: nodeId === focus.id };
+        }
+        return { ...data, label: "", color: VISUALS.unfocusedNodeColor };
+      });
+
+      renderer.setSetting("edgeReducer", (edgeId, data) => {
+        const focus = focusRef.current;
+        if (!focus.id) return data;
+        if (graph.hasExtremity(edgeId, focus.id)) {
+          return { ...data, color: VISUALS.focusedEdgeColor, size: VISUALS.focusedEdgeSize, zIndex: 998 };
+        }
+        return { ...data, hidden: true };
+      });
+
+      renderer.on("clickNode", ({ node }) => {
+        focusRef.current = { id: node, neighbors: new Set(graph.neighbors(node)) };
+        const nodeAttrs = graph.getNodeAttributes(node) as GraphApiNode & { x: number; y: number };
+        setFocusedNode(nodeAttrs);
         renderer.refresh();
-        currentIteration += CHUNK_SIZE;
-        animationFrameId = requestAnimationFrame(runLayoutStep);
-      };
 
-      animationFrameId = requestAnimationFrame(runLayoutStep);
-    } else {
-      setBuilding(false);
-    }
+        renderer.getCamera().animate(
+          { x: nodeAttrs.x, y: nodeAttrs.y, ratio: 0.2 },
+          { duration: 500 },
+        );
+      });
 
-    renderer.setSetting("nodeReducer", (nodeId, data) => {
-      const focus = focusRef.current;
-      if (!focus.id) return data;
-      if (nodeId === focus.id || focus.neighbors.has(nodeId)) {
-        return { ...data, zIndex: 999, highlighted: nodeId === focus.id };
-      }
-      return { ...data, label: "", color: VISUALS.unfocusedNodeColor };
-    });
+      renderer.on("clickStage", () => {
+        focusRef.current = { id: null, neighbors: new Set() };
+        setFocusedNode(null);
+        renderer.refresh();
+      });
 
-    renderer.setSetting("edgeReducer", (edgeId, data) => {
-      const focus = focusRef.current;
-      if (!focus.id) return data;
-      if (graph.hasExtremity(edgeId, focus.id)) {
-        return { ...data, color: VISUALS.focusedEdgeColor, size: VISUALS.focusedEdgeSize, zIndex: 998 };
-      }
-      return { ...data, hidden: true };
-    });
-
-    // Click focuses a node's neighborhood and centers camera on selection
-    renderer.on("clickNode", ({ node }) => {
-      focusRef.current = { id: node, neighbors: new Set(graph.neighbors(node)) };
-      const nodeAttrs = graph.getNodeAttributes(node) as GraphApiNode & { x: number; y: number };
-      setFocusedNode(nodeAttrs);
-      renderer.refresh();
-
-      // Smoothly zoom in and center the viewport on the selected node
-      renderer.getCamera().animate(
-        { x: nodeAttrs.x, y: nodeAttrs.y, ratio: 0.2 },
-        { duration: 500 }
-      );
-    });
-
-    renderer.on("clickStage", () => {
-      focusRef.current = { id: null, neighbors: new Set() };
-      setFocusedNode(null);
-      renderer.refresh();
-    });
-
-    onVisibleCountChangeRef.current?.(graph.order);
+      onVisibleCountChangeRef.current?.(graph.order);
+    })();
 
     return () => {
-      if (animationFrameId !== null) {
-        cancelAnimationFrame(animationFrameId);
-      }
-      renderer.kill();
+      cancelled = true;
+      controller.abort();
+      cancelProgressiveLayout?.();
+      rendererRef.current?.kill();
+      rendererRef.current = null;
+      graphRef.current = null;
+      mountedTopologyRef.current = null;
       focusRef.current = { id: null, neighbors: new Set() };
       setFocusedNode(null);
     };
-  }, [payload, dataRevision]);
+  }, [topologyRevision]);
 
   if (!payload || payload.nodes.length === 0) {
     return (

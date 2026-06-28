@@ -22,11 +22,6 @@ const ProgressiveTreeGraph = dynamic(
   { ssr: false },
 );
 
-const SplineGraphBackground = dynamic(
-  () => import("@/components/hero/SplineGraphBackground"),
-  { ssr: false },
-);
-
 // Re-fetch every 30s so scraper/database updates surface without a reload.
 const GRAPH_REFRESH_MS = 30_000;
 
@@ -106,13 +101,6 @@ export default function GraphFlowPage() {
       </header>
 
       <div className="absolute inset-0 pt-32">
-        {viewMode === "force" && (
-          <SplineGraphBackground mode="lattice" />
-        )}
-        {(viewMode === "tree" || viewMode === "flow") && (
-          <SplineGraphBackground mode="treeFlow" />
-        )}
-
         <div className="relative z-10 h-full">
           {error && (
             <p

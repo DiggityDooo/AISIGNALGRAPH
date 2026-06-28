@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
   loadSplineViewerScript,
-  resolveSplineGraphViewerUrl,
+  resolveSplineGraphEmbed,
+  type SplineGraphEmbed,
   type SplineGraphMode,
   type SplineViewerState,
-  validateViewerUrl,
 } from "@/lib/splineScene";
 
 type SplineGraphBackgroundProps = {
@@ -15,20 +15,20 @@ type SplineGraphBackgroundProps = {
 
 export default function SplineGraphBackground({ mode }: SplineGraphBackgroundProps) {
   const viewerRef = useRef<HTMLElement | null>(null);
-  const [viewerUrl, setViewerUrl] = useState("");
+  const [embed, setEmbed] = useState<SplineGraphEmbed | null>(null);
   const [configReady, setConfigReady] = useState(false);
   const [viewerState, setViewerState] = useState<SplineViewerState>("idle");
 
   useEffect(() => {
     let cancelled = false;
     setConfigReady(false);
-    setViewerUrl("");
+    setEmbed(null);
     setViewerState("idle");
 
-    resolveSplineGraphViewerUrl(mode)
-      .then((url) => {
+    resolveSplineGraphEmbed(mode)
+      .then((resolved) => {
         if (!cancelled) {
-          setViewerUrl(url);
+          setEmbed(resolved);
         }
       })
       .finally(() => {
@@ -49,10 +49,21 @@ export default function SplineGraphBackground({ mode }: SplineGraphBackgroundPro
 
     let cancelled = false;
 
-    if (!viewerUrl) {
+    if (!embed) {
       queueMicrotask(() => {
         if (!cancelled) {
           setViewerState("failed");
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (embed.embedKind === "iframe") {
+      queueMicrotask(() => {
+        if (!cancelled) {
+          setViewerState("ready");
         }
       });
       return () => {
@@ -66,20 +77,11 @@ export default function SplineGraphBackground({ mode }: SplineGraphBackgroundPro
       }
     });
 
-    validateViewerUrl(viewerUrl)
-      .then((isValid) => {
-        if (cancelled) {
-          return;
+    loadSplineViewerScript()
+      .then(() => {
+        if (!cancelled) {
+          setViewerState("idle");
         }
-        if (!isValid) {
-          setViewerState("failed");
-          return;
-        }
-        return loadSplineViewerScript().then(() => {
-          if (!cancelled) {
-            setViewerState("idle");
-          }
-        });
       })
       .catch(() => {
         if (!cancelled) {
@@ -90,15 +92,21 @@ export default function SplineGraphBackground({ mode }: SplineGraphBackgroundPro
     return () => {
       cancelled = true;
     };
-  }, [configReady, viewerUrl]);
+  }, [configReady, embed]);
 
   useEffect(() => {
     const viewer = viewerRef.current;
-    if (!viewer || viewerState === "failed" || viewerState === "loading" || !viewerUrl) {
+    if (
+      !viewer ||
+      embed?.embedKind !== "viewer" ||
+      viewerState === "failed" ||
+      viewerState === "loading" ||
+      !embed.embedUrl
+    ) {
       return;
     }
 
-    viewer.setAttribute("url", viewerUrl);
+    viewer.setAttribute("url", embed.embedUrl);
     viewer.setAttribute("loading", "lazy");
     viewer.setAttribute("events-target", "local");
 
@@ -127,21 +135,22 @@ export default function SplineGraphBackground({ mode }: SplineGraphBackgroundPro
       window.clearInterval(logoTimer);
       window.clearTimeout(logoStopTimer);
     };
-  }, [viewerState, viewerUrl]);
+  }, [embed, viewerState]);
 
   const showVoidLayer =
     !configReady ||
-    !viewerUrl ||
-    viewerState === "loading" ||
-    viewerState === "failed";
+    !embed ||
+    (embed.embedKind === "viewer" &&
+      (viewerState === "loading" || viewerState === "failed"));
 
+  const showIframe = embed?.embedKind === "iframe" && viewerState === "ready";
   const showViewer =
-    Boolean(viewerUrl) &&
+    embed?.embedKind === "viewer" &&
     viewerState !== "failed" &&
     viewerState !== "loading";
 
   useEffect(() => {
-    if (!showViewer) {
+    if (!showViewer && !showIframe) {
       return;
     }
 
@@ -152,7 +161,7 @@ export default function SplineGraphBackground({ mode }: SplineGraphBackgroundPro
     return () => {
       timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [showViewer, viewerUrl]);
+  }, [showViewer, showIframe, embed?.embedUrl]);
 
   return (
     <div
@@ -161,15 +170,26 @@ export default function SplineGraphBackground({ mode }: SplineGraphBackgroundPro
       data-testid="spline-graph-root"
       data-spline-graph-mode={mode}
       data-spline-state={viewerState}
+      data-spline-embed={embed?.embedKind ?? "none"}
     >
       {showVoidLayer && (
         <div className="absolute inset-0 bg-[#050202]" data-testid="spline-graph-void" />
       )}
 
+      {showIframe && (
+        <iframe
+          src={embed.embedUrl}
+          title=""
+          tabIndex={-1}
+          className="h-full w-full border-0 opacity-60"
+          data-testid="spline-graph-iframe"
+        />
+      )}
+
       {showViewer && (
         <spline-viewer
           ref={viewerRef}
-          url={viewerUrl}
+          url={embed.embedUrl}
           loading="lazy"
           events-target="local"
           className="h-full w-full opacity-60"

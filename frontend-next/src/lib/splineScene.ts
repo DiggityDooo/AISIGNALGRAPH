@@ -131,37 +131,73 @@ async function fetchSceneConfig(path: string): Promise<SplineSceneConfig | null>
   }
 }
 
-function resolveGraphViewerUrlFromBundle(
+function resolveGraphEmbedFromConfig(
   config: SplineGraphSceneConfig | null,
   mode: SplineGraphMode,
-): string {
-  if (!config) {
-    return "";
+): SplineGraphEmbed | null {
+  if (!config?.[mode]) {
+    return null;
   }
 
-  const modeConfig = config[mode];
-  return modeConfig ? resolveViewerUrlFromConfig(modeConfig) : "";
+  const modeConfig = config[mode]!;
+  const directViewer = modeConfig.viewerUrl?.trim() ?? "";
+  if (directViewer) {
+    const normalized = normalizeViewerUrl(directViewer);
+    if (VIEWER_CODE_RE.test(normalized)) {
+      return { embedUrl: normalized, embedKind: "viewer" };
+    }
+  }
+
+  const publicScene = modeConfig.sceneUrl?.trim() ?? "";
+  if (publicScene && PUBLIC_SPLINE_RE.test(publicScene)) {
+    return { embedUrl: publicScene, embedKind: "iframe" };
+  }
+
+  if (publicScene) {
+    const derived = normalizeViewerUrl(publicScene);
+    if (VIEWER_CODE_RE.test(derived)) {
+      return { embedUrl: derived, embedKind: "viewer" };
+    }
+  }
+
+  return null;
 }
 
-export async function resolveSplineGraphViewerUrl(
-  mode: SplineGraphMode,
-): Promise<string> {
+async function fetchGraphSceneConfig(): Promise<SplineGraphSceneConfig | null> {
   const prodConfig = (await fetchSceneConfig(
     PROD_GRAPH_SCENE_CONFIG_PATH,
   )) as SplineGraphSceneConfig | null;
-  const prodUrl = resolveGraphViewerUrlFromBundle(prodConfig, mode);
-  if (prodUrl) {
-    return prodUrl;
+  if (prodConfig) {
+    return prodConfig;
   }
 
   if (process.env.NODE_ENV === "development") {
-    const devConfig = (await fetchSceneConfig(
+    return (await fetchSceneConfig(
       DEV_GRAPH_SCENE_CONFIG_PATH,
     )) as SplineGraphSceneConfig | null;
-    return resolveGraphViewerUrlFromBundle(devConfig, mode);
   }
 
-  return "";
+  return null;
+}
+
+export type SplineGraphEmbed = {
+  embedUrl: string;
+  embedKind: "viewer" | "iframe";
+};
+
+export async function resolveSplineGraphEmbed(
+  mode: SplineGraphMode,
+): Promise<SplineGraphEmbed | null> {
+  const config = await fetchGraphSceneConfig();
+  return resolveGraphEmbedFromConfig(config, mode);
+}
+
+/** @deprecated Prefer resolveSplineGraphEmbed — public URLs need iframe embed. */
+export async function resolveSplineGraphViewerUrl(
+  mode: SplineGraphMode,
+): Promise<string> {
+  const embed = await resolveSplineGraphEmbed(mode);
+  return embed?.embedKind === "viewer" ? embed.embedUrl : "";
 }
 
 export async function resolveSplineViewerUrl(): Promise<string> {

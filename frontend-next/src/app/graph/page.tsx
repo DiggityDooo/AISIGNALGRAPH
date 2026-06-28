@@ -27,6 +27,11 @@ const ProgressiveTreeGraph = dynamic(
   { ssr: false },
 );
 
+const SplineGraphBackground = dynamic(
+  () => import("@/components/hero/SplineGraphBackground"),
+  { ssr: false },
+);
+
 // Re-fetch every 30s so scraper/database updates surface without a reload.
 const GRAPH_REFRESH_MS = 30_000;
 
@@ -44,7 +49,7 @@ export default function GraphPage() {
   const [visibleFlowNodes, setVisibleFlowNodes] = useState(0);
   const loadingTimeoutRef = useRef<number | null>(null);
 
-  const { payload, revision, loading: flowLoading, error: flowError } = useGraphData({
+  const { payload, revision, topologyRevision, loading: flowLoading, error: flowError } = useGraphData({
     refreshMs: GRAPH_REFRESH_MS,
   });
 
@@ -106,8 +111,15 @@ export default function GraphPage() {
     settleOverlay();
   };
 
-  const modeButtonClass = (active: boolean) =>
+  const graphModeButtonClass = (active: boolean) =>
     `glass-panel px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider transition-all border ${
+      active
+        ? "bg-primary/20 text-primary border-primary/40 font-bold"
+        : "bg-transparent text-muted hover:text-white border-white/5 hover:border-white/10"
+    }`;
+
+  const flowModeButtonClass = (active: boolean) =>
+    `glass-panel px-5 py-2.5 font-mono text-sm uppercase tracking-wider transition-all border ${
       active
         ? "bg-primary/20 text-primary border-primary/40 font-bold"
         : "bg-transparent text-muted hover:text-white border-white/5 hover:border-white/10"
@@ -188,28 +200,28 @@ export default function GraphPage() {
                  <button
                    id="toggle-view-graph"
                    onClick={() => setViewMode("graph")}
-                   className={modeButtonClass(viewMode === "graph")}
+                   className={graphModeButtonClass(viewMode === "graph")}
                  >
                    Graph
                  </button>
                  <button
                    id="toggle-view-force"
                    onClick={() => setViewMode("force")}
-                   className={modeButtonClass(viewMode === "force")}
+                   className={flowModeButtonClass(viewMode === "force")}
                  >
                    Lattice
                  </button>
                  <button
                    id="toggle-view-tree"
                    onClick={() => setViewMode("tree")}
-                   className={modeButtonClass(viewMode === "tree")}
+                   className={flowModeButtonClass(viewMode === "tree")}
                  >
                    Tree
                  </button>
                  <button
                    id="toggle-view-flow"
                    onClick={() => setViewMode("flow")}
-                   className={modeButtonClass(viewMode === "flow")}
+                   className={flowModeButtonClass(viewMode === "flow")}
                  >
                    Flow
                  </button>
@@ -300,6 +312,12 @@ export default function GraphPage() {
 
             {viewMode !== "graph" && (
               <div className="absolute inset-0">
+                {viewMode === "force" && <SplineGraphBackground mode="lattice" />}
+                {(viewMode === "tree" || viewMode === "flow") && (
+                  <SplineGraphBackground mode="treeFlow" />
+                )}
+
+                <div className="relative z-10 h-full">
                 {flowError && (
                   <p
                     role="alert"
@@ -320,6 +338,7 @@ export default function GraphPage() {
                   <SigmaLatticeGraph
                     payload={payload}
                     dataRevision={revision}
+                    topologyRevision={topologyRevision}
                     onVisibleCountChange={setVisibleFlowNodes}
                   />
                 )}
@@ -327,6 +346,7 @@ export default function GraphPage() {
                   <ProgressiveTreeGraph
                     payload={payload}
                     dataRevision={revision}
+                    topologyRevision={topologyRevision}
                     initialSeedCount={3}
                     onVisibleCountChange={setVisibleFlowNodes}
                   />
@@ -335,9 +355,11 @@ export default function GraphPage() {
                   <SignalCardGraph
                     payload={payload}
                     dataRevision={revision}
+                    topologyRevision={topologyRevision}
                     onVisibleCountChange={setVisibleFlowNodes}
                   />
                 )}
+                </div>
               </div>
             )}
           </main>

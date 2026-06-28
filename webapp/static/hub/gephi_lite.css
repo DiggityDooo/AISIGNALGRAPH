@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@600;700;800&display=swap");
-
 :root {
   --color-bg: #050505;
   --color-surface: #120708;
@@ -18,16 +16,17 @@ body.body-graph-shell {
   overflow: hidden;
 }
 
+/*
+ * Layout (grid placement, widths/heights) for #app-root and its HUD and
+ * sigma-container descendants now lives entirely in Tailwind classes in
+ * page.tsx (a flex-based DOM, not the original grid). Only cosmetic
+ * properties (color, background, border, blur) remain here so a high-
+ * specificity ID selector can't fight the Tailwind layout classes.
+ */
 #app-root {
   --hud-pointer-x: 50%;
   --hud-pointer-y: 18%;
   --node-glow-color: var(--color-primary);
-  position: relative;
-  display: grid;
-  grid-template-columns: 320px minmax(0, 1fr) 320px;
-  grid-template-rows: 68px minmax(0, 1fr) 78px;
-  width: 100%;
-  height: 100vh;
   color: var(--color-text);
   font-family: "Inter", sans-serif;
   isolation: isolate;
@@ -80,20 +79,14 @@ body.body-graph-shell {
 }
 
 #hud-left {
-  grid-column: 1;
-  grid-row: 2;
   border-right: 1px solid var(--color-line);
 }
 
 #hud-right {
-  grid-column: 3;
-  grid-row: 2;
   border-left: 1px solid var(--color-line);
 }
 
 #hud-top {
-  grid-column: 1 / 4;
-  grid-row: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -104,8 +97,6 @@ body.body-graph-shell {
 }
 
 #hud-bottom {
-  grid-column: 1 / 4;
-  grid-row: 3;
   display: flex;
   align-items: center;
   padding: 0 20px;
@@ -168,8 +159,6 @@ body.body-graph-shell {
 }
 
 #sigma-container {
-  grid-column: 2;
-  grid-row: 2;
   position: relative;
   z-index: 2;
   background: #1e1e1e;
@@ -391,49 +380,19 @@ select:focus {
 }
 
 @media (max-width: 1180px) {
-  #app-root {
-    grid-template-columns: 270px minmax(0, 1fr);
-    grid-template-rows: 68px minmax(0, 1fr) 250px 78px;
-  }
-
   #hud-right {
-    grid-column: 1 / 3;
-    grid-row: 3;
     border-left: 0;
     border-top: 1px solid var(--color-line);
-  }
-
-  #sigma-container {
-    grid-column: 2;
-    grid-row: 2;
   }
 }
 
 @media (max-width: 860px) {
-  #app-root {
-    grid-template-columns: 1fr;
-    grid-template-rows: 68px minmax(0, 1fr) auto auto auto;
-  }
-
-  #hud-left,
-  #hud-right,
-  #sigma-container,
-  #hud-bottom {
-    grid-column: 1;
-  }
-
   #hud-left {
-    grid-row: 3;
     border-right: 0;
     border-top: 1px solid var(--color-line);
   }
 
-  #hud-right {
-    grid-row: 4;
-  }
-
   #hud-bottom {
-    grid-row: 5;
     padding: 12px 16px;
     height: auto;
   }

@@ -115,6 +115,10 @@ export async function initGephiLite(options = {}) {
     statsInterval: 12
   };
 
+  // Above this node count, skip continuous physics/signals to keep the main
+  // thread responsive (large graphs render as a static FA2 layout).
+  const AMBIENT_EFFECTS_NODE_LIMIT = 600;
+
   function getCanvasNodeColor(node) {
     const colorKey = getNodeSemanticType(node);
     return OBSIDIAN_GRAPH.nodeColors[colorKey] || OBSIDIAN_GRAPH.defaultNode;
@@ -487,6 +491,7 @@ export async function initGephiLite(options = {}) {
     threeAnimFrameId: null,
     threeHoveredMesh: null,
     physicsEnabled: true,
+    signalsEnabled: true,
     physicsVelocities: null,
     physicsNodeIds: null,
     physicsAccumulator: 0,
@@ -1479,6 +1484,12 @@ export async function initGephiLite(options = {}) {
 
     resetBubblePhysics(graph);
 
+    // Ambient bubble physics + signal animation are O(nodes) per frame and run
+    // continuously. Above this size they stall the main thread; render static.
+    const ambientEffectsAllowed = graph.order <= AMBIENT_EFFECTS_NODE_LIMIT;
+    state.physicsEnabled = ambientEffectsAllowed;
+    state.signalsEnabled = ambientEffectsAllowed;
+
     await waitForContainerSize(refs.container);
     syncCanvasSize();
 
@@ -1612,7 +1623,7 @@ export async function initGephiLite(options = {}) {
     state.animationPaused = false;
     state.animateFrame += 1;
 
-    const signalsEnabled = CONFIG.maxSignals > 0;
+    const signalsEnabled = CONFIG.maxSignals > 0 && state.signalsEnabled !== false;
     const bgFlowFrame = state.animateFrame % BUBBLE_PHYSICS.bgFlowInterval === 0;
     if (bgFlowFrame) {
       drawBackgroundFlow();
@@ -1695,7 +1706,7 @@ export async function initGephiLite(options = {}) {
   function pauseAnimationIfIdle() {
     if (
       state.renderer &&
-      state.physicsSleeping &&
+      (state.physicsSleeping || !state.physicsEnabled) &&
       !state.cameraDirty &&
       state.activeSignals.length === 0 &&
       getSoftDragNodes().size === 0

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchGraphApi,
   type GraphApiPayload,
@@ -28,6 +28,8 @@ export interface UseGraphDataResult {
   topologyRevision: string | null;
   loading: boolean;
   error: Error | null;
+  /** Force a fresh fetch (e.g. Rebuild button). */
+  reload: () => void;
 }
 
 /**
@@ -44,8 +46,16 @@ export function useGraphData(
   const [topologyRevision, setTopologyRevision] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const revisionRef = useRef<string | null>(null);
   const topologyRevisionRef = useRef<string | null>(null);
+
+  const reload = useCallback(() => {
+    revisionRef.current = null;
+    topologyRevisionRef.current = null;
+    setLoading(true);
+    setReloadNonce((nonce) => nonce + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,7 +98,7 @@ export function useGraphData(
       controller.abort();
       if (timer) clearInterval(timer);
     };
-  }, [dataset, refreshMs]);
+  }, [dataset, refreshMs, reloadNonce]);
 
-  return { payload, revision, topologyRevision, loading, error };
+  return { payload, revision, topologyRevision, loading, error, reload };
 }

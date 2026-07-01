@@ -15,8 +15,13 @@
 - Good for scanning global structure and jumping to interesting clusters.
 
 ### Runtime
-- Component: `SigmaLatticeGraph`
-- Renderer: `sigma` (WebGL) over a `graphology` graph built from the full
+- Page: `frontend-next/src/app/graph/page.tsx` — Lattice is the default view;
+  legacy `graph.js` / `GraphRuntime` production path removed (prototype copy
+  kept under `app/graph/prototype/`).
+- HUD: `GraphHud` + `useGraphFilters` + `latticeFilters.ts` (search, lens,
+  node-type filters, era/year timeline, detail pane).
+- Component: `SigmaLatticeGraph` (2D) / `Lattice3DScene` (inline 3D toggle).
+- Renderer: `sigma` (WebGL) over a `graphology` graph built from the filtered
   `/api/graph` payload — no cap, no progressive disclosure. SVG/D3-force
   (the old `ForceTree`) couldn't hold the full corpus at interactive
   framerate past a few hundred nodes; WebGL can.
@@ -27,12 +32,10 @@
   `computeDegrees`) and `nodeColors.ts` (`accentForType`/`nodeTypeOf`) — same
   helpers Tree/Flow use, so Lattice stays visually consistent with them.
 - Interaction: click a node to highlight it + its direct neighbors (dims
-  everything else) — the "tree feature" here, since nothing needs to be
-  hidden for performance anymore, navigation is about attention, not
-  visibility. Double-click uses Sigma's native zoom-toward-click. A
-  "View in 3D" link (`buildLatticeFocusHref`, `latticeBridge.ts`) on the
-  focused-node overlay still jumps to the full `/graph` 3D experience,
-  unchanged convention.
+  everything else) and open the HUD detail pane. Double-click uses Sigma's
+  native zoom-toward-click. Inline **3D** toggle (`Lattice3DScene` /
+  `GraphEngine`) replaces the old separate Graph mode. Deep links from Flow
+  still use `buildLatticeFocusHref` (`?focus=…&mode=3d`).
 
 ### Expected first paint
 - Shows the entire live corpus, not a curated subset — this mode is
@@ -140,6 +143,9 @@
 
 ## File Map (for fast edits)
 
+- `frontend-next/src/app/graph/page.tsx` -> route shell, mode switcher, HUD wiring
+- `frontend-next/src/components/graph/GraphHud.tsx` -> Lattice HUD (filters, detail pane, 3D toggle)
+- `frontend-next/src/components/visualization/Lattice3DScene.tsx` -> inline 3D lattice (`GraphEngine`)
 - `frontend-next/src/components/visualization/SigmaLatticeGraph.tsx` -> Lattice mode (Sigma/WebGL, full corpus)
 - `frontend-next/src/components/visualization/ProgressiveTreeGraph.tsx` -> Tree wiring
 - `frontend-next/src/components/visualization/SignalCardGraph.tsx` -> Flow wiring

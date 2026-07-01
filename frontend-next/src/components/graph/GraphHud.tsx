@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { GRAPH_CONFIG } from "@/lib/graph/config.js";
 import { ERA_OPTIONS, NODE_TYPES } from "@/lib/graph/constants.js";
 import type { GraphLens, GraphNodeSummary } from "@/lib/graph/types";
@@ -24,6 +25,14 @@ type GraphHudProps = {
   selectedNode: GraphNodeSummary | null;
   onCloseDetail: () => void;
   onSelectNeighbor: (id: string) => void;
+  is3DMode?: boolean;
+  enable3d?: boolean;
+  onToggle3d?: () => void;
+  onRebuild?: () => void;
+  onFit?: () => void;
+  modeSwitcher?: ReactNode;
+  /** When omitted, legacy sigma/3D/signal DOM shells are rendered for graph.js. */
+  children?: ReactNode;
 };
 
 export default function GraphHud({
@@ -46,6 +55,13 @@ export default function GraphHud({
   selectedNode,
   onCloseDetail,
   onSelectNeighbor,
+  is3DMode = false,
+  enable3d = true,
+  onToggle3d,
+  onRebuild,
+  onFit,
+  modeSwitcher,
+  children,
 }: GraphHudProps) {
   return (
     <div className="absolute inset-0 flex flex-col pt-20">
@@ -66,6 +82,7 @@ export default function GraphHud({
             </svg>
           </button>
           <h2 className="font-mono text-xs text-primary uppercase tracking-widest hidden sm:block">Lattice Control</h2>
+          {modeSwitcher}
         </div>
         <div className="flex items-center gap-4 md:gap-6 font-mono text-[10px] text-muted uppercase tracking-widest">
           <span className="hidden xs:inline">
@@ -78,17 +95,21 @@ export default function GraphHud({
             Signals: <strong id="stat-signals" className="text-secondary">{signalCount}</strong>
           </span>
           <div className="flex gap-2 ml-2 md:ml-4">
-            <button
-              id="toggle-3d-button"
-              type="button"
-              className="glass-panel px-2 md:px-3 py-1 hover:bg-primary/10 transition-colors font-mono text-[10px] uppercase tracking-wider"
-              title="Toggle 3D Neural Space"
-            >
-              <span id="toggle-3d-label">3D</span>
-            </button>
+            {enable3d && (
+              <button
+                id="toggle-3d-button"
+                type="button"
+                onClick={onToggle3d}
+                className="glass-panel px-2 md:px-3 py-1 hover:bg-primary/10 transition-colors font-mono text-[10px] uppercase tracking-wider"
+                title="Toggle 3D Neural Space"
+              >
+                <span id="toggle-3d-label">{is3DMode ? "2D" : "3D"}</span>
+              </button>
+            )}
             <button
               id="rebuild-button"
               type="button"
+              onClick={onRebuild}
               className="glass-panel px-2 md:px-3 py-1 hover:bg-primary/10 transition-colors"
             >
               Rebuild
@@ -96,6 +117,7 @@ export default function GraphHud({
             <button
               id="fit-button"
               type="button"
+              onClick={onFit}
               className="glass-panel px-2 md:px-3 py-1 hover:bg-white/5 transition-colors"
             >
               Fit
@@ -158,19 +180,23 @@ export default function GraphHud({
         </aside>
 
         <main id="sigma-container" className="flex-1 relative bg-black">
-          <div id="three-container" className="absolute inset-0 z-5" style={{ display: "none" }} />
-          <canvas id="signal-canvas" className="absolute inset-0 pointer-events-none z-10" />
-          <div
-            id="node-visualizer-container"
-            className="node-visualizer-container absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20"
-          >
-            <div className="neural-sphere">
-              <div className="sphere-core" />
-              <div className="sphere-orbit sphere-orbit--1" />
-              <div className="sphere-orbit sphere-orbit--2" />
-              <div className="sphere-orbit sphere-orbit--3" />
-            </div>
-          </div>
+          {children ?? (
+            <>
+              <div id="three-container" className="absolute inset-0 z-5" style={{ display: "none" }} />
+              <canvas id="signal-canvas" className="absolute inset-0 pointer-events-none z-10" />
+              <div
+                id="node-visualizer-container"
+                className="node-visualizer-container absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20"
+              >
+                <div className="neural-sphere">
+                  <div className="sphere-core" />
+                  <div className="sphere-orbit sphere-orbit--1" />
+                  <div className="sphere-orbit sphere-orbit--2" />
+                  <div className="sphere-orbit sphere-orbit--3" />
+                </div>
+              </div>
+            </>
+          )}
         </main>
 
         <aside

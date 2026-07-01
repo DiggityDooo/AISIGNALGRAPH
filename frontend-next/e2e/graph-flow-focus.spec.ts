@@ -24,7 +24,7 @@ test("flow node opens the focused 3D lattice", async ({ page }, testInfo) => {
   await expect(page.locator("#toggle-3d-label")).toHaveText("2D", {
     timeout: 30_000,
   });
-  await expect(page.locator("#three-container canvas")).toBeVisible({
+  await expect(page.locator("#sigma-container canvas")).toBeVisible({
     timeout: 30_000,
   });
   await expect(page.locator("#detail-title")).not.toHaveText("Select a node");

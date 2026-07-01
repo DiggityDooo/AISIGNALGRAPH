@@ -1,18 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import Sigma from "sigma";
 import type { GraphApiNode, GraphApiPayload } from "@/components/graph-flow/fetchGraphApi";
 import { accentForType, nodeTypeOf } from "@/lib/graphFlow/nodeColors";
 import { degreeBasedSize } from "@/lib/graphFlow/nodeSizing";
-import { buildLatticeFocusHref } from "@/lib/graphFlow/latticeBridge";
 import {
   getGraphQualityProfile,
   type GraphQualityProfile,
 } from "@/lib/graph/mobileProfile";
 import { bindWebglContextLossHandler } from "@/lib/graph/webglGuard";
+import type { GraphNodeSummary } from "@/lib/graph/types";
 import {
   applyLayoutPositions,
   latticeLayoutSettings,
@@ -25,7 +31,34 @@ export interface SigmaLatticeGraphProps {
   payload: GraphApiPayload | null;
   dataRevision?: string | null;
   topologyRevision?: string | null;
+  /** Bumps when HUD filters change so the visible subgraph rebuilds. */
+  filterRevision?: string;
   onVisibleCountChange?: (visible: number) => void;
+  onNodeSelect?: (node: GraphNodeSummary | null) => void;
+  onStatsChange?: (stats: { nodes: number; edges: number }) => void;
+}
+
+export type SigmaLatticeGraphHandle = {
+  fit: () => void;
+  focusNode: (id: string) => void;
+};
+
+function toNodeSummary(node: GraphApiNode, graph: Graph): GraphNodeSummary {
+  const neighbors = graph.neighbors(node.id).map((neighborId) => {
+    const attrs = graph.getNodeAttributes(neighborId) as GraphApiNode;
+    return { id: neighborId, label: attrs.label ?? neighborId };
+  });
+  return {
+    id: node.id,
+    label: node.label ?? node.id,
+    type: nodeTypeOf(node),
+    summary: typeof node.summary === "string" ? node.summary : undefined,
+    description: node.description,
+    community_name:
+      typeof node.community_name === "string" ? node.community_name : undefined,
+    route: node.route,
+    neighbors,
+  };
 }
 
 /**
@@ -238,12 +271,19 @@ function mountSigmaRenderer(
   });
 }
 
-export default function SigmaLatticeGraph({
-  payload,
-  dataRevision,
-  topologyRevision,
-  onVisibleCountChange,
-}: SigmaLatticeGraphProps) {
+const SigmaLatticeGraph = forwardRef<SigmaLatticeGraphHandle, SigmaLatticeGraphProps>(
+function SigmaLatticeGraph(
+  {
+    payload,
+    dataRevision,
+    topologyRevision,
+    filterRevision = "",
+    onVisibleCountChange,
+    onNodeSelect,
+    onStatsChange,
+  },
+  ref,
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   /** Reducer closures read this synchronously — a ref avoids re-registering
    * the reducers (and re-running Sigma's render pass setup) on every click. */
@@ -263,9 +303,10 @@ export default function SigmaLatticeGraph({
    * otherwise a new closure from the parent would tear down and rebuild the
    * entire Sigma/WebGL instance + layout. */
   const onVisibleCountChangeRef = useRef(onVisibleCountChange);
+  const onNodeSelectRef = useRef(onNodeSelect);
+  const onStatsChangeRef = useRef(onStatsChange);
   /** Device tier resolved once per mount; drives DPR/labels/layout budget. */
   const [quality] = useState<GraphQualityProfile>(getGraphQualityProfile);
-  const [focusedNode, setFocusedNode] = useState<GraphApiNode | null>(null);
   const [building, setBuilding] = useState(true);
   /** Context-loss recovery: rebuild once, then declare the device out of GPU memory. */
   const contextLossesRef = useRef(0);
@@ -274,7 +315,28 @@ export default function SigmaLatticeGraph({
 
   useEffect(() => {
     onVisibleCountChangeRef.current = onVisibleCountChange;
-  }, [onVisibleCountChange]);
+    onNodeSelectRef.current = onNodeSelect;
+    onStatsChangeRef.current = onStatsChange;
+  }, [onVisibleCountChange, onNodeSelect, onStatsChange]);
+
+  useImperativeHandle(ref, () => ({
+    fit() {
+      rendererRef.current?.getCamera().animatedReset({ duration: quality.isLowTier ? 0 : 500 });
+    },
+    focusNode(id: string) {
+      const graph = graphRef.current;
+      const renderer = rendererRef.current;
+      if (!graph || !renderer || !graph.hasNode(id)) return;
+      focusRef.current = { id, neighbors: new Set(graph.neighbors(id)) };
+      const nodeAttrs = graph.getNodeAttributes(id) as GraphApiNode & { x: number; y: number };
+      onNodeSelectRef.current?.(toNodeSummary(nodeAttrs, graph));
+      renderer.refresh();
+      renderer.getCamera().animate(
+        { x: nodeAttrs.x, y: nodeAttrs.y, ratio: 0.2 },
+        { duration: quality.isLowTier ? 0 : 500 },
+      );
+    },
+  }), [quality.isLowTier]);
 
   useEffect(
     () => () => {
@@ -393,11 +455,9 @@ export default function SigmaLatticeGraph({
       renderer.on("clickNode", ({ node }) => {
         focusRef.current = { id: node, neighbors: new Set(graph.neighbors(node)) };
         const nodeAttrs = graph.getNodeAttributes(node) as GraphApiNode & { x: number; y: number };
-        setFocusedNode(nodeAttrs);
+        onNodeSelectRef.current?.(toNodeSummary(nodeAttrs, graph));
         renderer.refresh();
 
-        // Coarse-pointer devices jump instantly — the 500ms eased camera
-        // animation forces continuous re-renders that stutter on weak GPUs.
         renderer.getCamera().animate(
           { x: nodeAttrs.x, y: nodeAttrs.y, ratio: 0.2 },
           { duration: quality.isLowTier ? 0 : 500 },
@@ -406,11 +466,15 @@ export default function SigmaLatticeGraph({
 
       renderer.on("clickStage", () => {
         focusRef.current = { id: null, neighbors: new Set() };
-        setFocusedNode(null);
+        onNodeSelectRef.current?.(null);
         renderer.refresh();
       });
 
       onVisibleCountChangeRef.current?.(graph.order);
+      onStatsChangeRef.current?.({
+        nodes: graph.order,
+        edges: graph.size,
+      });
     })();
 
     return () => {
@@ -422,9 +486,8 @@ export default function SigmaLatticeGraph({
       graphRef.current = null;
       mountedTopologyRef.current = null;
       focusRef.current = { id: null, neighbors: new Set() };
-      setFocusedNode(null);
     };
-  }, [topologyRevision, quality, rebuildNonce]);
+  }, [topologyRevision, filterRevision, quality, rebuildNonce]);
 
   if (contextDead) {
     return (
@@ -457,17 +520,10 @@ export default function SigmaLatticeGraph({
           </p>
         </div>
       )}
-      {focusedNode && (
-        <div className="absolute bottom-4 left-4 glass-panel flex items-center gap-3 rounded border border-white/10 bg-black/60 px-3 py-2">
-          <p className="font-mono text-[11px] text-white/85">{focusedNode.label ?? focusedNode.id}</p>
-          <a
-            href={buildLatticeFocusHref(focusedNode.id)}
-            className="rounded border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-cyan-300/90 hover:bg-cyan-500/20"
-          >
-            View in 3D
-          </a>
-        </div>
-      )}
     </div>
   );
-}
+});
+
+SigmaLatticeGraph.displayName = "SigmaLatticeGraph";
+
+export default SigmaLatticeGraph;

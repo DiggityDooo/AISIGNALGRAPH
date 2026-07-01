@@ -94,7 +94,6 @@ test("mobile mode switching survives without context loss", async ({ page }) => 
     "#toggle-view-force",
     "#toggle-view-tree",
     "#toggle-view-flow",
-    "#toggle-view-graph",
   ];
 
   // Mode buttons only render when the flow feature flag is on; skip cleanly otherwise.

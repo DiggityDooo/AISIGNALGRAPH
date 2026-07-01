@@ -647,3 +647,30 @@ select:focus {
 .detail-divider {
   margin: 10px 0;
 }
+
+/* --- Mobile performance overrides (graph page only) --- */
+
+/* Sigma owns pan/pinch; without this the browser fights the gesture with
+   page scroll/zoom, which reads as input lag on touch devices. */
+#sigma-container {
+  touch-action: none;
+}
+
+@media (max-width: 767px) {
+  /* backdrop-filter forces an offscreen compositing pass over the live WebGL
+     canvas every frame — one of the main mobile GPU costs on this page. */
+  #app-root :is(.glass-card, .glass-panel, .backdrop-blur-md, .backdrop-blur-sm) {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  #app-root #hud-top,
+  #app-root #hud-bottom {
+    background: rgba(5, 2, 2, 0.88) !important;
+  }
+
+  /* Decorative 800px blurred CSS animation — pure GPU cost on phones. */
+  .node-visualizer-container {
+    display: none !important;
+  }
+}

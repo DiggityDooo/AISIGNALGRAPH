@@ -128,6 +128,7 @@ export default function GraphPage() {
     <div
       id="app-root"
       data-graph-variant="prototype"
+      data-lenis-prevent
       className="relative w-full h-screen bg-[#050202] overflow-hidden pointer-events-auto"
     >
       <div className="absolute top-20 left-1/2 z-20 -translate-x-1/2 pointer-events-none">

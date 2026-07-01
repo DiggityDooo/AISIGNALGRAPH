@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useGraphData } from "@/hooks/useGraphData";
 import { isGraphFlowEnabled } from "@/lib/graphFlow/featureFlag";
+import { getGraphQualityProfile } from "@/lib/graph/mobileProfile";
 import "../../../public/gephi_lite.css";
 
 const GraphRuntime = dynamic(() => import("./GraphRuntime"), { ssr: false });
@@ -42,7 +43,34 @@ export default function GraphPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [visibleFlowNodes, setVisibleFlowNodes] = useState(0);
+  const [readingModeNotice, setReadingModeNotice] = useState(false);
   const loadingTimeoutRef = useRef<number | null>(null);
+
+  // Low-tier devices default to the progressive Tree view instead of the
+  // full-corpus Sigma lattice — phones repeatedly lost the WebGL context
+  // under it. The heavier modes stay one tap away in the mode switcher.
+  // Runs in an effect (not state init) so server HTML and hydration match.
+  useEffect(() => {
+    if (!flowModesEnabled) {
+      return undefined;
+    }
+    if (!getGraphQualityProfile().isLowTier) {
+      return undefined;
+    }
+    const frameId = window.requestAnimationFrame(() => {
+      setViewMode("tree");
+      setReadingModeNotice(true);
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [flowModesEnabled]);
+
+  useEffect(() => {
+    if (!readingModeNotice) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setReadingModeNotice(false), 6000);
+    return () => window.clearTimeout(timer);
+  }, [readingModeNotice]);
 
   const { payload, revision, topologyRevision, loading: flowLoading, error: flowError } = useGraphData({
     refreshMs: GRAPH_REFRESH_MS,
@@ -100,6 +128,14 @@ export default function GraphPage() {
 
   const handleError = (error: unknown) => {
     console.error("Gephi Lite: Runtime error.", error);
+    // WebGL/runtime failure: fall back to the progressive Tree view (no
+    // full-corpus WebGL) instead of leaving a dead overlay, when available.
+    if (flowModesEnabled) {
+      setViewMode("tree");
+      setReadingModeNotice(true);
+      setIsLoaded(true);
+      return;
+    }
     setLoadFailed(true);
     setStatus("Neural Link Interrupted — refresh to retry.");
     setProgress(100);
@@ -124,6 +160,15 @@ export default function GraphPage() {
     <div id="app-root" data-lenis-prevent className="relative w-full h-screen bg-[#050202] overflow-hidden pointer-events-auto">
       {viewMode === "graph" && (
         <GraphRuntime onReady={handleReady} onError={handleError} />
+      )}
+
+      {readingModeNotice && (
+        <div
+          role="status"
+          className="absolute bottom-6 left-1/2 z-[70] -translate-x-1/2 glass-panel bg-black/85 px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-primary"
+        >
+          Switched to reading mode for this device
+        </div>
       )}
 
       {/* Cinematic Loading Overlay */}

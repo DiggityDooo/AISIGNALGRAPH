@@ -9,8 +9,12 @@ import { accentForType, nodeTypeOf } from "@/lib/graphFlow/nodeColors";
 import { degreeBasedSize } from "@/lib/graphFlow/nodeSizing";
 import { buildLatticeFocusHref } from "@/lib/graphFlow/latticeBridge";
 import {
+  getGraphQualityProfile,
+  type GraphQualityProfile,
+} from "@/lib/graph/mobileProfile";
+import { bindWebglContextLossHandler } from "@/lib/graph/webglGuard";
+import {
   applyLayoutPositions,
-  LAYOUT_ITERATIONS,
   latticeLayoutSettings,
   PROGRESSIVE_CHUNK_SIZE,
   serializeGraphForLayout,
@@ -65,6 +69,7 @@ function runWorkerLayout(
   worker: LayoutWorker,
   input: ReturnType<typeof serializeGraphForLayout>,
   signal: AbortSignal,
+  iterations: number,
 ): Promise<LatticeLayoutPositions> {
   const requestId = crypto.randomUUID();
   return new Promise((resolve, reject) => {
@@ -107,7 +112,7 @@ function runWorkerLayout(
     worker.addEventListener("messageerror", onMessageError);
     signal.addEventListener("abort", onAbort, { once: true });
     try {
-      worker.postMessage({ type: "layout", requestId, input });
+      worker.postMessage({ type: "layout", requestId, input, iterations });
     } catch (error) {
       cleanup();
       reject(error);
@@ -118,6 +123,7 @@ function runWorkerLayout(
 function runProgressiveLayout(
   graph: Graph,
   renderer: Sigma,
+  maxIterations: number,
   onComplete: (positions: SavedPositions) => void,
 ): () => void {
   const settings = latticeLayoutSettings(graph);
@@ -125,7 +131,7 @@ function runProgressiveLayout(
   let animationFrameId: number | null = null;
 
   const runLayoutStep = () => {
-    if (currentIteration >= LAYOUT_ITERATIONS) {
+    if (currentIteration >= maxIterations) {
       const nextPositions: SavedPositions = new Map();
       graph.forEachNode((nodeId, attrs) => {
         nextPositions.set(nodeId, { x: attrs.x as number, y: attrs.y as number });
@@ -214,16 +220,20 @@ function applyNodeMetadata(graph: Graph, payload: GraphApiPayload): void {
   }
 }
 
-function mountSigmaRenderer(graph: Graph, container: HTMLDivElement): Sigma {
+function mountSigmaRenderer(
+  graph: Graph,
+  container: HTMLDivElement,
+  quality: GraphQualityProfile,
+): Sigma {
   return new Sigma(graph, container, {
-    renderLabels: true,
+    renderLabels: quality.renderLabels,
     labelSize: VISUALS.labelSize,
     labelColor: { color: VISUALS.labelColor },
     defaultNodeColor: VISUALS.defaultNodeColor,
     defaultEdgeColor: VISUALS.edgeColor,
     labelGridCellSize: VISUALS.labelGridCellSize,
-    labelDensity: VISUALS.labelDensity,
-    labelRenderedSizeThreshold: VISUALS.labelRenderedSizeThreshold,
+    labelDensity: quality.labelDensity,
+    labelRenderedSizeThreshold: quality.labelRenderedSizeThreshold,
     minEdgeThickness: VISUALS.minEdgeThickness,
   });
 }
@@ -253,8 +263,14 @@ export default function SigmaLatticeGraph({
    * otherwise a new closure from the parent would tear down and rebuild the
    * entire Sigma/WebGL instance + layout. */
   const onVisibleCountChangeRef = useRef(onVisibleCountChange);
+  /** Device tier resolved once per mount; drives DPR/labels/layout budget. */
+  const [quality] = useState<GraphQualityProfile>(getGraphQualityProfile);
   const [focusedNode, setFocusedNode] = useState<GraphApiNode | null>(null);
   const [building, setBuilding] = useState(true);
+  /** Context-loss recovery: rebuild once, then declare the device out of GPU memory. */
+  const contextLossesRef = useRef(0);
+  const [rebuildNonce, setRebuildNonce] = useState(0);
+  const [contextDead, setContextDead] = useState(false);
 
   useEffect(() => {
     onVisibleCountChangeRef.current = onVisibleCountChange;
@@ -308,7 +324,12 @@ export default function SigmaLatticeGraph({
 
         try {
           const positions = worker
-            ? await runWorkerLayout(worker, serializeGraphForLayout(graph), controller.signal)
+            ? await runWorkerLayout(
+                worker,
+                serializeGraphForLayout(graph),
+                controller.signal,
+                quality.layoutIterations,
+              )
             : await Promise.reject(new Error("layout worker unavailable"));
           if (cancelled || controller.signal.aborted) return;
           applyLayoutPositions(graph, positions);
@@ -326,11 +347,23 @@ export default function SigmaLatticeGraph({
 
       if (cancelled) return;
 
-      const renderer = mountSigmaRenderer(graph, container);
+      const renderer = mountSigmaRenderer(graph, container, quality);
       rendererRef.current = renderer;
 
+      bindWebglContextLossHandler(container, () => {
+        if (cancelled) return;
+        contextLossesRef.current += 1;
+        if (contextLossesRef.current > 1) {
+          setContextDead(true);
+          return;
+        }
+        // Remount once — the effect keyed on rebuildNonce tears down the dead
+        // renderer and builds a fresh one from saved positions.
+        setRebuildNonce((nonce) => nonce + 1);
+      });
+
       if (newNodeCount > 0 && useProgressiveFallback) {
-        cancelProgressiveLayout = runProgressiveLayout(graph, renderer, (nextPositions) => {
+        cancelProgressiveLayout = runProgressiveLayout(graph, renderer, quality.layoutIterations, (nextPositions) => {
           if (cancelled) return;
           positionsRef.current = nextPositions;
           setBuilding(false);
@@ -363,9 +396,11 @@ export default function SigmaLatticeGraph({
         setFocusedNode(nodeAttrs);
         renderer.refresh();
 
+        // Coarse-pointer devices jump instantly — the 500ms eased camera
+        // animation forces continuous re-renders that stutter on weak GPUs.
         renderer.getCamera().animate(
           { x: nodeAttrs.x, y: nodeAttrs.y, ratio: 0.2 },
-          { duration: 500 },
+          { duration: quality.isLowTier ? 0 : 500 },
         );
       });
 
@@ -389,7 +424,18 @@ export default function SigmaLatticeGraph({
       focusRef.current = { id: null, neighbors: new Set() };
       setFocusedNode(null);
     };
-  }, [topologyRevision]);
+  }, [topologyRevision, quality, rebuildNonce]);
+
+  if (contextDead) {
+    return (
+      <div className="flex h-full items-center justify-center bg-[#050202]">
+        <p className="max-w-sm px-6 text-center font-mono text-xs uppercase tracking-widest text-secondary">
+          Graphics context lost twice — this device ran out of GPU memory.
+          Try the Tree or Flow view instead.
+        </p>
+      </div>
+    );
+  }
 
   if (!payload || payload.nodes.length === 0) {
     return (

@@ -26,6 +26,7 @@ import {
 import { GraphLayoutProvider } from "@/components/visualization/flow/GraphLayoutContext";
 import { SignalEdge } from "@/components/visualization/flow/SignalEdge";
 import type { LayoutMode } from "@/lib/graphFlow/layoutUtils";
+import { getGraphQualityProfile } from "@/lib/graph/mobileProfile";
 
 const nodeTypes = { documentCard: DocumentCardNode };
 const edgeTypes = { signal: SignalEdge };
@@ -85,6 +86,9 @@ function CardGraphCanvasInner({
 }: CardGraphCanvasProps) {
   const [nodes, setNodes] = useState(layouted.nodes);
   const [edges] = useState(layouted.edges);
+  // Touch devices: single-finger pan (mouse-button pan filters don't apply),
+  // no MiniMap (extra render pass + tap target too small to be useful).
+  const [isLowTier] = useState(() => getGraphQualityProfile().isLowTier);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setNodes((current) =>
@@ -114,7 +118,7 @@ function CardGraphCanvasInner({
           onNodesChange={onNodesChange}
           onNodeDoubleClick={onToggleExpand ? onNodeDoubleClick : undefined}
           nodesDraggable
-          panOnDrag={[1, 2]}
+          panOnDrag={isLowTier ? true : [1, 2]}
           panOnScroll
           zoomOnScroll
           nodesConnectable={false}
@@ -128,15 +132,17 @@ function CardGraphCanvasInner({
             showInteractive={false}
             className="!border-white/10 !bg-black/50 !shadow-none [&>button]:!border-white/10 [&>button]:!bg-black/40 [&>button]:!fill-white/70"
           />
-          <MiniMap
-            nodeColor={(node) =>
-              (node.data as DocumentCardData | undefined)?.accentColor ?? "#334155"
-            }
-            maskColor="rgba(5, 2, 2, 0.65)"
-            className="!border-white/10 !bg-black/40"
-            pannable
-            zoomable
-          />
+          {!isLowTier && (
+            <MiniMap
+              nodeColor={(node) =>
+                (node.data as DocumentCardData | undefined)?.accentColor ?? "#334155"
+              }
+              maskColor="rgba(5, 2, 2, 0.65)"
+              className="!border-white/10 !bg-black/40"
+              pannable
+              zoomable
+            />
+          )}
           <AutoFit fitKey={fitKey} focusKey={focusKey} focusNodeIds={focusNodeIds} />
         </ReactFlow>
       </div>

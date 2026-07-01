@@ -21,9 +21,17 @@ const CustomCursor = dynamic(() => import("@/components/ui/CustomCursor"), {
 
 const SPLINE_BACKGROUND_ROUTES = new Set(["/", "/stories", "/entities"]);
 
+/**
+ * Graph routes own their WebGL context (Sigma/Three). Mounting the site-wide
+ * R3F constellation canvas alongside them doubles GPU contexts and exhausts
+ * weak mobile GPUs (context loss / tab crash), so it is excluded here.
+ */
+const GRAPH_ROUTE_PREFIX = "/graph";
+
 export default function ClientShellEffects() {
   const pathname = usePathname();
   const showSplineBackground = SPLINE_BACKGROUND_ROUTES.has(pathname);
+  const isGraphRoute = pathname === GRAPH_ROUTE_PREFIX || pathname.startsWith(`${GRAPH_ROUTE_PREFIX}/`);
   const [mountSpline, setMountSpline] = useState(false);
   const [posterHidden, setPosterHidden] = useState(false);
 
@@ -51,9 +59,11 @@ export default function ClientShellEffects() {
           )}
         </>
       )}
-      <div className="constellation-layer" aria-hidden>
-        <GlobalCanvas />
-      </div>
+      {!isGraphRoute && (
+        <div className="constellation-layer" aria-hidden>
+          <GlobalCanvas />
+        </div>
+      )}
       <CustomCursor />
     </>
   );

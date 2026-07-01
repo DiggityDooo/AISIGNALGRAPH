@@ -1,5 +1,8 @@
 "use strict";
 
+import { getGraphQualityProfile } from "../../lib/graph/mobileProfile";
+import { assertSingleWebglSurface, bindWebglContextLossHandler } from "../../lib/graph/webglGuard";
+
 const READY_CHECK_INTERVAL_MS = 100;
 // Mobile devices (slower CPUs, throttled networks, more main-thread contention
 // from site-wide background canvases/animations) can take noticeably longer
@@ -45,6 +48,11 @@ function safeInternalRoute(candidate, fallback) {
 
 export async function initGephiLite(options = {}) {
   console.log("Gephi Lite: Initializing...");
+
+  // Device-tier quality profile — mobile GPUs lose their WebGL context under
+  // the desktop configuration (full-DPR framebuffers, decorative canvases,
+  // continuous labels, legacy per-node 3D meshes).
+  const QUALITY = getGraphQualityProfile();
 
   const SigmaLib = options.SigmaLib || window.Sigma || window.sigma?.Sigma || window.sigma;
   const GraphCtor = options.GraphCtor || window.graphology?.Graph || window.graphology;
@@ -479,6 +487,8 @@ export async function initGephiLite(options = {}) {
     animationFrameId: null,
     destroyed: false,
     is3DMode: false,
+    contextLossRecoveryUsed: false,
+    graphEngine: null,
     threeModule: null,
     threeScene: null,
     threeRenderer: null,
@@ -684,6 +694,41 @@ export async function initGephiLite(options = {}) {
     });
   }
 
+  /**
+   * Mobile GPUs can drop the WebGL context under memory pressure, which used
+   * to leave a dead black canvas (perceived as a crash). Rebuild once
+   * automatically; if the context is lost again, surface a runtime error so
+   * the page shows its recovery message instead of a frozen canvas.
+   */
+  function bindContextLossRecovery() {
+    const host = refs?.rendererHost || refs?.container;
+    if (!host || !state.renderer) {
+      return;
+    }
+    bindWebglContextLossHandler(host, () => {
+      console.warn("Gephi Lite: WebGL context lost.");
+      if (state.destroyed) {
+        return;
+      }
+      if (state.contextLossRecoveryUsed) {
+        emitRuntimeError(new Error("WebGL context lost twice; device is out of GPU memory."), "Render error");
+        return;
+      }
+      state.contextLossRecoveryUsed = true;
+      stopAnimationLoop();
+      window.setTimeout(() => {
+        if (state.destroyed) {
+          return;
+        }
+        void rebuildFromFilters().then((hasRenderer) => {
+          if (hasRenderer && !state.pageHidden && !state.is3DMode) {
+            startAnimationLoop();
+          }
+        });
+      }, 500);
+    });
+  }
+
   function destroyRenderer() {
     if (state.renderer) {
       state.renderer.kill();
@@ -725,6 +770,7 @@ export async function initGephiLite(options = {}) {
 
     // Clean up 3D scene
     destroy3DScene();
+    disposeLayoutWorker();
 
     managedListeners.splice(0).reverse().forEach((dispose) => {
       try {
@@ -1186,7 +1232,7 @@ export async function initGephiLite(options = {}) {
   }
 
   async function enter3DModeIfNeeded() {
-    if (state.is3DMode) return;
+    if (!QUALITY.enable3d || state.is3DMode) return;
     state.is3DMode = true;
     if (refs.toggle3dLabel) refs.toggle3dLabel.textContent = "2D";
     if (refs.toggle3d) {
@@ -1211,6 +1257,11 @@ export async function initGephiLite(options = {}) {
 
     if (prefer3d) {
       await enter3DModeIfNeeded();
+    }
+
+    if (state.is3DMode && state.graphEngine) {
+      state.graphEngine.focusNode(id);
+      return;
     }
 
     const THREE = state.threeModule;
@@ -1391,6 +1442,96 @@ export async function initGephiLite(options = {}) {
     }
   }
 
+  // --- ForceAtlas2 off the main thread ---
+  // The synchronous FA2 pass (up to 120 iterations over the full corpus)
+  // blocked the main thread for seconds on mobile. Run it in the shared
+  // lattice layout worker; fall back to the old synchronous path only if the
+  // worker cannot start (e.g. very old browsers).
+  let layoutWorker = null;
+  let layoutWorkerFailed = false;
+
+  function getLayoutWorker() {
+    if (layoutWorker || layoutWorkerFailed || typeof Worker === "undefined") {
+      return layoutWorker;
+    }
+    try {
+      layoutWorker = new Worker(
+        new URL("../../lib/graphFlow/latticeLayout.worker.ts", import.meta.url),
+        { type: "module" }
+      );
+    } catch (error) {
+      console.warn("Gephi Lite: Layout worker unavailable.", error);
+      layoutWorkerFailed = true;
+    }
+    return layoutWorker;
+  }
+
+  function disposeLayoutWorker() {
+    if (layoutWorker) {
+      layoutWorker.terminate();
+      layoutWorker = null;
+    }
+  }
+
+  function runLayoutInWorker(graph, iterations) {
+    const worker = getLayoutWorker();
+    if (!worker) {
+      return Promise.reject(new Error("layout worker unavailable"));
+    }
+
+    const nodes = [];
+    graph.forEachNode((id, attrs) => {
+      nodes.push({ id, x: attrs.x, y: attrs.y, size: attrs.size });
+    });
+    const edges = [];
+    graph.forEachEdge((_edge, _attrs, source, target) => {
+      edges.push({ source, target });
+    });
+
+    const requestId = `fa2-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return new Promise((resolve, reject) => {
+      const onMessage = (event) => {
+        const data = event.data;
+        if (!data || data.requestId !== requestId) return;
+        worker.removeEventListener("message", onMessage);
+        worker.removeEventListener("error", onError);
+        if (data.type === "error") {
+          reject(new Error(data.message || "layout worker error"));
+          return;
+        }
+        resolve(data.positions);
+      };
+      const onError = (event) => {
+        worker.removeEventListener("message", onMessage);
+        worker.removeEventListener("error", onError);
+        reject(event.error instanceof Error ? event.error : new Error(event.message || "layout worker error"));
+      };
+      worker.addEventListener("message", onMessage);
+      worker.addEventListener("error", onError);
+      worker.postMessage({ type: "layout", requestId, input: { nodes, edges }, iterations });
+    });
+  }
+
+  async function runGraphLayout(graph, iterations, settings) {
+    if (!layoutWorkerFailed) {
+      try {
+        const positions = await runLayoutInWorker(graph, iterations);
+        for (const [id, pos] of Object.entries(positions)) {
+          if (graph.hasNode(id)) {
+            graph.setNodeAttribute(id, "x", pos.x);
+            graph.setNodeAttribute(id, "y", pos.y);
+          }
+        }
+        return;
+      } catch (error) {
+        console.warn("Gephi Lite: Worker layout failed, using main thread.", error);
+        layoutWorkerFailed = true;
+        disposeLayoutWorker();
+      }
+    }
+    forceAtlas2.assign(graph, { iterations, settings });
+  }
+
   async function buildGraph(options = {}) {
     const { mountRenderer = true, skipLayout = false } = options;
     console.log("Gephi Lite: Building graph...");
@@ -1476,10 +1617,16 @@ export async function initGephiLite(options = {}) {
     const isFiltered = state.filteredNodes.length < state.nodes.length;
     const shouldLayout = !skipLayout && newNodeCount > 0;
     if (shouldLayout) {
-      const iterations = isFiltered ? 40 : 120;
+      const iterations = isFiltered ? 40 : QUALITY.layoutIterations;
       console.time("FA2-Layout");
-      forceAtlas2.assign(graph, { iterations, settings: spreadSettings });
+      await runGraphLayout(graph, iterations, spreadSettings);
       console.timeEnd("FA2-Layout");
+    }
+
+    // The worker layout is async — the page may have been torn down or
+    // switched to 3D while it ran.
+    if (state.destroyed) {
+      return false;
     }
 
     resetBubblePhysics(graph);
@@ -1495,7 +1642,7 @@ export async function initGephiLite(options = {}) {
 
     console.log("Gephi Lite: Initializing Sigma renderer...");
     state.renderer = new SigmaLib(graph, ensureRendererHost(), {
-      renderLabels: true,
+      renderLabels: QUALITY.renderLabels,
       labelSize: OBSIDIAN_GRAPH.labelSize,
       labelFont: OBSIDIAN_GRAPH.labelFont,
       labelColor: { color: OBSIDIAN_GRAPH.labelColor },
@@ -1503,10 +1650,12 @@ export async function initGephiLite(options = {}) {
       defaultEdgeColor: OBSIDIAN_GRAPH.edgeColor,
       edgeColor: "default",
       labelGridCellSize: OBSIDIAN_GRAPH.labelGridCellSize,
-      labelDensity: OBSIDIAN_GRAPH.labelDensity,
-      labelRenderedSizeThreshold: OBSIDIAN_GRAPH.labelRenderedSizeThreshold,
+      labelDensity: QUALITY.labelDensity,
+      labelRenderedSizeThreshold: QUALITY.labelRenderedSizeThreshold,
       minEdgeThickness: OBSIDIAN_GRAPH.minEdgeThickness
     });
+
+    bindContextLossRecovery();
 
     state.renderer.getCamera().on("updated", () => {
       state.cameraDirty = true;
@@ -1739,7 +1888,7 @@ export async function initGephiLite(options = {}) {
   }
 
   function syncCanvasSize() {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, QUALITY.maxDpr);
     if (refs.bgCanvas) {
       const rootRect = appRoot.getBoundingClientRect();
       const bgW = Math.max(1, Math.floor(rootRect.width * dpr));
@@ -1767,7 +1916,7 @@ export async function initGephiLite(options = {}) {
   };
 
   function initBackgroundFlow() {
-    if (!refs.bgCanvas || !bgCtx || bgFlow.initialized) {
+    if (!QUALITY.enableBackgroundFlow || !refs.bgCanvas || !bgCtx || bgFlow.initialized) {
       return;
     }
 
@@ -1810,7 +1959,7 @@ export async function initGephiLite(options = {}) {
   }
 
   function drawBackgroundFlow() {
-    if (!refs.bgCanvas || !bgCtx) {
+    if (!bgFlow.initialized || !refs.bgCanvas || !bgCtx) {
       return;
     }
     const width = refs.bgCanvas.width;
@@ -1919,6 +2068,9 @@ export async function initGephiLite(options = {}) {
 
   // --- 3D Neural Engine ---
   async function toggle3DMode() {
+    if (!QUALITY.enable3d) {
+      return;
+    }
     state.is3DMode = !state.is3DMode;
 
     if (refs.toggle3dLabel) {
@@ -1957,6 +2109,24 @@ export async function initGephiLite(options = {}) {
 
   function destroy3DScene() {
     state.resumeThreeLoop = null;
+    if (state.graphEngine) {
+      state.graphEngine.dispose();
+      state.graphEngine = null;
+      state.threeRenderer = null;
+      state.threeScene = null;
+      state.threeModule = null;
+      state.threeCamera = null;
+      state.threeControls = null;
+      state.threeNodeMeshes = [];
+      state.threeEdgeLines = null;
+      state.threeRaycaster = null;
+      state.threeMouse = null;
+      state.threeHoveredMesh = null;
+      if (refs.threeContainer) {
+        refs.threeContainer.innerHTML = "";
+      }
+      return;
+    }
     if (state.threeAnimFrameId !== null) {
       window.cancelAnimationFrame(state.threeAnimFrameId);
       state.threeAnimFrameId = null;
@@ -1996,58 +2166,7 @@ export async function initGephiLite(options = {}) {
   async function build3DScene() {
     if (!refs.threeContainer) return;
 
-    const THREE = await import("three");
-    const { OrbitControls } = await import("three/examples/jsm/controls/OrbitControls.js");
-
     destroy3DScene();
-    state.threeModule = THREE;
-
-    const rect = refs.threeContainer.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) return;
-    const width = Math.max(rect.width, 1);
-    const height = Math.max(rect.height, 1);
-
-    // Scene
-    const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x050202, 0.0018);
-
-    // Camera
-    const camera = new THREE.PerspectiveCamera(60, width / height, 1, 5000);
-    camera.position.set(0, 0, 350);
-
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setClearColor(0x050202, 1);
-    refs.threeContainer.appendChild(renderer.domElement);
-
-    // Controls
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.06;
-    controls.rotateSpeed = 0.6;
-    controls.zoomSpeed = 0.8;
-    controls.minDistance = 30;
-    controls.maxDistance = 1200;
-
-    // Raycaster
-    const raycaster = new THREE.Raycaster();
-    raycaster.params.Points = { threshold: 5 };
-    const mouse = new THREE.Vector2();
-
-    state.threeScene = scene;
-    state.threeCamera = camera;
-    state.threeRenderer = renderer;
-    state.threeControls = controls;
-    state.threeRaycaster = raycaster;
-    state.threeMouse = mouse;
-
-    // Ambient light
-    scene.add(new THREE.AmbientLight(0xffffff, 0.3));
-    const pointLight = new THREE.PointLight(0xff4258, 2, 800);
-    pointLight.position.set(0, 100, 200);
-    scene.add(pointLight);
 
     const graph = state.graph;
     if (!graph || graph.order === 0) return;
@@ -2077,6 +2196,109 @@ export async function initGephiLite(options = {}) {
         : getStableDepthOffset(node.id);
       nodePositions.set(node.id, { x, y, z });
     });
+
+    // Prefer the instanced GraphEngine (InstancedMesh nodes, batched edges,
+    // frustum culling, LOD, adaptive pixel-ratio) — already proven on
+    // /graph/prototype. The legacy per-node-mesh scene below is fallback only.
+    try {
+      const { GraphEngine } = await import("../../lib/graphEngine/GraphEngine.js");
+      const engine = new GraphEngine({
+        container: refs.threeContainer,
+        onNodeClick: (node) => {
+          inspectNode(node);
+          engine.focusNode(node.id);
+        },
+        onNodeHover: (node) => {
+          const canvas = engine.getDomElement();
+          if (canvas) {
+            canvas.style.cursor = node ? "pointer" : "grab";
+          }
+        },
+      });
+      const engineNodes = nodes.map((node) => {
+        const pos = nodePositions.get(node.id);
+        return {
+          ...node,
+          semanticType: getNodeSemanticType(node),
+          x: pos.x,
+          y: pos.y,
+          z: pos.z,
+        };
+      });
+      const initialized = await engine.init({
+        nodes: engineNodes,
+        edges: state.filteredEdges,
+        positions: nodePositions,
+      });
+      if (state.destroyed || !state.is3DMode) {
+        engine.dispose();
+        return;
+      }
+      if (initialized) {
+        state.graphEngine = engine;
+        state.threeRenderer = { domElement: engine.getDomElement(), dispose: () => {} };
+        const canvas = engine.getDomElement();
+        if (canvas) {
+          canvas.style.cursor = "grab";
+        }
+        return;
+      }
+      engine.dispose();
+    } catch (error) {
+      console.warn("GraphEngine unavailable, using legacy 3D renderer:", error);
+    }
+
+    const THREE = await import("three");
+    const { OrbitControls } = await import("three/examples/jsm/controls/OrbitControls.js");
+
+    state.threeModule = THREE;
+
+    const rect = refs.threeContainer.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return;
+    const width = Math.max(rect.width, 1);
+    const height = Math.max(rect.height, 1);
+
+    // Scene
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x050202, 0.0018);
+
+    // Camera
+    const camera = new THREE.PerspectiveCamera(60, width / height, 1, 5000);
+    camera.position.set(0, 0, 350);
+
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, QUALITY.maxDpr));
+    renderer.setClearColor(0x050202, 1);
+    refs.threeContainer.appendChild(renderer.domElement);
+
+    // Controls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.rotateSpeed = 0.6;
+    controls.zoomSpeed = 0.8;
+    controls.minDistance = 30;
+    controls.maxDistance = 1200;
+
+    // Raycaster
+    const raycaster = new THREE.Raycaster();
+    raycaster.params.Points = { threshold: 5 };
+    const mouse = new THREE.Vector2();
+
+    state.threeScene = scene;
+    state.threeCamera = camera;
+    state.threeRenderer = renderer;
+    state.threeControls = controls;
+    state.threeRaycaster = raycaster;
+    state.threeMouse = mouse;
+
+    // Ambient light
+    scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+    const pointLight = new THREE.PointLight(0xff4258, 2, 800);
+    pointLight.position.set(0, 100, 200);
+    scene.add(pointLight);
 
     // Create node meshes with glow
     const nodeMeshes = [];
@@ -2321,6 +2543,16 @@ export async function initGephiLite(options = {}) {
 
     appRoot.style.setProperty("--node-glow-color", DEFAULT_GLOW_COLOR);
     window.gephiLite = { selectNode: selectNodeById, flyToNode: flyToNodeById };
+
+    assertSingleWebglSurface();
+
+    if (!QUALITY.enable3d && refs.toggle3d) {
+      refs.toggle3d.style.display = "none";
+    }
+    if (!QUALITY.enableNeuralSphere) {
+      const visualizer = document.getElementById("node-visualizer-container");
+      if (visualizer) visualizer.style.display = "none";
+    }
 
     state.pageHidden = document.hidden;
     bindControls();

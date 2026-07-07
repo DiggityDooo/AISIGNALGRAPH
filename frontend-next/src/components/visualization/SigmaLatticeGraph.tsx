@@ -87,6 +87,110 @@ const VISUALS = {
 type SavedPositions = Map<string, { x: number; y: number }>;
 type LayoutWorker = Worker;
 
+const LATTICE_POSITIONS_KEY = "aisignalgraph-lattice-positions-v1";
+
+const FOCUS_RATIO_MIN = 0.5;
+const FOCUS_RATIO_MAX = 1.2;
+const FOCUS_RATIO_PADDING = 1.3;
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function loadLatticePositions(): SavedPositions {
+  try {
+    const raw = localStorage.getItem(LATTICE_POSITIONS_KEY);
+    if (!raw) return new Map();
+    const parsed = JSON.parse(raw) as Record<string, { x: number; y: number }>;
+    const map = new Map<string, { x: number; y: number }>();
+    for (const [id, pos] of Object.entries(parsed)) {
+      if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+        map.set(id, { x: pos.x, y: pos.y });
+      }
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+function saveLatticePositions(positions: SavedPositions): void {
+  try {
+    const obj: Record<string, { x: number; y: number }> = {};
+    positions.forEach((pos, id) => {
+      obj[id] = pos;
+    });
+    localStorage.setItem(LATTICE_POSITIONS_KEY, JSON.stringify(obj));
+  } catch {
+    // Storage may be unavailable or full — non-fatal.
+  }
+}
+
+function getGraphExtent(graph: Graph): { width: number; height: number } {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  graph.forEachNode((_nodeId, attrs) => {
+    const x = Number(attrs.x);
+    const y = Number(attrs.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  });
+  if (!Number.isFinite(minX)) return { width: 0, height: 0 };
+  return {
+    width: Math.max(maxX - minX, 1),
+    height: Math.max(maxY - minY, 1),
+  };
+}
+
+/**
+ * Compute a Sigma camera ratio that frames the clicked node plus its
+ * neighbors. The ratio is clamped so the camera never zooms past the node
+ * (too far in) or out to the full graph (too far out).
+ */
+function computeFocusRatio(graph: Graph, nodeId: string): number {
+  const nodeAttrs = graph.getNodeAttributes(nodeId) as GraphApiNode & {
+    x: number;
+    y: number;
+  };
+  const nodeX = Number(nodeAttrs.x);
+  const nodeY = Number(nodeAttrs.y);
+  if (!Number.isFinite(nodeX) || !Number.isFinite(nodeY)) {
+    return FOCUS_RATIO_MIN;
+  }
+
+  let minX = nodeX;
+  let maxX = nodeX;
+  let minY = nodeY;
+  let maxY = nodeY;
+  for (const neighborId of graph.neighbors(nodeId)) {
+    const attrs = graph.getNodeAttributes(neighborId) as GraphApiNode & {
+      x: number;
+      y: number;
+    };
+    const x = Number(attrs.x);
+    const y = Number(attrs.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+
+  const bboxSpan = Math.max(maxX - minX, maxY - minY, 1);
+  const extent = getGraphExtent(graph);
+  const graphSpan = Math.max(extent.width, extent.height);
+  if (graphSpan <= 0) return FOCUS_RATIO_MIN;
+
+  const rawRatio = (bboxSpan * FOCUS_RATIO_PADDING) / graphSpan;
+  return Math.min(FOCUS_RATIO_MAX, Math.max(FOCUS_RATIO_MIN, rawRatio));
+}
+
 function createLayoutWorker(): LayoutWorker | null {
   if (typeof Worker === "undefined") return null;
   try {
@@ -292,8 +396,9 @@ function SigmaLatticeGraph(
     neighbors: new Set(),
   });
   /** Node positions persisted across rebuilds so a poll-driven data refresh
-   * doesn't reshuffle the whole lattice. */
-  const positionsRef = useRef<SavedPositions>(new Map());
+   * doesn't reshuffle the whole lattice. Seeded from localStorage so a full
+   * page refresh also keeps the last layout. */
+  const positionsRef = useRef<SavedPositions>(loadLatticePositions());
   const rendererRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
   const mountedTopologyRef = useRef<string | null>(null);
@@ -308,6 +413,9 @@ function SigmaLatticeGraph(
   /** Device tier resolved once per mount; drives DPR/labels/layout budget. */
   const [quality] = useState<GraphQualityProfile>(getGraphQualityProfile);
   const [building, setBuilding] = useState(true);
+  /** Mirrors `building` synchronously so imperative handlers can guard against
+   * animating the camera before the layout has settled. */
+  const buildingRef = useRef(true);
   /** Context-loss recovery: rebuild once, then declare the device out of GPU memory. */
   const contextLossesRef = useRef(0);
   const [rebuildNonce, setRebuildNonce] = useState(0);
@@ -319,9 +427,15 @@ function SigmaLatticeGraph(
     onStatsChangeRef.current = onStatsChange;
   }, [onVisibleCountChange, onNodeSelect, onStatsChange]);
 
+  useEffect(() => {
+    buildingRef.current = building;
+  }, [building]);
+
   useImperativeHandle(ref, () => ({
     fit() {
-      rendererRef.current?.getCamera().animatedReset({ duration: quality.isLowTier ? 0 : 500 });
+      rendererRef.current?.getCamera().animatedReset({
+        duration: quality.isLowTier || prefersReducedMotion() ? 0 : 500,
+      });
     },
     focusNode(id: string) {
       const graph = graphRef.current;
@@ -331,10 +445,14 @@ function SigmaLatticeGraph(
       const nodeAttrs = graph.getNodeAttributes(id) as GraphApiNode & { x: number; y: number };
       onNodeSelectRef.current?.(toNodeSummary(nodeAttrs, graph));
       renderer.refresh();
-      renderer.getCamera().animate(
-        { x: nodeAttrs.x, y: nodeAttrs.y, ratio: 0.2 },
-        { duration: quality.isLowTier ? 0 : 500 },
-      );
+      const ratio = computeFocusRatio(graph, id);
+      const duration = quality.isLowTier || prefersReducedMotion() ? 0 : 500;
+      if (!buildingRef.current) {
+        renderer.getCamera().animate(
+          { x: nodeAttrs.x, y: nodeAttrs.y, ratio },
+          { duration },
+        );
+      }
     },
   }), [quality.isLowTier]);
 
@@ -396,6 +514,7 @@ function SigmaLatticeGraph(
           if (cancelled || controller.signal.aborted) return;
           applyLayoutPositions(graph, positions);
           positionsRef.current = new Map(Object.entries(positions));
+          saveLatticePositions(positionsRef.current);
         } catch {
           if (cancelled || controller.signal.aborted) return;
           if (worker) {
@@ -428,6 +547,7 @@ function SigmaLatticeGraph(
         cancelProgressiveLayout = runProgressiveLayout(graph, renderer, quality.layoutIterations, (nextPositions) => {
           if (cancelled) return;
           positionsRef.current = nextPositions;
+          saveLatticePositions(positionsRef.current);
           setBuilding(false);
         });
       } else {
@@ -458,10 +578,14 @@ function SigmaLatticeGraph(
         onNodeSelectRef.current?.(toNodeSummary(nodeAttrs, graph));
         renderer.refresh();
 
-        renderer.getCamera().animate(
-          { x: nodeAttrs.x, y: nodeAttrs.y, ratio: 0.2 },
-          { duration: quality.isLowTier ? 0 : 500 },
-        );
+        const ratio = computeFocusRatio(graph, node);
+        const duration = quality.isLowTier || prefersReducedMotion() ? 0 : 500;
+        if (!buildingRef.current) {
+          renderer.getCamera().animate(
+            { x: nodeAttrs.x, y: nodeAttrs.y, ratio },
+            { duration },
+          );
+        }
       });
 
       renderer.on("clickStage", () => {

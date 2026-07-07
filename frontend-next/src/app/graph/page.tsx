@@ -64,6 +64,48 @@ function buildNodeSummary(payload: GraphApiPayload, nodeId: string): GraphNodeSu
   };
 }
 
+/**
+ * Reactive view of `window.location.search`. Next client-side navigations
+ * (e.g. clicking a <Link>) update history without firing `popstate`, so we
+ * also patch `pushState`/`replaceState` to re-emit. Read during an effect
+ * (never during render) to keep SSR/client markup consistent.
+ */
+function useSyncedSearchParams(): URLSearchParams {
+  const [params, setParams] = useState(
+    () => new URLSearchParams(typeof window === "undefined" ? "" : window.location.search),
+  );
+
+  useEffect(() => {
+    const update = () => setParams(new URLSearchParams(window.location.search));
+    update();
+
+    window.addEventListener("popstate", update);
+
+    const originalPush = window.history.pushState;
+    const originalReplace = window.history.replaceState;
+    window.history.pushState = function patchedPush(...args: Parameters<History["pushState"]>) {
+      originalPush.apply(this, args);
+      update();
+      return;
+    };
+    window.history.replaceState = function patchedReplace(
+      ...args: Parameters<History["replaceState"]>
+    ) {
+      originalReplace.apply(this, args);
+      update();
+      return;
+    };
+
+    return () => {
+      window.removeEventListener("popstate", update);
+      window.history.pushState = originalPush;
+      window.history.replaceState = originalReplace;
+    };
+  }, []);
+
+  return params;
+}
+
 export default function GraphPage() {
   const flowModesEnabled = isGraphFlowEnabled();
   const quality = getGraphQualityProfile();
@@ -141,22 +183,50 @@ export default function GraphPage() {
     return () => window.clearTimeout(timer);
   }, [readingModeNotice]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const focus = params.get("focus");
-    const mode = params.get("mode");
+  const urlParams = useSyncedSearchParams();
+  const urlView = urlParams.get("view");
+  const urlMode = urlParams.get("mode");
+  const urlFocus = urlParams.get("focus");
 
-    if (mode === "3d" && quality.enable3d) {
+  // Derive view/mode/focus from the URL (reactive to client-side nav). State
+  // is updated in effects (post-hydration) to avoid SSR/client markup mismatch.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (urlMode === "3d" && quality.enable3d) {
       setIs3DMode(true);
     }
-    if (focus) {
-      pendingFocusRef.current = focus;
-      setUrlFocusId(focus);
+  }, [urlMode, quality.enable3d]);
+
+  useEffect(() => {
+    if (urlFocus) {
+      pendingFocusRef.current = urlFocus;
+      setUrlFocusId(urlFocus);
       if (flowModesEnabled) {
         setViewMode("force");
       }
+      return;
     }
-  }, [flowModesEnabled, quality.enable3d]);
+    if (urlView === "force" || urlView === "tree" || urlView === "flow") {
+      setViewMode(urlView);
+    }
+  }, [urlView, urlFocus, flowModesEnabled]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Write the active view mode back to the URL (direct links, refresh, and
+  // the /graph/flow redirect stay consistent). Skips the first run so the
+  // mount-time read doesn't clobber a view already present in the URL.
+  const skipFirstViewWriteRef = useRef(true);
+  useEffect(() => {
+    if (skipFirstViewWriteRef.current) {
+      skipFirstViewWriteRef.current = false;
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("view") === viewMode) return;
+    params.set("view", viewMode);
+    const next = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState(null, "", next);
+  }, [viewMode]);
 
   useEffect(() => {
     const focus = pendingFocusRef.current;
@@ -189,6 +259,13 @@ export default function GraphPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isMobileMenuOpen]);
 
+  // Reset the camera when switching between 2D/3D or between view modes.
+  useEffect(() => {
+    if (!is3DMode && viewMode === "force") {
+      latticeRef.current?.fit();
+    }
+  }, [viewMode, is3DMode]);
+
   const handleNodeSelect = useCallback(
     (node: GraphNodeSummary | null) => {
       setSelectedNode(node);
@@ -220,6 +297,43 @@ export default function GraphPage() {
   const handleFit = useCallback(() => {
     latticeRef.current?.fit();
   }, []);
+
+  // Keyboard shortcuts: F = fit, Esc = clear selection, 1/2/3 = Lattice/Tree/Flow.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (event.key === "Escape") {
+        handleCloseDetail();
+        return;
+      }
+      if (event.key === "f" || event.key === "F") {
+        handleFit();
+        return;
+      }
+      if (event.key === "1") {
+        setViewMode("force");
+        return;
+      }
+      if (event.key === "2") {
+        setViewMode("tree");
+        return;
+      }
+      if (event.key === "3") {
+        setViewMode("flow");
+        return;
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleCloseDetail, handleFit]);
 
   const handleRebuild = useCallback(() => {
     reload();

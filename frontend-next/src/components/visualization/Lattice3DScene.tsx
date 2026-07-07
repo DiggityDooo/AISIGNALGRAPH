@@ -33,9 +33,10 @@ function buildNodePositions(nodes: GraphApiNode[]): Map<string, { x: number; y: 
     const rawY = Number(node.y);
     const x = Number.isFinite(rawX) ? rawX : getStableDepthOffset(`${node.id}:x`) * FALLBACK_X_SPREAD;
     const y = Number.isFinite(rawY) ? rawY : getStableDepthOffset(`${node.id}:y`) * FALLBACK_Y_SPREAD;
-    const z = Number.isFinite(monthIndex)
-      ? (monthIndex - timelineCenter) * TIMELINE_Z_SCALE + getStableDepthOffset(node.id)
-      : getStableDepthOffset(node.id);
+    const z =
+      monthIndex !== null && Number.isFinite(monthIndex)
+        ? (monthIndex - timelineCenter) * TIMELINE_Z_SCALE + getStableDepthOffset(node.id)
+        : getStableDepthOffset(node.id);
     positions.set(node.id, { x, y, z });
   }
   return positions;
@@ -91,7 +92,7 @@ export default function Lattice3DScene({
 
         const instance = new GraphEngine({
           container: containerRef.current,
-          onNodeClick: (node) => {
+          onNodeClick: (node: GraphApiNode) => {
             const full = nodeById.get(node.id);
             if (!full) return;
             const neighborSummaries = edges
@@ -105,7 +106,7 @@ export default function Lattice3DScene({
             onNodeSelectRef.current?.(toNodeSummary(full, neighborSummaries));
             instance.focusNode(node.id);
           },
-          onNodeHover: (node) => {
+          onNodeHover: (node: GraphApiNode | null) => {
             const canvas = instance.getDomElement();
             if (canvas) {
               canvas.style.cursor = node ? "pointer" : "grab";

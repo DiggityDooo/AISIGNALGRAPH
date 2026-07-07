@@ -7,7 +7,7 @@ test("flow node opens the focused 3D lattice", async ({ page }, testInfo) => {
   });
   page.on("pageerror", (error) => consoleErrors.push(error.message));
 
-  await page.goto("/graph/flow", {
+  await page.goto("/graph?view=flow", {
     waitUntil: "domcontentloaded",
     timeout: 60_000,
   });

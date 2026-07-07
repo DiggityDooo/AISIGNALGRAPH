@@ -84,12 +84,12 @@ test("Full video walkthrough of today's changes", async ({ page, context }) => {
   await page.waitForTimeout(2000);
 
   // ─── Scene 5: Signal Tree (graph/flow) — Progressive Disclosure ───
-  await page.goto("/graph/flow", { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await page.goto("/graph?view=flow", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page.waitForTimeout(6000); // Let force sim settle
 
   // Switch to the Sigma/WebGL Lattice mode and interact with its canvas.
   try {
-    await page.click("#toggle-layout-force", { timeout: 15_000 });
+    await page.click("#toggle-view-force", { timeout: 15_000 });
     // Wait for the WebGL canvas to mount (Lattice renders into <canvas>, not SVG).
     const canvasLocator = page.locator("canvas").first();
     await canvasLocator.waitFor({ state: "attached", timeout: 15_000 });

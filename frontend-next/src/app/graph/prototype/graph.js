@@ -889,12 +889,63 @@ export async function initGephiLite(options = {}) {
     container.classList.add("node-selected-active");
   }
 
+  function computeFocusRatio(graph, id) {
+    const attrs = graph.getNodeAttributes(id);
+    const nodeX = Number(attrs.x);
+    const nodeY = Number(attrs.y);
+    if (!Number.isFinite(nodeX) || !Number.isFinite(nodeY)) {
+      return 0.5;
+    }
+
+    let minX = nodeX;
+    let maxX = nodeX;
+    let minY = nodeY;
+    let maxY = nodeY;
+    for (const neighborId of graph.neighbors(id)) {
+      const neighborAttrs = graph.getNodeAttributes(neighborId);
+      const x = Number(neighborAttrs.x);
+      const y = Number(neighborAttrs.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+
+    let gMinX = Infinity;
+    let gMaxX = -Infinity;
+    let gMinY = Infinity;
+    let gMaxY = -Infinity;
+    graph.forEachNode((nodeId, nodeAttrs) => {
+      const x = Number(nodeAttrs.x);
+      const y = Number(nodeAttrs.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      if (x < gMinX) gMinX = x;
+      if (x > gMaxX) gMaxX = x;
+      if (y < gMinY) gMinY = y;
+      if (y > gMaxY) gMaxY = y;
+    });
+
+    const bboxSpan = Math.max(maxX - minX, maxY - minY, 1);
+    const graphSpan =
+      gMinX === Infinity ? 0 : Math.max(gMaxX - gMinX, gMaxY - gMinY);
+    const minRatio = 0.5;
+    const maxRatio = 1.2;
+    const padding = 1.3;
+    if (!graphSpan || graphSpan <= 0) return minRatio;
+    const rawRatio = (bboxSpan * padding) / graphSpan;
+    return Math.min(maxRatio, Math.max(minRatio, rawRatio));
+  }
+
   function selectNodeById(id) {
     if (!state.graph || !state.graph.hasNode(id)) return;
     const attrs = state.graph.getNodeAttributes(id);
     inspectNode(attrs);
     if (state.renderer) {
-      state.renderer.getCamera().animate({ x: attrs.x, y: attrs.y, ratio: 0.15 }, { duration: 500 });
+      state.renderer.getCamera().animate(
+        { x: attrs.x, y: attrs.y, ratio: computeFocusRatio(state.graph, id) },
+        { duration: 500 },
+      );
     }
   }
 

@@ -357,8 +357,33 @@ export class GraphEngine {
       return;
     }
     const THREE = this._THREE;
+
+    // Frame the focused node plus its neighbors: derive the camera distance
+    // from the graph extent (instead of a fixed +80) so dense, large graphs
+    // don't clip context while small graphs stay close.
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    this._nodePositions.forEach((p) => {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+      if (p.z < minZ) minZ = p.z;
+      if (p.z > maxZ) maxZ = p.z;
+    });
+    let graphRadius = 0;
+    if (Number.isFinite(minX)) {
+      graphRadius = 0.5 * Math.hypot(maxX - minX, maxY - minY, maxZ - minZ);
+    }
+    const nodeScale = this._baseScales.get(nodeId) || 4;
+    const offset = THREE.MathUtils.clamp(graphRadius * 0.3, nodeScale * 6, 500);
+
     const target = new THREE.Vector3(pos.x, pos.y, pos.z);
-    const camTarget = target.clone().add(new THREE.Vector3(0, 0, 80));
+    const camTarget = target.clone().add(new THREE.Vector3(0, 0, offset));
     const startPos = this._camera.position.clone();
     const startTarget = this._controls.target.clone();
     const startTime = performance.now();

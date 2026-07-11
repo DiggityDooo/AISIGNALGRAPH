@@ -207,16 +207,13 @@ export default function GraphHud({
             <div className="flex justify-between items-start">
               <div className="flex flex-col gap-2">
                 <h3 id="detail-title" className="font-display text-2xl font-bold uppercase text-white leading-tight">
-                  {selectedNode ? (
-                    <a href={selectedNode.route} className="detail-title-link" title="Open full dossier">
-                      {selectedNode.label}
-                    </a>
-                  ) : (
-                    "Select a node"
-                  )}
+                  {/* Hub has no /stories/:id or /entities/:id pages yet — a real
+                      <a href={route}> navigates away and Cursor/Next show
+                      "This page couldn't load". Keep selection in-pane. */}
+                  {selectedNode ? selectedNode.label : "Select a node"}
                 </h3>
                 <p id="detail-subtitle" className="font-mono text-[10px] text-primary uppercase tracking-[0.2em]">
-                  {selectedNode?.type.toUpperCase() ?? "Select any node"}
+                  {selectedNode?.type?.toUpperCase() ?? "Select any node"}
                 </p>
               </div>
               <button

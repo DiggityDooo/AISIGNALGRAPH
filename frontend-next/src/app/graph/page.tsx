@@ -156,6 +156,9 @@ export default function GraphPage() {
     [searchQuery, lens, activeYear, visibleNodeTypes, selectedNode?.id],
   );
 
+  // selectedNodeId only reshapes the subgraph under local lens — keep it out of
+  // deps otherwise so global/era clicks don't rebuild the filtered payload.
+  const selectedNodeIdForFilter = lens === "local" ? selectedNode?.id ?? null : null;
   const filteredPayload = useMemo(() => {
     if (!payload) return null;
     return filterGraphPayload(payload, {
@@ -163,10 +166,10 @@ export default function GraphPage() {
       lens,
       activeYear,
       visibleNodeTypes,
-      selectedNodeId: selectedNode?.id ?? null,
+      selectedNodeId: selectedNodeIdForFilter,
       ftsStoryIds: new Set(),
     });
-  }, [payload, searchQuery, lens, activeYear, visibleNodeTypes, selectedNode?.id]);
+  }, [payload, searchQuery, lens, activeYear, visibleNodeTypes, selectedNodeIdForFilter]);
 
   useEffect(() => {
     if (!flowModesEnabled) return undefined;

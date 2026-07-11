@@ -5,10 +5,7 @@ import {
   fetchGraphApi,
   type GraphApiPayload,
 } from "@/components/graph-flow/fetchGraphApi";
-import {
-  graphPayloadFingerprint,
-  graphTopologyFingerprint,
-} from "@/lib/graphFlow/graphFingerprint";
+import { compareGraphRevision } from "@/lib/graphFlow/graphRevision";
 
 export interface UseGraphDataOptions {
   /** Dataset name forwarded to `/api/graph?dataset=`. */
@@ -66,16 +63,18 @@ export function useGraphData(
         const next = await fetchGraphApi({ dataset, signal: controller.signal });
         if (cancelled) return;
 
-        const fp = graphPayloadFingerprint(next);
-        const topo = graphTopologyFingerprint(next);
-        if (fp !== revisionRef.current) {
-          revisionRef.current = fp;
+        const result = compareGraphRevision(
+          { revision: revisionRef.current, topologyRevision: topologyRevisionRef.current },
+          next,
+        );
+        if (result.payloadChanged) {
+          revisionRef.current = result.revision;
           setPayload(next);
-          setRevision(fp);
+          setRevision(result.revision);
         }
-        if (topo !== topologyRevisionRef.current) {
-          topologyRevisionRef.current = topo;
-          setTopologyRevision(topo);
+        if (result.topologyChanged) {
+          topologyRevisionRef.current = result.topologyRevision;
+          setTopologyRevision(result.topologyRevision);
         }
         setError(null);
       } catch (err) {

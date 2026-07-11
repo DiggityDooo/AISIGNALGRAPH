@@ -4,20 +4,11 @@ import {
   LAYOUT_ITERATIONS,
   latticeLayoutSettings,
   runForceAtlas2Layout,
+  type LayoutRequest,
   type LatticeLayoutInput,
   type LatticeLayoutPositions,
+  type WorkerResponse,
 } from "./latticeLayout";
-
-type LayoutRequest = {
-  type: "layout";
-  requestId: string;
-  input: LatticeLayoutInput;
-  iterations?: number;
-};
-
-type WorkerResponse =
-  | { type: "layout"; requestId: string; positions: LatticeLayoutPositions }
-  | { type: "error"; requestId: string; message: string };
 
 self.onmessage = (event: MessageEvent<LayoutRequest>) => {
   const msg = event.data;

@@ -25,6 +25,17 @@ export type LatticeLayoutInput = {
 
 export type LatticeLayoutPositions = Record<string, { x: number; y: number }>;
 
+export type LayoutRequest = {
+  type: "layout";
+  requestId: string;
+  input: LatticeLayoutInput;
+  iterations?: number;
+};
+
+export type WorkerResponse =
+  | { type: "layout"; requestId: string; positions: LatticeLayoutPositions }
+  | { type: "error"; requestId: string; message: string };
+
 export function latticeLayoutSettings(graph: Graph): ForceAtlas2Settings {
   return {
     ...forceAtlas2.inferSettings(graph),

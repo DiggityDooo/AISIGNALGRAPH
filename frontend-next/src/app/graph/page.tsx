@@ -6,7 +6,7 @@ import GraphHud from "@/components/graph/GraphHud";
 import type { GraphApiPayload } from "@/components/graph-flow/fetchGraphApi";
 import { useGraphData } from "@/hooks/useGraphData";
 import { useGraphFilters } from "@/hooks/useGraphFilters";
-import { filterGraphPayload } from "@/lib/graph/latticeFilters";
+import { filterGraphPayload, filterKey } from "@/lib/graph/latticeFilters";
 import type { GraphNodeSummary } from "@/lib/graph/types";
 import { isGraphFlowEnabled } from "@/lib/graphFlow/featureFlag";
 import { nodeTypeOf } from "@/lib/graphFlow/nodeColors";
@@ -146,11 +146,11 @@ export default function GraphPage() {
 
   const filterRevision = useMemo(
     () =>
-      JSON.stringify({
+      filterKey({
         searchQuery,
         lens,
         activeYear,
-        visibleNodeTypes: [...visibleNodeTypes].sort(),
+        visibleNodeTypes,
         selectedNodeId: selectedNode?.id ?? null,
       }),
     [searchQuery, lens, activeYear, visibleNodeTypes, selectedNode?.id],
@@ -164,6 +164,7 @@ export default function GraphPage() {
       activeYear,
       visibleNodeTypes,
       selectedNodeId: selectedNode?.id ?? null,
+      ftsStoryIds: new Set(),
     });
   }, [payload, searchQuery, lens, activeYear, visibleNodeTypes, selectedNode?.id]);
 
@@ -194,6 +195,8 @@ export default function GraphPage() {
   useEffect(() => {
     if (urlMode === "3d" && quality.enable3d) {
       setIs3DMode(true);
+    } else if (urlMode !== "3d") {
+      setIs3DMode(false);
     }
   }, [urlMode, quality.enable3d]);
 

@@ -289,10 +289,9 @@ export interface LatticeRendererOptions {
   onStatsChange?: (stats: { nodes: number; edges: number }) => void;
   onVisibleCountChange?: (visible: number) => void;
   onBuildingChange: (building: boolean) => void;
-  onContextDead: () => void;
-  /** Called on the first WebGL context loss — the React adapter owns the
-   * rebuildNonce that remounts a fresh renderer from saved positions. */
-  onRequestRemount: () => void;
+  /** Called on WebGL context loss. The React adapter owns the retry counter
+   * (rebuild once, then declare the device out of GPU memory). */
+  onContextLoss: () => void;
 }
 
 /**
@@ -305,17 +304,16 @@ export class LatticeRenderer {
   private readonly container: HTMLDivElement;
   private readonly options: LatticeRendererOptions;
 
-  private graphRef: Graph | null = null;
-  private rendererRef: Sigma | null = null;
-  private positionsRef: SavedPositions = loadLatticePositions();
-  private focusRef: { id: string | null; neighbors: Set<string> } = {
+  private graph: Graph | null = null;
+  private renderer: Sigma | null = null;
+  private positions: SavedPositions = loadLatticePositions();
+  private focus: { id: string | null; neighbors: Set<string> } = {
     id: null,
     neighbors: new Set(),
   };
-  private mountedTopologyRef: string | null = null;
-  private layoutClientRef: LayoutClient | null = null;
-  private layoutWorkerFailedRef = false;
-  private contextLossesRef = 0;
+  private mountedTopology: string | null = null;
+  private layoutClient: LayoutClient | null = null;
+  private layoutWorkerFailed = false;
 
   private controller: AbortController | null = null;
   private cancelProgressive: (() => void) | null = null;
@@ -323,7 +321,7 @@ export class LatticeRenderer {
 
   /** Mirrors the `building` callback synchronously so imperative handlers can
    * guard against animating the camera before the layout has settled. */
-  private buildingRef = true;
+  private building = true;
 
   constructor(container: HTMLDivElement, options: LatticeRendererOptions) {
     this.container = container;
@@ -331,8 +329,39 @@ export class LatticeRenderer {
   }
 
   private setBuilding(value: boolean): void {
-    this.buildingRef = value;
+    this.building = value;
     this.options.onBuildingChange(value);
+  }
+
+  private mergeAndSavePositions(next: LatticeLayoutPositions | SavedPositions): void {
+    const entries =
+      next instanceof Map ? next.entries() : Object.entries(next);
+    for (const [id, pos] of entries) {
+      if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+        this.positions.set(id, { x: pos.x, y: pos.y });
+      }
+    }
+    saveLatticePositions(this.positions);
+  }
+
+  private applyFocus(nodeId: string): void {
+    const graph = this.graph;
+    const renderer = this.renderer;
+    if (!graph || !renderer || !graph.hasNode(nodeId)) return;
+    this.focus = { id: nodeId, neighbors: new Set(graph.neighbors(nodeId)) };
+    const nodeAttrs = graph.getNodeAttributes(nodeId) as GraphApiNode & { x: number; y: number };
+    this.options.onNodeSelect?.(toNodeSummary(nodeAttrs, graph));
+    renderer.refresh();
+    const ratio = computeFocusRatio(graph, nodeId);
+    const duration = this.options.quality.isLowTier || prefersReducedMotion() ? 0 : 500;
+    if (!this.building) {
+      renderer.getCamera().animate({ x: nodeAttrs.x, y: nodeAttrs.y, ratio }, { duration });
+    }
+  }
+
+  private disposeLayoutClient(): void {
+    this.layoutClient?.dispose();
+    this.layoutClient = null;
   }
 
   /** Build graph from payload, run layout (worker or progressive fallback),
@@ -341,33 +370,31 @@ export class LatticeRenderer {
   async update(
     payload: GraphApiPayload,
     topologyRevision: string | null,
-    filterRevision: string,
   ): Promise<void> {
-    void filterRevision;
     this.cancelled = true;
     this.controller?.abort();
     this.cancelProgressive?.();
+    this.cancelProgressive = null;
     this.cancelled = false;
 
     const controller = new AbortController();
     this.controller = controller;
     const signal = controller.signal;
 
-    const topologyKey = topologyRevision;
-    this.mountedTopologyRef = topologyKey;
+    this.mountedTopology = topologyRevision;
 
-    const { graph, newNodeCount } = buildGraph(payload, this.positionsRef);
-    this.graphRef = graph;
+    const { graph, newNodeCount } = buildGraph(payload, this.positions);
+    this.graph = graph;
 
     let useProgressiveFallback = false;
 
     if (newNodeCount > 0) {
       this.setBuilding(true);
 
-      if (!this.layoutClientRef && !this.layoutWorkerFailedRef) {
-        this.layoutClientRef = createLayoutClient();
+      if (!this.layoutClient && !this.layoutWorkerFailed) {
+        this.layoutClient = createLayoutClient();
       }
-      const client = this.layoutClientRef;
+      const client = this.layoutClient;
 
       try {
         const positions = client
@@ -378,31 +405,27 @@ export class LatticeRenderer {
             )
           : await Promise.reject(new Error("layout worker unavailable"));
         if (this.cancelled || signal.aborted) return;
-        applyLayoutPositions(graph, positions as LatticeLayoutPositions);
-        this.positionsRef = new Map(Object.entries(positions));
-        saveLatticePositions(this.positionsRef);
-      } catch {
+        applyLayoutPositions(graph, positions);
+        this.mergeAndSavePositions(positions);
+      } catch (error) {
         if (this.cancelled || signal.aborted) return;
-        this.layoutWorkerFailedRef = true;
+        this.disposeLayoutClient();
+        this.layoutWorkerFailed = true;
         useProgressiveFallback = true;
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          console.error("[lattice] layout failed; falling back to progressive", error);
+        }
       }
     }
 
     if (this.cancelled) return;
 
     const renderer = mountSigmaRenderer(graph, this.container, this.options.quality);
-    this.rendererRef = renderer;
+    this.renderer = renderer;
 
     bindWebglContextLossHandler(this.container, () => {
       if (this.cancelled) return;
-      this.contextLossesRef += 1;
-      if (this.contextLossesRef > 1) {
-        this.options.onContextDead();
-        return;
-      }
-      // Remount once — the React adapter's rebuildNonce tears down this dead
-      // renderer and builds a fresh one from saved positions.
-      this.options.onRequestRemount();
+      this.options.onContextLoss();
     });
 
     if (newNodeCount > 0 && useProgressiveFallback) {
@@ -412,8 +435,7 @@ export class LatticeRenderer {
         this.options.quality.layoutIterations,
         (nextPositions) => {
           if (this.cancelled) return;
-          this.positionsRef = nextPositions;
-          saveLatticePositions(this.positionsRef);
+          this.mergeAndSavePositions(nextPositions);
           this.setBuilding(false);
         },
       );
@@ -422,7 +444,7 @@ export class LatticeRenderer {
     }
 
     renderer.setSetting("nodeReducer", (nodeId, data) => {
-      const focus = this.focusRef;
+      const focus = this.focus;
       if (!focus.id) return data;
       if (nodeId === focus.id || focus.neighbors.has(nodeId)) {
         return { ...data, zIndex: 999, highlighted: nodeId === focus.id };
@@ -431,7 +453,7 @@ export class LatticeRenderer {
     });
 
     renderer.setSetting("edgeReducer", (edgeId, data) => {
-      const focus = this.focusRef;
+      const focus = this.focus;
       if (!focus.id) return data;
       if (graph.hasExtremity(edgeId, focus.id)) {
         return { ...data, color: VISUALS.focusedEdgeColor, size: VISUALS.focusedEdgeSize, zIndex: 998 };
@@ -440,20 +462,11 @@ export class LatticeRenderer {
     });
 
     renderer.on("clickNode", ({ node }) => {
-      this.focusRef = { id: node, neighbors: new Set(graph.neighbors(node)) };
-      const nodeAttrs = graph.getNodeAttributes(node) as GraphApiNode & { x: number; y: number };
-      this.options.onNodeSelect?.(toNodeSummary(nodeAttrs, graph));
-      renderer.refresh();
-
-      const ratio = computeFocusRatio(graph, node);
-      const duration = this.options.quality.isLowTier || prefersReducedMotion() ? 0 : 500;
-      if (!this.buildingRef) {
-        renderer.getCamera().animate({ x: nodeAttrs.x, y: nodeAttrs.y, ratio }, { duration });
-      }
+      this.applyFocus(node);
     });
 
     renderer.on("clickStage", () => {
-      this.focusRef = { id: null, neighbors: new Set() };
+      this.focus = { id: null, neighbors: new Set() };
       this.options.onNodeSelect?.(null);
       renderer.refresh();
     });
@@ -466,33 +479,22 @@ export class LatticeRenderer {
   }
 
   /** Metadata-only patch (labels/colors/sizes) when topology unchanged. No remount. */
-  applyMetadata(payload: GraphApiPayload): void {
-    const graph = this.graphRef;
-    const renderer = this.rendererRef;
+  applyMetadata(payload: GraphApiPayload, topologyRevision: string | null): void {
+    const graph = this.graph;
+    const renderer = this.renderer;
     if (!graph || !renderer) return;
-    if (this.mountedTopologyRef === null) return;
+    if (this.mountedTopology !== topologyRevision) return;
 
     applyNodeMetadata(graph, payload);
     renderer.refresh();
   }
 
   focusNode(id: string): void {
-    const graph = this.graphRef;
-    const renderer = this.rendererRef;
-    if (!graph || !renderer || !graph.hasNode(id)) return;
-    this.focusRef = { id, neighbors: new Set(graph.neighbors(id)) };
-    const nodeAttrs = graph.getNodeAttributes(id) as GraphApiNode & { x: number; y: number };
-    this.options.onNodeSelect?.(toNodeSummary(nodeAttrs, graph));
-    renderer.refresh();
-    const ratio = computeFocusRatio(graph, id);
-    const duration = this.options.quality.isLowTier || prefersReducedMotion() ? 0 : 500;
-    if (!this.buildingRef) {
-      renderer.getCamera().animate({ x: nodeAttrs.x, y: nodeAttrs.y, ratio }, { duration });
-    }
+    this.applyFocus(id);
   }
 
   fit(): void {
-    this.rendererRef?.getCamera().animatedReset({
+    this.renderer?.getCamera().animatedReset({
       duration: this.options.quality.isLowTier || prefersReducedMotion() ? 0 : 500,
     });
   }
@@ -502,12 +504,12 @@ export class LatticeRenderer {
     this.controller?.abort();
     this.cancelProgressive?.();
     this.cancelProgressive = null;
-    this.rendererRef?.kill();
-    this.rendererRef = null;
-    this.graphRef = null;
-    this.mountedTopologyRef = null;
-    this.layoutClientRef = null;
-    this.layoutWorkerFailedRef = false;
-    this.focusRef = { id: null, neighbors: new Set() };
+    this.disposeLayoutClient();
+    this.layoutWorkerFailed = false;
+    this.renderer?.kill();
+    this.renderer = null;
+    this.graph = null;
+    this.mountedTopology = null;
+    this.focus = { id: null, neighbors: new Set() };
   }
 }

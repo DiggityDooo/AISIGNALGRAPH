@@ -44,14 +44,17 @@ function SigmaLatticeGraph(
   const containerRef = useRef<HTMLDivElement>(null);
   /** Callback kept in a ref so its identity isn't an effect dependency —
    * otherwise a new closure from the parent would tear down and rebuild the
-   * entire Sigma/WebGL instance + layout. */
+   * entire Sigma/WebGL instance + layout. Engine options wrap these refs so
+   * event handlers always call the latest callback. */
   const onVisibleCountChangeRef = useRef(onVisibleCountChange);
   const onNodeSelectRef = useRef(onNodeSelect);
   const onStatsChangeRef = useRef(onStatsChange);
   /** Device tier resolved once per mount; drives DPR/labels/layout budget. */
   const [quality] = useState(getGraphQualityProfile);
   const [building, setBuilding] = useState(true);
-  /** Context-loss recovery: rebuild once, then declare the device out of GPU memory. */
+  /** Context-loss recovery: rebuild once, then declare the device out of GPU memory.
+   * Lives in the React adapter so the count survives engine remounts. */
+  const contextLossesRef = useRef(0);
   const [rebuildNonce, setRebuildNonce] = useState(0);
   const [contextDead, setContextDead] = useState(false);
   const rendererRef = useRef<LatticeRenderer | null>(null);
@@ -69,13 +72,13 @@ function SigmaLatticeGraph(
     focusNode(id: string) {
       rendererRef.current?.focusNode(id);
     },
-  }), [quality.isLowTier]);
+  }), []);
 
   // Metadata-only poll updates: patch labels/colors/sizes without remounting Sigma
   // or re-running ForceAtlas2 when topology is unchanged.
   useEffect(() => {
     if (!payload) return;
-    rendererRef.current?.applyMetadata(payload);
+    rendererRef.current?.applyMetadata(payload, topologyRevision ?? null);
   }, [payload, dataRevision, topologyRevision]);
 
   useEffect(() => {
@@ -84,16 +87,24 @@ function SigmaLatticeGraph(
 
     const renderer = new LatticeRenderer(container, {
       quality,
-      onNodeSelect: onNodeSelectRef.current,
-      onStatsChange: onStatsChangeRef.current,
-      onVisibleCountChange: onVisibleCountChangeRef.current,
+      onNodeSelect: (node) => onNodeSelectRef.current?.(node),
+      onStatsChange: (stats) => onStatsChangeRef.current?.(stats),
+      onVisibleCountChange: (visible) => onVisibleCountChangeRef.current?.(visible),
       onBuildingChange: setBuilding,
-      onContextDead: () => setContextDead(true),
-      onRequestRemount: () => setRebuildNonce((nonce) => nonce + 1),
+      onContextLoss: () => {
+        contextLossesRef.current += 1;
+        if (contextLossesRef.current > 1) {
+          setContextDead(true);
+          return;
+        }
+        setRebuildNonce((nonce) => nonce + 1);
+      },
     });
     rendererRef.current = renderer;
 
-    void renderer.update(payload, topologyRevision ?? null, filterRevision).catch(() => {});
+    void renderer.update(payload, topologyRevision ?? null).catch((error) => {
+      console.error("[lattice] failed to mount renderer", error);
+    });
 
     return () => {
       rendererRef.current?.dispose();

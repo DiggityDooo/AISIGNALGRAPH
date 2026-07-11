@@ -4,7 +4,17 @@ import type { ForceAtlas2Settings } from "graphology-layout-forceatlas2";
 
 export const LAYOUT_ITERATIONS = 120;
 
+/** Hard cap so a bad/malicious worker message cannot DoS the layout thread. */
+export const MAX_LAYOUT_ITERATIONS = 500;
+
 export const PROGRESSIVE_CHUNK_SIZE = 10;
+
+export function clampLayoutIterations(iterations: number | undefined): number {
+  const raw = typeof iterations === "number" && Number.isFinite(iterations)
+    ? Math.floor(iterations)
+    : LAYOUT_ITERATIONS;
+  return Math.min(MAX_LAYOUT_ITERATIONS, Math.max(1, raw));
+}
 
 export type LatticeLayoutNode = {
   id: string;
@@ -72,6 +82,7 @@ export function serializeGraphForLayout(graph: Graph): LatticeLayoutInput {
 export function applyLayoutPositions(graph: Graph, positions: LatticeLayoutPositions): void {
   for (const [id, pos] of Object.entries(positions)) {
     if (!graph.hasNode(id)) continue;
+    if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) continue;
     graph.setNodeAttribute(id, "x", pos.x);
     graph.setNodeAttribute(id, "y", pos.y);
   }

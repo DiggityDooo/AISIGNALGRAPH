@@ -72,6 +72,44 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+/** FNV-1a hash for deterministic per-node pseudo-random values. */
+function hashString(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i += 1) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** Deterministic fallback position in the initial scatter range. */
+function deterministicPosition(id: string): { x: number; y: number } {
+  const h = hashString(id);
+  const rand = (salt: number): number => {
+    let x = (h ^ salt) >>> 0;
+    x = Math.imul(x ^ (x >>> 15), 2246822519);
+    x = Math.imul(x ^ (x >>> 13), 3266489917);
+    return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
+  };
+  return { x: rand(1) * 100, y: rand(2) * 100 };
+}
+
+/**
+ * Replace any non-finite node position with the last saved position, or a
+ * deterministic fallback. Guards against ForceAtlas2 divergence leaking NaN
+ * into live graph attributes (which the camera focus path reads directly).
+ */
+function sanitizeGraphPositions(graph: Graph, saved: SavedPositions): void {
+  graph.forEachNode((nodeId, attrs) => {
+    const x = Number(attrs.x);
+    const y = Number(attrs.y);
+    if (Number.isFinite(x) && Number.isFinite(y)) return;
+    const fallback = saved.get(nodeId) ?? deterministicPosition(nodeId);
+    graph.setNodeAttribute(nodeId, "x", fallback.x);
+    graph.setNodeAttribute(nodeId, "y", fallback.y);
+  });
+}
+
 function loadLatticePositions(): SavedPositions {
   try {
     const raw = localStorage.getItem(LATTICE_POSITIONS_KEY);
@@ -169,6 +207,7 @@ function runProgressiveLayout(
   graph: Graph,
   renderer: Sigma,
   maxIterations: number,
+  savedPositions: SavedPositions,
   onComplete: (positions: SavedPositions) => void,
 ): () => void {
   const settings = latticeLayoutSettings(graph);
@@ -177,6 +216,9 @@ function runProgressiveLayout(
 
   const runLayoutStep = () => {
     if (currentIteration >= maxIterations) {
+      // Sanitize before reading: a diverged ForceAtlas2 run can leave NaN
+      // in live attributes.
+      sanitizeGraphPositions(graph, savedPositions);
       const nextPositions: SavedPositions = new Map();
       graph.forEachNode((nodeId, attrs) => {
         nextPositions.set(nodeId, { x: attrs.x as number, y: attrs.y as number });
@@ -323,6 +365,15 @@ export class LatticeRenderer {
    * guard against animating the camera before the layout has settled. */
   private building = true;
 
+  /** Idle float animation state: base positions plus per-node drift params. */
+  private floatFrameId: number | null = null;
+  private floatBase: Map<
+    string,
+    { x: number; y: number; phaseX: number; phaseY: number; speed: number }
+  > | null = null;
+  private floatTick = 0;
+  private floatStart = 0;
+
   constructor(container: HTMLDivElement, options: LatticeRendererOptions) {
     this.container = container;
     this.options = options;
@@ -355,13 +406,98 @@ export class LatticeRenderer {
     const ratio = computeFocusRatio(graph, nodeId);
     const duration = this.options.quality.isLowTier || prefersReducedMotion() ? 0 : 500;
     if (!this.building) {
-      renderer.getCamera().animate({ x: nodeAttrs.x, y: nodeAttrs.y, ratio }, { duration });
+      // Guard the animate call itself: a NaN position here zooms the camera
+      // into empty space with no way back.
+      const x = Number(nodeAttrs.x);
+      const y = Number(nodeAttrs.y);
+      if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(ratio)) {
+        renderer.getCamera().animate({ x, y, ratio }, { duration });
+      }
     }
   }
 
   private disposeLayoutClient(): void {
     this.layoutClient?.dispose();
     this.layoutClient = null;
+  }
+
+  /**
+   * Gentle idle drift: cheap sine/cosine offsets around the laid-out base
+   * positions, throttled to ~30fps with a single refresh per tick. Skipped
+   * for reduced-motion users, low-tier devices, and large graphs.
+   */
+  private startFloat(): void {
+    this.stopFloat();
+    const graph = this.graph;
+    const renderer = this.renderer;
+    if (!graph || !renderer || this.building) return;
+    if (prefersReducedMotion() || this.options.quality.isLowTier) return;
+    if (graph.order === 0 || graph.order > 3000) return;
+
+    const extent = getGraphExtent(graph);
+    const amp = Math.min(8, Math.max(0.5, 0.004 * Math.max(extent.width, extent.height)));
+
+    const base = new Map<string, { x: number; y: number; phaseX: number; phaseY: number; speed: number }>();
+    graph.forEachNode((nodeId, attrs) => {
+      const x = Number(attrs.x);
+      const y = Number(attrs.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      const h = hashString(nodeId);
+      base.set(nodeId, {
+        x,
+        y,
+        phaseX: (h % 628) / 100,
+        phaseY: ((h >>> 8) % 628) / 100,
+        speed: 0.4 + (((h >>> 16) % 100) / 100) * 0.6,
+      });
+    });
+    if (base.size === 0) return;
+
+    this.floatBase = base;
+    this.floatTick = 0;
+    this.floatStart = performance.now();
+
+    const tick = () => {
+      if (this.floatFrameId === null) return;
+      this.floatFrameId = requestAnimationFrame(tick);
+      this.floatTick += 1;
+      if (this.floatTick % 2 !== 0) return; // ~30fps throttle
+      const g = this.graph;
+      const r = this.renderer;
+      const b = this.floatBase;
+      if (!g || !r || !b) return;
+      const t = (performance.now() - this.floatStart) / 1000;
+      for (const [nodeId, n] of b) {
+        g.setNodeAttribute(nodeId, "x", n.x + amp * Math.sin(t * n.speed + n.phaseX));
+        g.setNodeAttribute(nodeId, "y", n.y + amp * Math.cos(t * n.speed * 0.87 + n.phaseY));
+      }
+      r.refresh();
+    };
+    this.floatFrameId = requestAnimationFrame(tick);
+  }
+
+  /**
+   * Cancel the float loop. With `restore` (dispose), write the base
+   * positions back into the graph attributes and refresh once so nothing is
+   * left mid-drift.
+   */
+  private stopFloat(restore = false): void {
+    if (this.floatFrameId !== null) {
+      cancelAnimationFrame(this.floatFrameId);
+      this.floatFrameId = null;
+    }
+    if (restore && this.floatBase && this.graph) {
+      const graph = this.graph;
+      this.floatBase.forEach((n, nodeId) => {
+        if (graph.hasNode(nodeId)) {
+          graph.setNodeAttribute(nodeId, "x", n.x);
+          graph.setNodeAttribute(nodeId, "y", n.y);
+        }
+      });
+      this.renderer?.refresh();
+    }
+    this.floatBase = null;
+    this.floatTick = 0;
   }
 
   /** Build graph from payload, run layout (worker or progressive fallback),
@@ -375,6 +511,7 @@ export class LatticeRenderer {
     this.controller?.abort();
     this.cancelProgressive?.();
     this.cancelProgressive = null;
+    this.stopFloat(); // graph is discarded below; no restore needed
     this.cancelled = false;
 
     const controller = new AbortController();
@@ -406,6 +543,7 @@ export class LatticeRenderer {
           : await Promise.reject(new Error("layout worker unavailable"));
         if (this.cancelled || signal.aborted) return;
         applyLayoutPositions(graph, positions);
+        sanitizeGraphPositions(graph, this.positions);
         this.mergeAndSavePositions(positions);
       } catch (error) {
         if (this.cancelled || signal.aborted) return;
@@ -433,14 +571,17 @@ export class LatticeRenderer {
         graph,
         renderer,
         this.options.quality.layoutIterations,
+        this.positions,
         (nextPositions) => {
           if (this.cancelled) return;
           this.mergeAndSavePositions(nextPositions);
           this.setBuilding(false);
+          this.startFloat();
         },
       );
     } else {
       this.setBuilding(false);
+      this.startFloat();
     }
 
     renderer.setSetting("nodeReducer", (nodeId, data) => {
@@ -506,6 +647,7 @@ export class LatticeRenderer {
     this.cancelProgressive = null;
     this.disposeLayoutClient();
     this.layoutWorkerFailed = false;
+    this.stopFloat(true);
     this.renderer?.kill();
     this.renderer = null;
     this.graph = null;

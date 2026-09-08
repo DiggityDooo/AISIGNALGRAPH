@@ -19,8 +19,22 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://aisignalgraph.com"),
   title: "AISIGNALGRAPH | Intelligence Hub",
   description: "The Intelligence Hub for the AI Era",
+  openGraph: {
+    title: "AISIGNALGRAPH | Intelligence Hub",
+    description: "The Intelligence Hub for the AI Era",
+    type: "website",
+    url: "https://aisignalgraph.com/",
+    images: [{ url: "/spline_preview.jpg" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AISIGNALGRAPH | Intelligence Hub",
+    description: "The Intelligence Hub for the AI Era",
+    images: ["/spline_preview.jpg"],
+  },
 };
 
 export default function RootLayout({

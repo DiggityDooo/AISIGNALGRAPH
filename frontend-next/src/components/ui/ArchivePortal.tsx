@@ -53,7 +53,7 @@ export default function ArchivePortal({
       transition={{ duration: 0.8, ease: "easeOut" }}
       className={`relative flex flex-col gap-4 ${align === "right" ? "items-end text-right" : "items-start text-left"}`}
     >
-      <h3 className="font-display text-2xl tracking-widest text-foreground">{title}</h3>
+      <h2 className="font-display text-2xl tracking-widest text-foreground">{title}</h2>
       
       {href ? <Link href={href}>{portal}</Link> : portal}
       

@@ -1,0 +1,13 @@
+# Keep the Docker build context lean: dependencies, VCS data, and
+# generated/test artifacts are all rebuilt or unnecessary inside the image.
+.git
+node_modules
+__pycache__
+.venv
+docs/
+frontend-next/e2e/
+frontend-next/artifacts/
+frontend-next/playwright-report/
+*.webm
+.obsidian/
+.cursor/

@@ -12,6 +12,19 @@ import { createLayoutWorker } from "./LayoutWorker.js";
 
 const LAYOUT_CACHE_KEY = "aisignalgraph-layout-v1";
 
+/**
+ * Replace any non-finite position component with a fallback (default 0).
+ * Guards against NaN/Infinity leaking in from layout workers, caches, or
+ * payloads and stranding the camera in empty space.
+ */
+function sanitizePosition(pos, fallback = 0) {
+  return {
+    x: Number.isFinite(pos?.x) ? pos.x : fallback,
+    y: Number.isFinite(pos?.y) ? pos.y : fallback,
+    z: Number.isFinite(pos?.z) ? pos.z : fallback,
+  };
+}
+
 export class GraphEngine {
   constructor(options = {}) {
     this.container = options.container;
@@ -46,6 +59,7 @@ export class GraphEngine {
     this._nodeIndexList = [];
     this._filteredNodeIds = null;
     this._resizeObserver = null;
+    this._homeView = null;
   }
 
   async init(graphPayload) {
@@ -83,6 +97,14 @@ export class GraphEngine {
     controls.minDistance = 30;
     controls.maxDistance = 2000;
 
+    // Home view for the render-loop safety net: if the camera or its target
+    // ever goes non-finite, we restore these instead of leaving the user
+    // stranded in empty space.
+    this._homeView = {
+      position: camera.position.clone(),
+      target: controls.target.clone(),
+    };
+
     scene.add(new THREE.AmbientLight(0xffffff, 0.3));
     const pointLight = new THREE.PointLight(0xff4258, 2, 1200);
     pointLight.position.set(0, 100, 200);
@@ -107,7 +129,9 @@ export class GraphEngine {
     this._nodeIndexList = nodes.map((node) => node.id);
 
     const renderNodes = nodes.map((node) => {
-      const pos = positions.get(node.id) || { x: node.x || 0, y: node.y || 0, z: node.z || 0 };
+      // A cached `{x: NaN}` object is truthy, so sanitize after the fallback.
+      const rawPos = positions.get(node.id) || { x: node.x || 0, y: node.y || 0, z: node.z || 0 };
+      const pos = sanitizePosition(rawPos);
       return { ...node, x: pos.x, y: pos.y, z: pos.z };
     });
 
@@ -239,8 +263,9 @@ export class GraphEngine {
         const parsed = JSON.parse(cached);
         for (const [nodeId, pos] of Object.entries(parsed)) {
           if (this._nodePositions.has(nodeId)) {
-            this._nodePositions.set(nodeId, pos);
-            this._nodeRenderer.updatePosition(nodeId, pos.x, pos.y, pos.z);
+            const clean = sanitizePosition(pos);
+            this._nodePositions.set(nodeId, clean);
+            this._nodeRenderer.updatePosition(nodeId, clean.x, clean.y, clean.z);
           }
         }
         this._nodeRenderer.flush();
@@ -265,8 +290,9 @@ export class GraphEngine {
           const x = message.positions[offset];
           const y = message.positions[offset + 1];
           const z = message.positions[offset + 2];
-          this._nodePositions.set(nodeId, { x, y, z });
-          this._nodeRenderer.updatePosition(nodeId, x, y, z);
+          const clean = sanitizePosition({ x, y, z });
+          this._nodePositions.set(nodeId, clean);
+          this._nodeRenderer.updatePosition(nodeId, clean.x, clean.y, clean.z);
         }
         this._nodeRenderer.flush();
         this._edgeRenderer.updatePositions(this._nodePositions, this._edges);
@@ -315,6 +341,19 @@ export class GraphEngine {
 
     this._controls.update();
 
+    // Safety net: if the camera position or its target ever goes non-finite
+    // (e.g. a NaN slipped into a focus tween), restore the home view instead
+    // of leaving the user stranded in empty space with no way back.
+    if (this._homeView) {
+      const cam = this._camera.position;
+      const tgt = this._controls.target;
+      if (!Number.isFinite(cam.x + cam.y + cam.z) || !Number.isFinite(tgt.x + tgt.y + tgt.z)) {
+        cam.copy(this._homeView.position);
+        tgt.copy(this._homeView.target);
+        this._controls.update();
+      }
+    }
+
     if (this._frameCount % 3 === 0) {
       this._frustumCuller.update();
       const visible = this._applyEraFilter(this._frustumCuller.visibleSet);
@@ -356,6 +395,12 @@ export class GraphEngine {
     if (!pos || !this._camera || !this._controls) {
       return;
     }
+    // Never tween toward a non-finite position — that's the "zoom into black
+    // space" bug. All position inputs are sanitized upstream, but bail out
+    // here too rather than stranding the camera.
+    if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y) || !Number.isFinite(pos.z)) {
+      return;
+    }
     const THREE = this._THREE;
 
     // Frame the focused node plus its neighbors: derive the camera distance
@@ -381,6 +426,9 @@ export class GraphEngine {
     }
     const nodeScale = this._baseScales.get(nodeId) || 4;
     const offset = THREE.MathUtils.clamp(graphRadius * 0.3, nodeScale * 6, 500);
+    if (!Number.isFinite(offset)) {
+      return;
+    }
 
     const target = new THREE.Vector3(pos.x, pos.y, pos.z);
     const camTarget = target.clone().add(new THREE.Vector3(0, 0, offset));

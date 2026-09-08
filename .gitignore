@@ -151,3 +151,8 @@ expressions.txt
 
 # Legacy / unused at repo root only (do not ignore package __init__.py under webapp/, etc.)
 /__init__.py
+
+# Generated / test artifacts (rebuilt by Docker or `npm run build:hub`)
+frontend-next/e2e/test-results/
+frontend-next/e2e/video-results/
+webapp/static/hub/

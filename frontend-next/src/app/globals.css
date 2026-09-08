@@ -7,7 +7,7 @@
   --color-void: #0A0000;
   --color-primary: #FF2A4D; /* Vivid Crimson */
   --color-secondary: #800015; /* Deep Blood Red */
-  --color-muted: #A38C8F; /* Desaturated red-grey */
+  --color-muted: #C4AEB2; /* Desaturated red-grey, brightened for WCAG AA on near-black */
 
   --font-display: var(--font-display), sans-serif;
   --font-mono: var(--font-mono), monospace;
@@ -35,6 +35,13 @@ body {
 
 body.custom-cursor-active {
   cursor: none;
+}
+
+/* Visible keyboard focus everywhere — the native cursor is replaced by a
+   custom one, so focus must never rely on the cursor alone. */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
 }
 
 @media (max-width: 767px) {
@@ -425,8 +432,8 @@ article {
 }
 
 .side-rail__node {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: 9999px;
   border: 1px solid rgba(255, 42, 77, 0.35);
   background: rgba(10, 2, 4, 0.5);

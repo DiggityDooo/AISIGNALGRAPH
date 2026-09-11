@@ -27,13 +27,20 @@ export const metadata: Metadata = {
     description: "The Intelligence Hub for the AI Era",
     type: "website",
     url: "https://aisignalgraph.com/",
-    images: [{ url: "/spline_preview.jpg" }],
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 630,
+        alt: "AISIGNALGRAPH — The Intelligence Hub for the AI Era",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "AISIGNALGRAPH | Intelligence Hub",
     description: "The Intelligence Hub for the AI Era",
-    images: ["/spline_preview.jpg"],
+    images: ["/og-image.jpg"],
   },
 };
 

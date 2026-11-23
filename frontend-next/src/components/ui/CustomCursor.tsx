@@ -24,6 +24,7 @@ export default function CustomCursor() {
     }
 
     const mobileQuery = window.matchMedia(`(max-width: ${MOBILE_MAX_WIDTH - 1}px)`);
+    const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const finePointerQuery = window.matchMedia("(pointer: fine)");
 
     const cursor = cursorRef.current;
@@ -55,6 +56,7 @@ export default function CustomCursor() {
     };
 
     const enable = () => {
+      if (rafRef.current !== null) return;
       cursor.style.display = "block";
       document.body.classList.add("custom-cursor-active");
       rafRef.current = window.requestAnimationFrame(tick);
@@ -71,7 +73,7 @@ export default function CustomCursor() {
     };
 
     const syncEnabled = () => {
-      if (mobileQuery.matches || !finePointerQuery.matches) {
+      if (mobileQuery.matches || reducedMotionQuery.matches || !finePointerQuery.matches) {
         disable();
       } else {
         enable();
@@ -114,6 +116,7 @@ export default function CustomCursor() {
 
     mobileQuery.addEventListener("change", syncEnabled);
     finePointerQuery.addEventListener("change", syncEnabled);
+    reducedMotionQuery.addEventListener("change", syncEnabled);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("pointermove", handlePointerMove, { passive: true });
     window.addEventListener("pointerleave", handlePointerLeave, { passive: true });
@@ -122,6 +125,7 @@ export default function CustomCursor() {
     return () => {
       mobileQuery.removeEventListener("change", syncEnabled);
       finePointerQuery.removeEventListener("change", syncEnabled);
+      reducedMotionQuery.removeEventListener("change", syncEnabled);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerleave", handlePointerLeave);

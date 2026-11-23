@@ -1,32 +1,72 @@
 "use client";
 
-import Link from "next/link";
+import { PointerEventsRoot } from "@/components/layout/PointerEventsRoot";
+import PageHero from "@/components/layout/PageHero";
+import StatFloatCard from "@/components/ui/StatFloatCard";
+import ArchivePortal from "@/components/ui/ArchivePortal";
 import { useOverviewStats } from "@/hooks/useOverviewStats";
 
 export default function Home() {
-  const { indexedLabel, edgesLabel, storiesLabel, entitiesLabel } = useOverviewStats();
+  const {
+    indexedLabel,
+    edgesLabel,
+    signalsLabel,
+    storiesLabel,
+    entitiesLabel,
+  } = useOverviewStats();
+
   return (
-    <main className="atlas-home">
-      <div className="desk-wrap">
-        <section className="atlas-intro">
-          <p className="desk-kicker">Knowledge graph</p>
-          <h1>The intelligence hub<br/>for the <em>AI era.</em></h1>
-          <p className="atlas-deck">Follow the stories, people, and organizations shaping AI. Explore their connections and the safety questions behind the headlines.</p>
-          <div className="atlas-actions">
-            <Link className="desk-button" href="/graph">Explore the graph <span aria-hidden="true">↗</span></Link>
-            <Link className="desk-text-link" href="/safety">Visit the safety desk <span aria-hidden="true">→</span></Link>
-          </div>
-        </section>
-        <dl className="atlas-metrics">
-          {[[indexedLabel, "Indexed nodes"], [edgesLabel, "Connections"], [storiesLabel, "Stories"], [entitiesLabel, "Entities"]].map(([value, label]) =>
-            <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
-        </dl>
-        <section id="archives" className="atlas-sections" aria-label="Explore the archive">
-          <Link href="/stories"><h2>Story archive <span>↗</span></h2><p>Browse reports on research, releases, and policy.</p></Link>
-          <Link href="/entities"><h2>Entity directory <span>↗</span></h2><p>Find the people, labs, and models behind a story.</p></Link>
-          <Link href="/safety"><h2>AI safety desk <span>↗</span></h2><p>Read conduct reports and guidance on protecting yourself.</p></Link>
-        </section>
-      </div>
-    </main>
+    <PointerEventsRoot className="relative min-h-screen w-full flex flex-col">
+      <section className="home-hero relative w-full">
+        <StatFloatCard
+          title="Indexed Nodes"
+          value={indexedLabel}
+          href="/entities"
+          className="hero-stat hero-stat--bl"
+        />
+        <StatFloatCard
+          title="Edge Lattice"
+          value={edgesLabel}
+          href="/graph"
+          className="hero-stat hero-stat--tr"
+        />
+        <StatFloatCard
+          title="Active Signals"
+          value={signalsLabel}
+          href="/stories"
+          className="hero-stat hero-stat--mr"
+        />
+
+        <PageHero
+          eyebrow="Neural Signal Platform"
+          bgTitle="AISIGNAL"
+          title="The Intelligence Hub for the AI Era"
+          description="Track labs, models, safety pressure, and strategic pivots through a live neural archive built for high-signal operational awareness."
+          primaryCta={{ label: "Enter Neural Signal", href: "/graph" }}
+          secondaryCta={{ label: "Review Matrix", href: "/stories" }}
+          showScroll
+        />
+      </section>
+
+      <section
+        id="archives"
+        className="relative w-full max-w-6xl mx-auto px-6 py-24 md:py-32 flex flex-col md:flex-row justify-between items-center gap-16 pointer-events-auto scroll-mt-28"
+      >
+        <ArchivePortal
+          title="INTELLIGENCE LIBRARY"
+          subtitle="Query the Archive"
+          stats={`${storiesLabel} RECORDS RECOVERED`}
+          href="/stories"
+          align="left"
+        />
+        <ArchivePortal
+          title="ACTOR DIRECTORY"
+          subtitle="Identify Node"
+          stats={`${entitiesLabel} NODES IDENTIFIED`}
+          href="/entities"
+          align="right"
+        />
+      </section>
+    </PointerEventsRoot>
   );
 }

@@ -236,15 +236,24 @@ def create_app() -> Flask:
     def entities():
         return app.send_static_file("hub/entities.html")
 
+    def send_hub_asset(path: str):
+        hub_root = Path(app.static_folder) / "hub"
+        if (hub_root / path).is_file():
+            return app.send_static_file(f"hub/{path}")
+
+        # Next requests page segments with dots, while its static export can
+        # emit those same page segments in nested directories.
+        route, _, filename = path.rpartition("/")
+        if route and all(ID_RE.fullmatch(part) for part in route.split("/")):
+            if filename == f"__next.{route.replace('/', '.')}.__PAGE__.txt":
+                return app.send_static_file(f"hub/{route}/__next.{route}/__PAGE__.txt")
+        abort(404)
+
     @app.get("/stories/<story_id>")
     def story_detail(story_id: str):
-        # Prevent intercepting Next.js static data files
-        if story_id.startswith("__next") or story_id.endswith(".txt") or story_id.endswith(".json"):
-             hub_file = Path(app.static_folder) / "hub" / "stories" / story_id
-             if hub_file.exists():
-                 return app.send_static_file(f"hub/stories/{story_id}")
-             abort(404)
-             
+        if story_id.startswith("__next") or story_id.endswith((".txt", ".json")):
+            return send_hub_asset(f"stories/{story_id}")
+
         _validate_identifier(story_id)
         store, _jobs = require_services()
         story = store.get_story(story_id)
@@ -254,12 +263,8 @@ def create_app() -> Flask:
 
     @app.get("/entities/<entity_id>")
     def entity_detail(entity_id: str):
-        # Prevent intercepting Next.js static data files
-        if entity_id.startswith("__next") or entity_id.endswith(".txt") or entity_id.endswith(".json"):
-             hub_file = Path(app.static_folder) / "hub" / "entities" / entity_id
-             if hub_file.exists():
-                 return app.send_static_file(f"hub/entities/{entity_id}")
-             abort(404)
+        if entity_id.startswith("__next") or entity_id.endswith((".txt", ".json")):
+            return send_hub_asset(f"entities/{entity_id}")
 
         _validate_identifier(entity_id)
         store, _jobs = require_services()
@@ -439,10 +444,7 @@ def create_app() -> Flask:
             or path.startswith("graph/prototype/")
         ):
             abort(404)
-        hub_file = Path(app.static_folder) / "hub" / path
-        if hub_file.exists() and hub_file.is_file():
-            return app.send_static_file(f"hub/{path}")
-        abort(404)
+        return send_hub_asset(path)
 
     return app
 

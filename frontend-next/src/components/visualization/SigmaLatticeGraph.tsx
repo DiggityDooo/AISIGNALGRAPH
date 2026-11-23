@@ -83,9 +83,8 @@ function SigmaLatticeGraph(
   const getCurrentPayload = useEffectEvent(() => payload);
   const hasNodes = Boolean(payload?.nodes.length);
   useEffect(() => {
-    const payload = getCurrentPayload();
     const container = containerRef.current;
-    if (!container || !payload || payload.nodes.length === 0) return;
+    if (!container || !hasNodes || contextDead) return;
 
     const renderer = new LatticeRenderer(container, {
       quality,
@@ -104,15 +103,20 @@ function SigmaLatticeGraph(
     });
     rendererRef.current = renderer;
 
+    return () => {
+      renderer.dispose();
+      if (rendererRef.current === renderer) rendererRef.current = null;
+    };
+  }, [hasNodes, quality, rebuildNonce, contextDead]);
+
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    const payload = getCurrentPayload();
+    if (!renderer || !payload || !hasNodes) return;
     void renderer.update(payload, topologyRevision ?? null).catch((error) => {
       console.error("[lattice] failed to mount renderer", error);
       if (rendererRef.current === renderer) setContextDead(true);
     });
-
-    return () => {
-      rendererRef.current?.dispose();
-      rendererRef.current = null;
-    };
   }, [hasNodes, topologyRevision, filterRevision, quality, rebuildNonce]);
 
   useEffect(() => {

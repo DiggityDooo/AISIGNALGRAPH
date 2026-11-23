@@ -384,10 +384,10 @@ export class GraphEngine {
   _adaptQuality() {
     if (this._fps < 25 && this._adaptiveQuality > 0.5) {
       this._adaptiveQuality = Math.max(0.5, this._adaptiveQuality - 0.1);
-      this._renderer.setPixelRatio(window.devicePixelRatio * this._adaptiveQuality);
+      this._renderer.setPixelRatio(Math.min(window.devicePixelRatio * this._adaptiveQuality, 2));
     } else if (this._fps > 55 && this._adaptiveQuality < 1) {
       this._adaptiveQuality = Math.min(1, this._adaptiveQuality + 0.05);
-      this._renderer.setPixelRatio(window.devicePixelRatio * this._adaptiveQuality);
+      this._renderer.setPixelRatio(Math.min(window.devicePixelRatio * this._adaptiveQuality, 2));
     }
   }
 

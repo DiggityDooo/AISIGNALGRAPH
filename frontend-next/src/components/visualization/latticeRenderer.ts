@@ -26,7 +26,7 @@ function toNodeSummary(node: GraphApiNode, graph: Graph): GraphNodeSummary {
   return {
     id: node.id,
     label: node.label ?? node.id,
-    type: nodeTypeOf(node),
+    type: typeof node.semanticType === "string" ? node.semanticType : nodeTypeOf(node),
     summary: typeof node.summary === "string" ? node.summary : undefined,
     description: node.description,
     community_name:
@@ -270,6 +270,7 @@ function buildGraph(
       label: node.label ?? node.id,
       size: 2,
       color: accentForType(nodeTypeOf(node)),
+      semanticType: nodeTypeOf(node),
       x: saved ? saved.x : Math.random() * 100,
       y: saved ? saved.y : Math.random() * 100,
       type: "circle",
@@ -296,15 +297,22 @@ function buildGraph(
 }
 
 function applyNodeMetadata(graph: Graph, payload: GraphApiPayload): void {
-  for (const node of payload.nodes) {
-    if (!node.id || !graph.hasNode(node.id)) continue;
-    graph.mergeNodeAttributes(node.id, {
-      ...node,
-      label: node.label ?? node.id,
-      color: accentForType(nodeTypeOf(node)),
-      size: degreeBasedSize(graph.degree(node.id), { min: 2, max: 8 }),
-    });
-  }
+  const nodes = new Map(payload.nodes.map(node => [node.id, node]));
+  graph.updateEachNodeAttributes((id, attrs) => {
+    const node = nodes.get(id);
+    if (!node) return attrs;
+    const semanticType = nodeTypeOf(node);
+    return {
+      ...attrs,
+      label: node.label ?? id,
+      description: node.description,
+      summary: node.summary,
+      route: node.route,
+      community_name: node.community_name,
+      semanticType,
+      color: accentForType(semanticType),
+    };
+  }, { attributes: ["label", "color"] });
 }
 
 function mountSigmaRenderer(
@@ -399,11 +407,6 @@ export class LatticeRenderer {
 
   /** Idle float animation state: base positions plus per-node drift params. */
   private floatFrameId: number | null = null;
-  private floatBase: Map<
-    string,
-    { x: number; y: number; phaseX: number; phaseY: number; speed: number }
-  > | null = null;
-  private floatTick = 0;
   private floatStart = 0;
 
   constructor(container: HTMLDivElement, options: LatticeRendererOptions) {
@@ -453,7 +456,7 @@ export class LatticeRenderer {
 
   /**
    * Gentle idle drift: cheap sine/cosine offsets around the laid-out base
-   * positions, throttled to ~30fps with a single refresh per tick. Skipped
+   * positions, batched and throttled to limit redraws. Skipped
    * for reduced-motion users, low-tier devices, and large graphs.
    */
   private startFloat(): void {
@@ -483,51 +486,30 @@ export class LatticeRenderer {
     });
     if (base.size === 0) return;
 
-    this.floatBase = base;
-    this.floatTick = 0;
     this.floatStart = performance.now();
+    let lastFrame = 0;
 
-    const tick = () => {
-      if (this.floatFrameId === null) return;
+    const tick = (now: number) => {
       this.floatFrameId = requestAnimationFrame(tick);
-      this.floatTick += 1;
-      if (this.floatTick % 2 !== 0) return; // ~30fps throttle
-      const g = this.graph;
-      const r = this.renderer;
-      const b = this.floatBase;
-      if (!g || !r || !b) return;
-      const t = (performance.now() - this.floatStart) / 1000;
-      for (const [nodeId, n] of b) {
-        g.setNodeAttribute(nodeId, "x", n.x + amp * Math.sin(t * n.speed + n.phaseX));
-        g.setNodeAttribute(nodeId, "y", n.y + amp * Math.cos(t * n.speed * 0.87 + n.phaseY));
-      }
-      r.refresh();
+      if (now - lastFrame < 80 || document.hidden || this.focus.id) return;
+      lastFrame = now;
+      const t = (now - this.floatStart) / 1000;
+      graph.updateEachNodeAttributes((id, attrs) => {
+        const n = base.get(id);
+        if (!n) return attrs;
+        return {
+          ...attrs,
+          x: n.x + amp * Math.sin(t * n.speed + n.phaseX),
+          y: n.y + amp * Math.cos(t * n.speed * 0.87 + n.phaseY),
+        };
+      }, { attributes: ["x", "y"] });
     };
     this.floatFrameId = requestAnimationFrame(tick);
   }
 
-  /**
-   * Cancel the float loop. With `restore` (dispose), write the base
-   * positions back into the graph attributes and refresh once so nothing is
-   * left mid-drift.
-   */
-  private stopFloat(restore = false): void {
-    if (this.floatFrameId !== null) {
-      cancelAnimationFrame(this.floatFrameId);
-      this.floatFrameId = null;
-    }
-    if (restore && this.floatBase && this.graph) {
-      const graph = this.graph;
-      this.floatBase.forEach((n, nodeId) => {
-        if (graph.hasNode(nodeId)) {
-          graph.setNodeAttribute(nodeId, "x", n.x);
-          graph.setNodeAttribute(nodeId, "y", n.y);
-        }
-      });
-      this.renderer?.refresh();
-    }
-    this.floatBase = null;
-    this.floatTick = 0;
+  private stopFloat(): void {
+    if (this.floatFrameId !== null) cancelAnimationFrame(this.floatFrameId);
+    this.floatFrameId = null;
   }
 
   /** Build graph from payload, run layout (worker or progressive fallback),
@@ -541,17 +523,14 @@ export class LatticeRenderer {
     this.controller?.abort();
     this.cancelProgressive?.();
     this.cancelProgressive = null;
-    this.stopFloat(); // graph is discarded below; no restore needed
+    this.stopFloat();
     this.cancelled = false;
 
     const controller = new AbortController();
     this.controller = controller;
     const signal = controller.signal;
 
-    this.mountedTopology = topologyRevision;
-
     const { graph, newNodeCount } = buildGraph(payload, this.positions);
-    this.graph = graph;
 
     let useProgressiveFallback = false;
 
@@ -588,13 +567,17 @@ export class LatticeRenderer {
 
     if (this.cancelled) return;
 
-    const renderer = mountSigmaRenderer(graph, this.container, this.options.quality);
-    this.renderer = renderer;
-
-    bindWebglContextLossHandler(this.container, () => {
-      if (this.cancelled) return;
-      this.options.onContextLoss();
-    });
+    this.graph = graph;
+    this.mountedTopology = topologyRevision;
+    this.focus = { id: null, neighbors: new Set() };
+    let renderer = this.renderer;
+    if (renderer) {
+      renderer.setGraph(graph);
+      renderer.getCamera().animatedReset({ duration: 0 });
+    } else {
+      renderer = this.mount(graph);
+      this.renderer = renderer;
+    }
 
     if (newNodeCount > 0 && useProgressiveFallback) {
       this.cancelProgressive = runProgressiveLayout(
@@ -614,6 +597,18 @@ export class LatticeRenderer {
       this.startFloat();
     }
 
+    this.options.onVisibleCountChange?.(graph.order);
+    this.options.onStatsChange?.({
+      nodes: graph.order,
+      edges: graph.size,
+    });
+  }
+
+  private mount(graph: Graph): Sigma {
+    const renderer = mountSigmaRenderer(graph, this.container, this.options.quality);
+    bindWebglContextLossHandler(this.container, () => {
+      if (!this.cancelled) this.options.onContextLoss();
+    });
     renderer.setSetting("nodeReducer", (nodeId, data) => {
       const focus = this.focus;
       if (!focus.id) return data;
@@ -626,7 +621,7 @@ export class LatticeRenderer {
     renderer.setSetting("edgeReducer", (edgeId, data) => {
       const focus = this.focus;
       if (!focus.id) return data;
-      if (graph.hasExtremity(edgeId, focus.id)) {
+      if (renderer.getGraph().hasExtremity(edgeId, focus.id)) {
         return { ...data, color: VISUALS.focusedEdgeColor, size: VISUALS.focusedEdgeSize, zIndex: 998 };
       }
       return { ...data, hidden: true };
@@ -641,11 +636,7 @@ export class LatticeRenderer {
       this.options.onNodeSelect?.(null);
     });
 
-    this.options.onVisibleCountChange?.(graph.order);
-    this.options.onStatsChange?.({
-      nodes: graph.order,
-      edges: graph.size,
-    });
+    return renderer;
   }
 
   /** Metadata-only patch (labels/colors/sizes) when topology unchanged. No remount. */
@@ -656,7 +647,6 @@ export class LatticeRenderer {
     if (this.mountedTopology !== topologyRevision) return;
 
     applyNodeMetadata(graph, payload);
-    renderer.refresh();
   }
 
   focusNode(id: string): void {
@@ -682,7 +672,7 @@ export class LatticeRenderer {
     this.cancelProgressive = null;
     this.disposeLayoutClient();
     this.layoutWorkerFailed = false;
-    this.stopFloat(true);
+    this.stopFloat();
     this.renderer?.kill();
     this.renderer = null;
     this.graph = null;

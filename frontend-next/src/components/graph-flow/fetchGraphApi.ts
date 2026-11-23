@@ -19,7 +19,8 @@ export interface GraphApiNode {
   description?: string;
   importance?: number;
   timeline_month?: string;
-  year?: number;
+  year?: number | string;
+  era?: string;
   category?: string;
   // The compact endpoint strips empty values; unknown extras may appear.
   [key: string]: unknown;
@@ -80,7 +81,13 @@ export async function fetchGraphApi(
     throw new Error(`/api/graph returned ${response.status}`);
   }
 
-  const data = (await response.json()) as Partial<GraphApiPayload>;
+  const data = (await response.json()) as Partial<GraphApiPayload> | null;
+  if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
+    throw new Error("The server returned an invalid graph.");
+  }
+  if (data.status === "degraded") {
+    throw new Error(data.message || "The graph is temporarily unavailable.");
+  }
   return {
     nodes: Array.isArray(data.nodes) ? data.nodes : [],
     edges: Array.isArray(data.edges) ? data.edges : [],

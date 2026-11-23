@@ -53,6 +53,7 @@ export class GraphEngine {
     this._fpsTimer = performance.now();
     this._adaptiveQuality = 1;
     this._animFrameId = null;
+    this._focusFrameId = null;
     this._raycaster = null;
     this._mouse = null;
     this._hoveredNode = null;
@@ -383,10 +384,39 @@ export class GraphEngine {
   _adaptQuality() {
     if (this._fps < 25 && this._adaptiveQuality > 0.5) {
       this._adaptiveQuality = Math.max(0.5, this._adaptiveQuality - 0.1);
-      this._renderer.setPixelRatio(window.devicePixelRatio * this._adaptiveQuality);
+      this._renderer.setPixelRatio(Math.min(window.devicePixelRatio * this._adaptiveQuality, 2));
     } else if (this._fps > 55 && this._adaptiveQuality < 1) {
       this._adaptiveQuality = Math.min(1, this._adaptiveQuality + 0.05);
-      this._renderer.setPixelRatio(window.devicePixelRatio * this._adaptiveQuality);
+      this._renderer.setPixelRatio(Math.min(window.devicePixelRatio * this._adaptiveQuality, 2));
+    }
+  }
+
+  fit() {
+    if (!this._camera || !this._controls || !this._THREE) return;
+    this._stopCameraFocus();
+    const bounds = new this._THREE.Box3();
+    const point = new this._THREE.Vector3();
+    for (const pos of this._nodePositions.values()) {
+      bounds.expandByPoint(point.set(pos.x, pos.y, pos.z));
+    }
+    if (bounds.isEmpty()) return;
+    const { center, radius } = bounds.getBoundingSphere(new this._THREE.Sphere());
+    const halfFov = this._camera.fov * Math.PI / 360;
+    const limitingAngle = Math.min(halfFov, Math.atan(Math.tan(halfFov) * this._camera.aspect));
+    const distance = Math.max(radius / Math.sin(limitingAngle) * 1.08, 100);
+    this._controls.maxDistance = Math.max(2000, distance * 2);
+    this._camera.far = Math.max(10000, distance * 3);
+    this._camera.updateProjectionMatrix();
+    this._controls.target.copy(center);
+    this._camera.position.copy(center).add(point.set(0.45, 0.35, 1).normalize().multiplyScalar(distance));
+    this._controls.update();
+    this._homeView = { position: this._camera.position.clone(), target: center.clone() };
+  }
+
+  _stopCameraFocus() {
+    if (this._focusFrameId !== null) {
+      cancelAnimationFrame(this._focusFrameId);
+      this._focusFrameId = null;
     }
   }
 
@@ -432,6 +462,13 @@ export class GraphEngine {
 
     const target = new THREE.Vector3(pos.x, pos.y, pos.z);
     const camTarget = target.clone().add(new THREE.Vector3(0, 0, offset));
+    this._stopCameraFocus();
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      this._camera.position.copy(camTarget);
+      this._controls.target.copy(target);
+      this._controls.update();
+      return;
+    }
     const startPos = this._camera.position.clone();
     const startTarget = this._controls.target.clone();
     const startTime = performance.now();
@@ -443,11 +480,9 @@ export class GraphEngine {
       this._camera.position.lerpVectors(startPos, camTarget, ease);
       this._controls.target.lerpVectors(startTarget, target, ease);
       this._controls.update();
-      if (t < 1) {
-        requestAnimationFrame(step);
-      }
+      this._focusFrameId = t < 1 ? requestAnimationFrame(step) : null;
     };
-    requestAnimationFrame(step);
+    this._focusFrameId = requestAnimationFrame(step);
   }
 
   filterByEra(allowedNodeIds) {
@@ -472,6 +507,7 @@ export class GraphEngine {
 
   dispose() {
     this._destroyed = true;
+    this._stopCameraFocus();
     if (this._animFrameId !== null) {
       cancelAnimationFrame(this._animFrameId);
       this._animFrameId = null;
@@ -484,9 +520,7 @@ export class GraphEngine {
     this._labelAtlas?.dispose();
     this._controls?.dispose();
     this._renderer?.dispose();
-    if (this.container) {
-      this.container.innerHTML = "";
-    }
+    this._renderer?.domElement.remove();
     this._scene = null;
     this._camera = null;
     this._renderer = null;

@@ -58,7 +58,7 @@ function ProgressiveTreeGraphBody({
 
   return (
     <CardGraphCanvas
-      key={layoutKey}
+      layoutKey={layoutKey}
       layoutMode="tree"
       fitKey={fitKey}
       focusKey={focusKey}

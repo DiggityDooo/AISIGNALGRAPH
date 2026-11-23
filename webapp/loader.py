@@ -20,6 +20,7 @@ SEED_PATH = Path(__file__).parent.parent / "data" / "ai_history_seed.json"
 
 # Scraper entity type -> existing group_name conventions.
 _TYPE_TO_GROUP = {
+    "company": "Companies",
     "lab": "Labs",
     "model": "Models",
     "person": "People",
@@ -34,6 +35,7 @@ _TYPE_TO_GROUP = {
 
 # Scraper entity type -> existing entity_type conventions.
 _TYPE_TO_ENTITY_TYPE = {
+    "company": "company",
     "lab": "company",
     "model": "model",
     "person": "person",
@@ -74,24 +76,9 @@ class DataLoader:
     # -- public API ----------------------------------------------------------
 
     def load_seed(self, conn: sqlite3.Connection) -> int:
-        """Load the historical seed corpus once. Idempotent."""
-        row = conn.execute(
-            "SELECT value FROM meta WHERE key = 'seed_loaded'"
-        ).fetchone()
-        if row and row[0] == "1":
-            return 0
-
+        """Insert missing seed nodes, including additions shipped after first boot."""
         stories = self._read_json_file(self.seed_path)
-        if not stories:
-            return 0
-
-        inserted = self._insert_stories(conn, stories)
-        if inserted >= 0:
-            conn.execute(
-                "INSERT OR REPLACE INTO meta (key, value) VALUES ('seed_loaded', '1')"
-            )
-            conn.commit()
-        return max(inserted, 0)
+        return max(self._insert_stories(conn, stories), 0) if stories else 0
 
     def load_stories(self, conn: sqlite3.Connection) -> int:
         """Load scraped stories not yet in the DB (dedup by source_url/id)."""
@@ -247,8 +234,8 @@ class DataLoader:
             conn.execute(
                 """
                 INSERT OR IGNORE INTO entities
-                    (id, name, entity_type, group_name, description, importance)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    (id, name, entity_type, group_name, description, importance, category)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     entity_id,
@@ -257,6 +244,7 @@ class DataLoader:
                     _TYPE_TO_GROUP.get(raw_type, "Capabilities"),
                     "",
                     3,
+                    "organization" if raw_type in {"company", "lab"} else "topic",
                 ),
             )
             conn.execute(

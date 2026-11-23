@@ -564,5 +564,139 @@
     "era": "deep_learning",
     "importance_score": 0.8,
     "scraped_at": "2026-06-10T00:00:00+00:00"
+  },
+  {
+    "id": "ftc-workado-detection-order",
+    "title": "FTC orders Workado to substantiate its AI detector claims",
+    "summary": "The FTC announced a final consent order requiring Workado to support accuracy claims about its AI detection products with reliable evidence. Its complaint questioned how well a detector evaluated writing outside the academic material it was trained to classify.",
+    "date": "2025-08-28",
+    "source_url": "https://www.ftc.gov/legal-library/browse/cases-proceedings/2323092-content-scale-ai",
+    "source_name": "Federal Trade Commission",
+    "entities": [
+      {
+        "name": "Federal Trade Commission",
+        "type": "policy"
+      },
+      {
+        "name": "Workado",
+        "type": "company"
+      }
+    ],
+    "keywords": [
+      "deceptive advertising",
+      "ai detection",
+      "consumer protection"
+    ],
+    "relationships": [],
+    "era": "agentic",
+    "importance_score": 0.65
+  },
+  {
+    "id": "ftc-donotpay-ai-lawyer-order",
+    "title": "FTC finalizes order over DoNotPay’s AI lawyer claims",
+    "summary": "The FTC announced a settlement requiring DoNotPay to provide $193,000 in monetary relief and notify certain subscribers. Under the order, the company must have evidence before advertising that its service can perform like a lawyer.",
+    "date": "2025-02-11",
+    "source_url": "https://www.ftc.gov/news-events/news/press-releases/2025/02/ftc-finalizes-order-donotpay-prohibits-deceptive-ai-lawyer-claims-imposes-monetary-relief-requires",
+    "source_name": "Federal Trade Commission",
+    "entities": [
+      {
+        "name": "Federal Trade Commission",
+        "type": "policy"
+      },
+      {
+        "name": "DoNotPay",
+        "type": "company"
+      }
+    ],
+    "keywords": [
+      "deceptive advertising",
+      "consumer protection",
+      "ai services"
+    ],
+    "relationships": [],
+    "era": "agentic",
+    "importance_score": 0.65
+  },
+  {
+    "id": "ftc-fake-endorsements",
+    "title": "Check the endorsement before you buy",
+    "summary": "A familiar face in an ad can be edited into a testimonial. The FTC recommends looking up the spokesperson and product together with terms such as “fake” or “scam.” Give yourself time to check before paying, even when the ad claims the offer is about to expire.",
+    "date": "2024-04-26",
+    "source_url": "https://consumer.ftc.gov/consumer-alerts/2024/04/did-celebrity-really-endorse-maybe-not",
+    "source_name": "Federal Trade Commission",
+    "entities": [
+      {
+        "name": "Federal Trade Commission",
+        "type": "policy"
+      },
+      {
+        "name": "Synthetic media",
+        "type": "risk"
+      }
+    ],
+    "keywords": [
+      "deepfakes",
+      "impersonation",
+      "consumer advice"
+    ],
+    "relationships": [],
+    "era": "agentic",
+    "importance_score": 0.65
+  },
+  {
+    "id": "ftc-voice-clone-callback",
+    "title": "Verify an emergency call on a number you trust",
+    "summary": "A caller using a cloned voice can sound like a relative in trouble. Hang up and call your relative at a number you already have. If they cannot answer, ask someone close to them to check before you send money.",
+    "date": "2023-03-20",
+    "source_url": "https://consumer.ftc.gov/consumer-alerts/2023/03/scammers-use-ai-enhance-their-family-emergency-schemes",
+    "source_name": "Federal Trade Commission",
+    "entities": [
+      {
+        "name": "Federal Trade Commission",
+        "type": "policy"
+      },
+      {
+        "name": "Voice cloning",
+        "type": "risk"
+      }
+    ],
+    "keywords": [
+      "voice cloning",
+      "fraud",
+      "consumer advice"
+    ],
+    "relationships": [],
+    "era": "frontier",
+    "importance_score": 0.65
+  },
+  {
+    "id": "ftc-family-video-impersonation",
+    "title": "Check an urgent video call with someone else in the family",
+    "summary": "A familiar face on a call can be faked. If a relative asks for money and demands secrecy, end the call and check the story with another family member or friend before paying. The FTC also explains how to seek help if you already sent money.",
+    "date": "2026-11-18",
+    "source_url": "https://consumer.ftc.gov/consumer-alerts/2026/11/grandpa-i-need-your-help-how-spot-and-avoid-grandkid-scams",
+    "source_name": "Federal Trade Commission",
+    "entities": [
+      {
+        "name": "Federal Trade Commission",
+        "type": "policy"
+      },
+      {
+        "name": "Voice cloning",
+        "type": "risk"
+      },
+      {
+        "name": "Synthetic media",
+        "type": "risk"
+      }
+    ],
+    "keywords": [
+      "impersonation",
+      "voice cloning",
+      "consumer advice"
+    ],
+    "relationships": [],
+    "era": "agentic",
+    "importance_score": 0.65
   }
 ]

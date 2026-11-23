@@ -63,25 +63,15 @@ test("Full video walkthrough of today's changes", async ({ page, context }) => {
     }
   } catch { /* 3D toggle may not be present */ }
 
-  // Timeline slider
-  await page.evaluate(() => {
-    const slider = document.getElementById("year-filter") as HTMLInputElement;
-    if (slider) {
-      slider.value = "2023";
-      slider.dispatchEvent(new Event("input", { bubbles: true }));
-      slider.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-  });
-  await page.waitForTimeout(2000);
-  await page.evaluate(() => {
-    const slider = document.getElementById("year-filter") as HTMLInputElement;
-    if (slider) {
-      slider.value = "2026";
-      slider.dispatchEvent(new Event("input", { bubbles: true }));
-      slider.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-  });
-  await page.waitForTimeout(2000);
+  // Publication cutoff
+  await page.getByRole("button", { name: "Filters" }).click();
+  const year = page.getByLabel("Published through");
+  if (await year.getByRole("option", { name: "2023" }).count()) {
+    await year.selectOption("2023");
+    await page.waitForTimeout(2000);
+  }
+  await year.selectOption("");
+  await page.getByRole("button", { name: "Close filters" }).click();
 
   // ─── Scene 5: Signal Tree (graph/flow) — Progressive Disclosure ───
   await page.goto("/graph?view=flow", { waitUntil: "domcontentloaded", timeout: 60_000 });

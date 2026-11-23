@@ -5,8 +5,8 @@ import { join } from "node:path";
 const ROUTES = [
   { path: "/", name: "home", expectHeading: /Intelligence Hub|AI Era/i },
   { path: "/stories", name: "stories", expectHeading: /Intelligence Library|Archive/i },
-  { path: "/entities", name: "entities", expectHeading: /Actor Directory|ACTORS/i },
-  { path: "/graph", name: "graph", expectHeading: /Neural|Matrix|Signal|Link|Sync/i },
+  { path: "/entities", name: "entities", expectHeading: /Entity directory/i },
+  { path: "/graph", name: "graph", expectHeading: /AI graph/i },
 ] as const;
 
 type RouteFinding = {
@@ -76,7 +76,7 @@ test.describe("AISIGNALGRAPH hub analysis", () => {
       };
 
       if (route.path === "/") {
-        checks.hasHero = (await page.locator(".hero-aeru").count()) > 0;
+        checks.hasHero = (await page.locator(".atlas-intro").count()) > 0;
         checks.hasArchives = (await page.locator("#archives").count()) > 0;
         checks.hasSplineRoot = (await page.locator('[data-testid="spline-site-root"]').count()) > 0;
         checks.noAccessDeniedLeak =

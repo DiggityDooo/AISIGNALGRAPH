@@ -32,6 +32,10 @@ const nodeTypes = { documentCard: DocumentCardNode };
 const edgeTypes = { signal: SignalEdge };
 const defaultEdgeOptions = { type: "signal" as const };
 
+function fitDuration() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 500;
+}
+
 function AutoFit({
   fitKey,
   focusKey,
@@ -42,23 +46,22 @@ function AutoFit({
   focusNodeIds?: string[];
 }) {
   const { fitView } = useReactFlow();
+  const parentId = focusNodeIds?.[0];
 
-  // Initial load / data revision — fit the whole graph. Skipped when
-  // focusKey is set: layoutKey remounts on expand would otherwise re-run
-  // this and jump the camera away from the node being opened.
+  // Fit the whole graph on initial layout, or after a branch collapses.
+  // Opening a branch has its own camera target.
   useEffect(() => {
     if (focusKey) {
       return undefined;
     }
     const timer = window.setTimeout(() => {
-      void fitView({ padding: 0.2, duration: 800 });
+      void fitView({ padding: 0.2, duration: fitDuration() });
     }, 40);
     return () => window.clearTimeout(timer);
   }, [fitKey, focusKey, fitView]);
 
   // Expand — ease toward the parent node only; fitKey stays unchanged.
   useEffect(() => {
-    const parentId = focusNodeIds?.[0];
     if (!focusKey || !parentId) {
       return undefined;
     }
@@ -66,26 +69,37 @@ function AutoFit({
       void fitView({
         nodes: [{ id: parentId }],
         padding: 0.7,
-        duration: 700,
+        duration: fitDuration(),
         maxZoom: 1.1,
       });
     }, 120);
     return () => window.clearTimeout(timer);
-  }, [focusKey, focusNodeIds, fitView]);
+  }, [focusKey, parentId, fitView]);
 
   return null;
 }
 
 function CardGraphCanvasInner({
   layoutMode,
+  layoutKey,
   fitKey,
   focusKey,
   focusNodeIds,
   layouted,
   onToggleExpand,
 }: CardGraphCanvasProps) {
+  const [source, setSource] = useState({ nodes: layouted.nodes, key: layoutKey });
   const [nodes, setNodes] = useState(layouted.nodes);
-  const [edges] = useState(layouted.edges);
+  if (source.nodes !== layouted.nodes || source.key !== layoutKey) {
+    const previousNodes = new Map(nodes.map(node => [node.id, node]));
+    const sameLayout = source.key === layoutKey;
+    setSource({ nodes: layouted.nodes, key: layoutKey });
+    setNodes(layouted.nodes.map(node => {
+      const previous = previousNodes.get(node.id);
+      if (!previous) return node;
+      return { ...node, position: sameLayout ? previous.position : node.position, selected: previous.selected };
+    }));
+  }
   // Touch devices: single-finger pan (mouse-button pan filters don't apply),
   // no MiniMap (extra render pass + tap target too small to be useful).
   const [isLowTier] = useState(() => getGraphQualityProfile().isLowTier);
@@ -107,11 +121,11 @@ function CardGraphCanvasInner({
   );
 
   return (
-    <GraphLayoutProvider mode={layoutMode}>
+    <GraphLayoutProvider mode={layoutMode} onToggleExpand={onToggleExpand}>
       <div className="h-full w-full bg-[#050202]">
         <ReactFlow
           nodes={nodes}
-          edges={edges}
+          edges={layouted.edges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
@@ -122,6 +136,7 @@ function CardGraphCanvasInner({
           panOnScroll
           zoomOnScroll
           nodesConnectable={false}
+          deleteKeyCode={null}
           elementsSelectable
           minZoom={0.08}
           maxZoom={1.8}
@@ -152,6 +167,7 @@ function CardGraphCanvasInner({
 
 export interface CardGraphCanvasProps {
   layoutMode: LayoutMode;
+  layoutKey: string;
   fitKey: string;
   /** Stable per-expand key so the camera re-frames on each reveal. */
   focusKey?: string;

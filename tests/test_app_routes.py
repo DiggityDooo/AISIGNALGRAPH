@@ -51,6 +51,19 @@ class TestPageRoutes:
         assert response.status_code == 404
 
 
+@pytest.mark.parametrize("page", ["stories", "entities", "safety", "graph", "graph/flow"])
+def test_next_prefetch_loads_exported_page_segment(client, monkeypatch, tmp_path, page):
+    export_file = tmp_path / "hub" / page / f"__next.{page}" / "__PAGE__.txt"
+    export_file.parent.mkdir(parents=True)
+    export_file.write_text("static page segment", encoding="utf-8")
+    monkeypatch.setattr(client.application, "static_folder", str(tmp_path))
+
+    route = f"/{page}/__next.{page.replace('/', '.')}.__PAGE__.txt"
+    response = client.get(route)
+    assert response.status_code == 200
+    assert response.get_data(as_text=True) == "static page segment"
+
+
 # ---------------------------------------------------------------------------
 # API overview and health
 # ---------------------------------------------------------------------------

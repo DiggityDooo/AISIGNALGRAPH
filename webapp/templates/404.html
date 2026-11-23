@@ -1,20 +1,11 @@
-{% extends "base.html" %}
-{% block title %}Not Found | AI Signal Graph{% endblock %}
+{% extends "record_base.html" %}
+{% block title %}Page not found | AISIGNALGRAPH{% endblock %}
+
 {% block content %}
-  <section class="hero hero--zero-day" style="min-height: 80vh; padding-top: 0;">
-    <div class="page hero-grid" style="grid-template-columns: 1fr;">
-      <div class="hero-content" style="text-align: center; max-width: 100%;">
-        <p class="eyebrow mono neon-cyan">ERROR 404 // SIGNAL LOST</p>
-        <h1 class="hero-title">RECORD DELETED OR UNKNOWN</h1>
-        <p class="hero-subtitle">
-          The intelligence vector you followed does not exist in the current archive. 
-          The node may have been pruned or the classification was invalid.
-        </p>
-        <div class="hero-actions" style="justify-content: center;">
-          <a href="{{ url_for('home') }}" class="btn-premium">REVERT TO HOME</a>
-          <a href="{{ url_for('dashboard') }}" class="btn-premium btn-premium--outline">RETURN TO GRAPH</a>
-        </div>
-      </div>
-    </div>
-  </section>
+  <header class="record-hero record-error">
+    <p class="record-kicker">Error 404</p>
+    <h1>Page not found</h1>
+    <p class="record-deck">The address may have changed. Browse the archive or return to the graph to find a record.</p>
+    <div class="record-actions"><a href="{{ url_for('stories') }}">Browse stories</a><a href="{{ url_for('dashboard') }}">Explore the graph</a></div>
+  </header>
 {% endblock %}

@@ -8,13 +8,15 @@ import { useEffect } from "react";
 // static export, where server-side redirects are not applied.
 export default function GraphFlowRedirect() {
   useEffect(() => {
-    window.location.replace("/graph?view=flow");
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("view") && !params.has("focus")) params.set("view", "flow");
+    window.location.replace(`/graph?${params}${window.location.hash}`);
   }, []);
 
   return (
     <div className="relative w-full h-screen bg-[#050202] flex items-center justify-center">
       <p className="font-mono text-sm text-muted uppercase tracking-widest animate-pulse">
-        Redirecting to lattice…
+        Opening graph…
       </p>
     </div>
   );

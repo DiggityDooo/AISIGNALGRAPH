@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 import tldextract
 
 ALLOWED_DOMAINS: set[str] = {
+    "ftc.gov",
     "openai.com",
     "anthropic.com",
     "deepmind.google",

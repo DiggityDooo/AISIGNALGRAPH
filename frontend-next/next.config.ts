@@ -18,6 +18,10 @@ export default function nextConfig(phase: string): NextConfig {
       ...sharedConfig,
       async rewrites() {
         return [
+          ...["stories", "entities"].map((section) => ({
+            source: `/${section}/:id`,
+            destination: `http://localhost:8080/${section}/:id`,
+          })),
           {
             source: "/api/:path*",
             destination: "http://localhost:8080/api/:path*",

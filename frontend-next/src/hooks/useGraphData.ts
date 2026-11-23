@@ -48,8 +48,6 @@ export function useGraphData(
   const topologyRevisionRef = useRef<string | null>(null);
 
   const reload = useCallback(() => {
-    revisionRef.current = null;
-    topologyRevisionRef.current = null;
     setLoading(true);
     setReloadNonce((nonce) => nonce + 1);
   }, []);
@@ -85,17 +83,19 @@ export function useGraphData(
       }
     };
 
-    void load();
-
-    let timer: ReturnType<typeof setInterval> | undefined;
-    if (refreshMs > 0) {
-      timer = setInterval(() => void load(), refreshMs);
-    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = async () => {
+      await load();
+      if (!cancelled && refreshMs > 0) {
+        timer = setTimeout(refresh, refreshMs);
+      }
+    };
+    void refresh();
 
     return () => {
       cancelled = true;
       controller.abort();
-      if (timer) clearInterval(timer);
+      if (timer) clearTimeout(timer);
     };
   }, [dataset, refreshMs, reloadNonce]);
 

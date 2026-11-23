@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}AI Signal Graph{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='records.css') }}">
+</head>
+<body>
+  <a class="record-skip" href="#content">Skip to content</a>
+  <header class="record-masthead">
+    <div class="record-wrap">
+      <a href="{{ url_for('home') }}" class="record-wordmark" aria-label="AI Signal Graph home">AI<span>SIGNAL</span>GRAPH</a>
+      <nav aria-label="Primary">
+        <a href="{{ url_for('dashboard') }}">Graph</a>
+        <a href="{{ url_for('stories') }}">Stories</a>
+        <a href="{{ url_for('entities') }}">Entities</a>
+        <a href="{{ url_for('safety') }}">AI safety</a>
+      </nav>
+    </div>
+  </header>
+  <main id="content" class="record-wrap">{% block content %}{% endblock %}</main>
+</body>
+</html>

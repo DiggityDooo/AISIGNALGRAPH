@@ -15,10 +15,6 @@ const GlobalCanvas = dynamic(() => import("@/components/webgl/GlobalCanvas"), {
   ssr: false,
 });
 
-const CustomCursor = dynamic(() => import("@/components/ui/CustomCursor"), {
-  ssr: false,
-});
-
 const SPLINE_BACKGROUND_ROUTES = new Set(["/", "/stories", "/entities"]);
 
 /**
@@ -59,12 +55,11 @@ export default function ClientShellEffects() {
           )}
         </>
       )}
-      {!isGraphRoute && (
+      {!isGraphRoute && pathname !== "/safety" && (
         <div className="constellation-layer" aria-hidden>
           <GlobalCanvas />
         </div>
       )}
-      <CustomCursor />
     </>
   );
 }

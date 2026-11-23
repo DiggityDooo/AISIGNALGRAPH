@@ -1,66 +1,58 @@
-{% extends "base.html" %}
+{% extends "record_base.html" %}
 {% block title %}{{ story.title }} | AISIGNALGRAPH{% endblock %}
 
 {% block content %}
-  <section class="detail-shell">
-    <div class="page">
-      <div class="detail-hero glass-panel" data-animate data-pointer-reactive>
-        <div>
-          <span class="eyebrow">{{ story.kind }}</span>
-          <h1 class="protocol-heading">{{ story.title }}</h1>
-          <p class="detail-hero__copy">{{ story.summary }}</p>
-        </div>
-        <div class="detail-hero__meta">
-          <span>{{ story.status }}</span>
-          <span>{{ story.event_date }}</span>
-          <span>{{ story.entities|length }} links</span>
-        </div>
-      </div>
-
-      <div class="detail-layout detail-layout--premium">
-        <aside class="detail-sidebar glass-panel" data-animate data-pointer-reactive>
-          <div class="sidebar-block">
-            <h2>Summary</h2>
-            <p>{{ story.summary }}</p>
-          </div>
-          <div class="sidebar-block">
-            <h2>Tags</h2>
-            <div class="archive-chip-row">
-              {% for tag in story.tags %}
-                <span class="archive-chip">{{ tag }}</span>
-              {% endfor %}
-            </div>
-          </div>
-          <div class="sidebar-block">
-            <h2>Entities</h2>
-            <ul class="link-list">
-              {% for entity in story.entities %}
-                <li>
-                  <a href="{{ url_for('entity_detail', entity_id=entity.id) }}">{{ entity.name }}</a>
-                  <span class="inline-meta">{{ entity.type }}</span>
-                </li>
-              {% endfor %}
-            </ul>
-          </div>
-          {% if story.related_stories %}
-            <div class="sidebar-block">
-              <h2>Related Stories</h2>
-              <ul class="link-list">
-                {% for item in story.related_stories %}
-                  <li>
-                    <a href="{{ url_for('story_detail', story_id=item.id) }}">{{ item.title }}</a>
-                    <span class="inline-meta">{{ item.weight }} shared</span>
-                  </li>
-                {% endfor %}
-              </ul>
-            </div>
-          {% endif %}
-        </aside>
-
-        <article class="detail-content glass-panel" data-animate data-pointer-reactive>
-          <div class="markdown-body">{{ story.details_html | safe }}</div>
-        </article>
-      </div>
+  <nav class="record-breadcrumb" aria-label="Breadcrumb"><a href="{{ url_for('stories') }}">Story archive</a> <span aria-hidden="true">/</span> Story</nav>
+  <header class="record-hero">
+    <p class="record-kicker">{{ story.kind | replace("-", " ") }}{% if story.event_date %} · {{ story.event_date }}{% endif %}</p>
+    <h1>{{ story.title }}</h1>
+    {% if story.summary %}<p class="record-deck">{{ story.summary }}</p>{% endif %}
+    <div class="record-actions">
+      <a href="{{ url_for('dashboard', focus='story:' ~ story.id) }}">Locate in graph <span aria-hidden="true">→</span></a>
+      {% if story.source_url %}
+        <a href="{{ story.source_url }}" aria-label="Original source: {{ story.source_name or story.title }}" rel="external">{{ story.source_name or "Original source" }} <span aria-hidden="true">↗</span></a>
+      {% endif %}
     </div>
-  </section>
+  </header>
+  <div class="record-body">
+    <div>
+      {% if story.details_html and story.details_markdown | trim != story.summary | trim %}
+        <article class="record-section">
+          <h2>Details</h2>
+          <div class="record-markdown">{{ story.details_html | safe }}</div>
+        </article>
+      {% endif %}
+      {% if story.related_stories %}
+        <section class="record-section" aria-labelledby="related-stories">
+          <h2 id="related-stories">Related stories</h2>
+          <ul class="record-list">
+            {% for item in story.related_stories %}
+              <li><a href="{{ url_for('story_detail', story_id=item.id) }}">{{ item.title }}</a>
+                <small>{{ item.weight }} shared {{ 'entity' if item.weight == 1 else 'entities' }}</small></li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+    </div>
+    <div>
+      {% if story.entities %}
+        <section class="record-section" aria-labelledby="related-entities">
+          <h2 id="related-entities">Related entities</h2>
+          <ul class="record-list">
+            {% for entity in story.entities %}
+              <li><a href="{{ url_for('entity_detail', entity_id=entity.id) }}">{{ entity.name }}</a><small>{{ entity.type }}</small></li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+      {% if story.tags %}
+        <section class="record-section" aria-labelledby="story-topics">
+          <h2 id="story-topics">Topics</h2>
+          <ul class="record-tags">
+            {% for tag in story.tags %}<li><a href="{{ url_for('stories', q=tag) }}">{{ tag }}</a></li>{% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+    </div>
+  </div>
 {% endblock %}

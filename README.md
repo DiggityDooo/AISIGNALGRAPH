@@ -16,6 +16,12 @@ AISIGNALGRAPH is an intelligence graph platform that ingests AI news and history
 - **Investigate timelines**: filter graph data by era and year range.
 - **Operational monitoring**: check ingest/health/status endpoints for data freshness.
 
+## AI safety desk
+
+The `/safety` page reads `GET /api/safety` from the same story and entity records as the graph. It shows safety coverage, sourced reports on regulatory actions, and consumer guidance. Each record links to its story, its graph location, and available publisher and entity records. The page checks for updates every five minutes while visible and when reopened.
+
+The bundled historical corpus includes dated FTC advisories and enforcement announcements. The scraper also checks the FTC consumer advice and consumer protection RSS feeds alongside the existing news sources. Deploy both the web service and the scraper job to enable the new page and feed sources in production.
+
 ## Graph experiences
 
 The `/graph` experience supports multiple modes:
@@ -31,6 +37,8 @@ The `/graph` experience supports multiple modes:
 
 4. **Prototype route**  
    `/graph/prototype` keeps an older prototype runtime behind a feature flag (`GRAPH_PROTOTYPE_ENABLED`).
+
+The graph toolbar includes search by node label, era and publication-year filters, and a node-type selector. Open a matching result to focus it and see its connections. In the lattice, press `/` to focus search, `F` to fit the graph, and `Esc` to dismiss the active panel or clear selection. The story and entity directories support links that retain their search, type, and sort settings.
 
 ## High-level architecture
 

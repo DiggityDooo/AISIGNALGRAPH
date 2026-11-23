@@ -3,6 +3,7 @@
 import {
   forwardRef,
   useEffect,
+  useEffectEvent,
   useImperativeHandle,
   useRef,
   useState,
@@ -14,6 +15,7 @@ import { LatticeRenderer } from "./latticeRenderer";
 
 export interface SigmaLatticeGraphProps {
   payload: GraphApiPayload | null;
+  focusedNodeId?: string | null;
   dataRevision?: string | null;
   topologyRevision?: string | null;
   /** Bumps when HUD filters change so the visible subgraph rebuilds. */
@@ -25,7 +27,6 @@ export interface SigmaLatticeGraphProps {
 
 export type SigmaLatticeGraphHandle = {
   fit: () => void;
-  focusNode: (id: string) => void;
 };
 
 const SigmaLatticeGraph = forwardRef<SigmaLatticeGraphHandle, SigmaLatticeGraphProps>(
@@ -33,6 +34,7 @@ function SigmaLatticeGraph(
   {
     payload,
     dataRevision,
+    focusedNodeId,
     topologyRevision,
     filterRevision = "",
     onVisibleCountChange,
@@ -69,9 +71,6 @@ function SigmaLatticeGraph(
     fit() {
       rendererRef.current?.fit();
     },
-    focusNode(id: string) {
-      rendererRef.current?.focusNode(id);
-    },
   }), []);
 
   // Metadata-only poll updates: patch labels/colors/sizes without remounting Sigma
@@ -81,9 +80,11 @@ function SigmaLatticeGraph(
     rendererRef.current?.applyMetadata(payload, topologyRevision ?? null);
   }, [payload, dataRevision, topologyRevision]);
 
+  const getCurrentPayload = useEffectEvent(() => payload);
+  const hasNodes = Boolean(payload?.nodes.length);
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !payload || payload.nodes.length === 0) return;
+    if (!container || !hasNodes || contextDead) return;
 
     const renderer = new LatticeRenderer(container, {
       quality,
@@ -102,22 +103,33 @@ function SigmaLatticeGraph(
     });
     rendererRef.current = renderer;
 
+    return () => {
+      renderer.dispose();
+      if (rendererRef.current === renderer) rendererRef.current = null;
+    };
+  }, [hasNodes, quality, rebuildNonce, contextDead]);
+
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    const payload = getCurrentPayload();
+    if (!renderer || !payload || !hasNodes) return;
     void renderer.update(payload, topologyRevision ?? null).catch((error) => {
       console.error("[lattice] failed to mount renderer", error);
+      if (rendererRef.current === renderer) setContextDead(true);
     });
+  }, [hasNodes, topologyRevision, filterRevision, quality, rebuildNonce]);
 
-    return () => {
-      rendererRef.current?.dispose();
-      rendererRef.current = null;
-    };
-  }, [topologyRevision, filterRevision, quality, rebuildNonce]);
+  useEffect(() => {
+    if (building) return;
+    if (focusedNodeId) rendererRef.current?.focusNode(focusedNodeId);
+    else rendererRef.current?.clearFocus();
+  }, [building, focusedNodeId, filterRevision, topologyRevision, rebuildNonce]);
 
   if (contextDead) {
     return (
       <div className="flex h-full items-center justify-center bg-[#050202]">
-        <p className="max-w-sm px-6 text-center font-mono text-xs uppercase tracking-widest text-secondary">
-          Graphics context lost twice — this device ran out of GPU memory.
-          Try the Tree or Flow view instead.
+        <p className="max-w-sm px-6 text-center font-mono text-xs uppercase tracking-widest text-muted" role="alert">
+          The lattice could not start on this device. Try the Tree or Flow view.
         </p>
       </div>
     );

@@ -12,6 +12,7 @@ test("flow node opens the focused 3D lattice", async ({ page }, testInfo) => {
     timeout: 60_000,
   });
 
+  await page.getByTestId("rf__node-section:timeline").getByRole("button", { name: "Expand Timeline" }).click();
   const portalLink = page.getByRole("link", { name: "View in Lattice" }).first();
   await expect(portalLink).toBeVisible({ timeout: 30_000 });
 

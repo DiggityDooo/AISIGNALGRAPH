@@ -1,73 +1,42 @@
-{% extends "base.html" %}
-{% block title %}{{ entity.record.name }} | AISIGNALGRAPH{% endblock %}
-
-{% block extra_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='premium.css') }}">
-{% endblock %}
+{% extends "record_base.html" %}
+{% set profile = entity.record %}
+{% block title %}{{ profile.name }} | AISIGNALGRAPH{% endblock %}
 
 {% block content %}
-  <section class="detail-shell">
-    <div class="page">
-      <div class="detail-hero glass-panel" data-animate data-pointer-reactive>
-        <div>
-          <p class="eyebrow neon-purple">{{ entity.record.entity_type|upper }}</p>
-          <h1 class="protocol-heading">{{ entity.record.name }}</h1>
-          <p class="detail-hero__copy">{{ entity.record.description }}</p>
-        </div>
-        <div class="detail-hero__meta mono">
-          <span class="redacted">{{ entity.record.id|upper }}</span>
-          <span>{{ entity.record.story_count }} STORIES</span>
-          <span>{{ entity.record.group_name|upper }}</span>
-        </div>
-      </div>
+  <nav class="record-breadcrumb" aria-label="Breadcrumb"><a href="{{ url_for('entities') }}">Entity directory</a> <span aria-hidden="true">/</span> Entity</nav>
+  <header class="record-hero">
+    <p class="record-kicker">{{ profile.entity_type | replace("-", " ") }}{% if profile.group_name %} · {{ profile.group_name }}{% endif %}</p>
+    <h1>{{ profile.name }}</h1>
+    {% if profile.description %}<p class="record-deck">{{ profile.description }}</p>{% endif %}
+    <div class="record-actions"><a href="{{ url_for('dashboard', focus='entity:' ~ profile.id) }}">Locate in graph <span aria-hidden="true">→</span></a></div>
+  </header>
 
-      <div class="detail-layout detail-layout--premium">
-        <aside class="detail-sidebar glass-panel" data-animate data-pointer-reactive>
-          <div class="sidebar-block">
-            <h2>Profile</h2>
-            <p>{{ entity.record.description }}</p>
-          </div>
-          <div class="sidebar-block">
-            <h2>Field Group</h2>
-            <p>{{ entity.record.group_name }}</p>
-          </div>
-          {% if entity.linked_entities %}
-            <div class="sidebar-block">
-              <h2>Linked Actors</h2>
-              <ul class="link-list">
-                {% for item in entity.linked_entities %}
-                  <li>
-                    <a href="{{ url_for('entity_detail', entity_id=item.id) }}">{{ item.name }}</a>
-                    <span class="inline-meta">{{ item.relation }} / {{ item.weight }}</span>
-                  </li>
-                {% endfor %}
-              </ul>
-            </div>
-          {% endif %}
-        </aside>
+  <div class="record-body">
+    <section class="record-section" aria-labelledby="connected-stories">
+      <h2 id="connected-stories">Connected stories <span>{{ entity.stories | length }}</span></h2>
+      {% if entity.stories %}
+        <ul class="record-list record-story-list">
+          {% for story in entity.stories %}
+            <li><small>{{ story.kind | replace("-", " ") }}{% if story.event_date %} · {{ story.event_date }}{% endif %}</small>
+              <h3><a href="{{ url_for('story_detail', story_id=story.id) }}">{{ story.title }}</a></h3>
+              {% if story.excerpt %}<p>{{ story.excerpt }}</p>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="record-empty">No stories have been linked to this entity yet.</p>
+      {% endif %}
+    </section>
 
-        <article class="detail-content" data-animate>
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow neon-cyan">Connected stories</p>
-              <h2 class="protocol-heading">Where This Actor Surfaces</h2>
-            </div>
-          </div>
-          <div class="detail-story-stack">
-            {% for story in entity.stories %}
-              <article class="archive-card archive-card--story glass-panel" data-animate data-tilt data-pointer-reactive>
-                <div class="archive-card__meta mono">
-                  <span>{{ story.kind|upper }}</span>
-                  <span>{{ story.status|upper }}</span>
-                  <span>{{ story.event_date }}</span>
-                </div>
-                <h3><a href="{{ url_for('story_detail', story_id=story.id) }}">{{ story.title }}</a></h3>
-                <p>{{ story.excerpt }}</p>
-              </article>
-            {% endfor %}
-          </div>
-        </article>
-      </div>
-    </div>
-  </section>
+    {% if entity.linked_entities %}
+      <section class="record-section" aria-labelledby="linked-entities">
+        <h2 id="linked-entities">Linked entities</h2>
+        <ul class="record-list">
+          {% for item in entity.linked_entities %}
+            <li><a href="{{ url_for('entity_detail', entity_id=item.id) }}">{{ item.name }}</a><small>{{ item.relation }}</small></li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+  </div>
 {% endblock %}

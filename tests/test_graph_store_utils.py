@@ -383,3 +383,10 @@ class TestCommunityTypeHint:
 
     def test_empty_list_returns_none(self):
         assert _community_type_hint([]) is None
+
+
+def test_historical_story_dates_on_timeline():
+    from webapp.graph_store import timeline_day_sort_key, timeline_month_key
+
+    assert timeline_month_key("1956-06-18") == "1956-06"
+    assert timeline_day_sort_key("1956-06-18") == (1956, 6, 18)

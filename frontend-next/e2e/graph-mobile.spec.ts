@@ -32,27 +32,11 @@ async function contextLossCount(page: import("@playwright/test").Page): Promise<
   );
 }
 
-/**
- * Wait for the page to be interactive in either configuration:
- * - flow flag off: Sigma graph mode, #stat-nodes populates
- * - flow flag on: low-tier devices auto-default to Tree, header shows "Indexed:"
- */
 async function waitForGraphReady(page: import("@playwright/test").Page): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        const stat = await page
-          .locator("#stat-nodes")
-          .textContent()
-          .catch(() => null);
-        if (stat !== null && stat.trim() !== "" && stat.trim() !== "0") {
-          return true;
-        }
-        return (await page.getByText("Indexed:").count()) > 0;
-      },
-      { timeout: 45_000 },
-    )
-    .toBe(true);
+  await expect(page.locator("#stat-nodes")).toHaveText(/[1-9]/, { timeout: 45_000 });
+  await expect(page.locator("#sigma-container canvas, #sigma-container .react-flow").first()).toBeVisible({
+    timeout: 45_000,
+  });
 }
 
 test("mobile /graph loads without WebGL context loss", async ({ page }) => {

@@ -29,7 +29,7 @@ export function filterNodes({
       return false;
     }
     const year = Number.parseInt(String(node.year || node.timeline_month || "").slice(0, 4), 10);
-    if (Number.isFinite(year) && year > activeYear && nodeType !== "year") {
+    if (Number.isFinite(year) && year > activeYear) {
       return false;
     }
     if (!normalizedQuery) {

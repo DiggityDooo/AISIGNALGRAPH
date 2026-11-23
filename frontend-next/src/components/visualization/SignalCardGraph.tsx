@@ -58,7 +58,7 @@ function SignalCardGraphBody({
 
   return (
     <CardGraphCanvas
-      key={layoutKey}
+      layoutKey={layoutKey}
       layoutMode="flow"
       fitKey={fitKey}
       focusKey={focusKey}

@@ -3,7 +3,7 @@
 import { memo, type CSSProperties } from "react";
 import Link from "next/link";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { useGraphLayoutMode } from "@/components/visualization/flow/GraphLayoutContext";
+import { useGraphLayout } from "@/components/visualization/flow/GraphLayoutContext";
 import {
   DOCUMENT_CARD_HEIGHT,
   DOCUMENT_CARD_WIDTH,
@@ -50,10 +50,12 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
     height = DOCUMENT_CARD_HEIGHT,
     revealDelayMs,
   } = data;
-  const canExpand = hasChildren && !expanded;
   const isHub = nodeType === "root";
   const isSection = nodeType === "section";
-  const mode = useGraphLayoutMode();
+  const { mode, onToggleExpand } = useGraphLayout();
+  const loadMore = nodeType === "load_more";
+  const canToggle = Boolean(onToggleExpand && progressive && (hasChildren || loadMore));
+  const indexedNode = nodeId.startsWith("story:") || nodeId.startsWith("entity:");
   const targetPos = mode === "tree" ? Position.Top : Position.Left;
   const sourcePos = mode === "tree" ? Position.Bottom : Position.Right;
   const glow = glowShadowForAccent(accentColor);
@@ -95,17 +97,13 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
           <p className="text-[11px] font-semibold leading-tight text-white/92 break-words">
             {label}
           </p>
-          {progressive && hasChildren && (
-            <span
-              className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide ${
-                canExpand
-                  ? "border-primary/40 bg-primary/15 text-primary"
-                  : "border-white/15 bg-white/5 text-white/45"
-              }`}
-              title={expanded ? "Double-tap to collapse" : `Double-tap to expand ${childCount} children`}
-            >
+          {canToggle && !loadMore && (
+            <button type="button" className="nodrag nopan shrink-0 rounded border border-primary/45 bg-primary/10 px-2 py-0.5 text-xs text-white hover:bg-primary/25"
+              aria-expanded={expanded} aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`}
+              onClick={event => { event.stopPropagation(); onToggleExpand?.(nodeId); }}
+              onDoubleClick={event => event.stopPropagation()}>
               {expanded ? "−" : `+${childCount}`}
-            </span>
+            </button>
           )}
           {!progressive && childCount > 0 && (
             <span className="shrink-0 rounded border border-cyan-500/20 bg-cyan-500/5 px-1.5 py-0.5 font-mono text-[9px] text-cyan-200/55">
@@ -116,7 +114,7 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
         <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-white/38">
           {nodeType}
         </p>
-        {nodeType !== "load_more" && (
+        {indexedNode && (
           <Link
             href={buildLatticeFocusHref(nodeId)}
             className="nodrag nopan mt-0.5 w-fit rounded border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider text-cyan-300/90 hover:bg-cyan-500/20"
@@ -125,11 +123,11 @@ function DocumentCardNodeComponent({ data, selected }: NodeProps<DocumentCardNod
             View in Lattice
           </Link>
         )}
-        <div className="flex flex-col gap-1" aria-hidden>
-          <span className="h-1 w-full rounded-full bg-white/8" />
-          <span className="h-1 w-[80%] rounded-full bg-white/6" />
-          <span className="h-1 w-[60%] rounded-full bg-white/5" />
-        </div>
+        {loadMore && canToggle && (
+          <button type="button" className="nodrag nopan w-fit rounded border border-primary/45 px-2 py-1 text-xs hover:bg-primary/20"
+            onClick={event => { event.stopPropagation(); onToggleExpand?.(nodeId); }}
+            onDoubleClick={event => event.stopPropagation()}>Show more</button>
+        )}
       </div>
       <Handle type="target" position={targetPos} className={HANDLE_CLASS} />
       <Handle type="source" position={sourcePos} className={HANDLE_CLASS} />

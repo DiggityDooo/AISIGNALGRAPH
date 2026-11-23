@@ -7,12 +7,14 @@ export function filterKey(input: {
   searchQuery: string;
   lens: GraphLens;
   activeYear: number;
+  activeEra?: string;
   visibleNodeTypes: ReadonlySet<string>;
   selectedNodeId?: string | null;
 }): string {
   const selectedNodeId = input.lens === "local" ? (input.selectedNodeId ?? null) : null;
   return JSON.stringify({
-    searchQuery: input.searchQuery,
+    searchQuery: input.searchQuery.trim().toLowerCase(),
+    activeEra: input.activeEra || "",
     lens: input.lens,
     activeYear: input.activeYear,
     visibleNodeTypes: [...input.visibleNodeTypes].sort(),
@@ -26,11 +28,22 @@ export function filterGraphPayload(
   filters: Pick<
     GraphFilterState,
     "searchQuery" | "lens" | "activeYear" | "visibleNodeTypes"
-  > & { selectedNodeId?: string | null; ftsStoryIds?: Set<string> },
+  > & { activeEra?: string; selectedNodeId?: string | null; ftsStoryIds?: Set<string> },
 ): GraphApiPayload {
+  let nodes = payload.nodes;
+  if (filters.activeEra) {
+    const stories = new Set(nodes.filter(node => node.era === filters.activeEra).map(node => node.id));
+    const related = new Set(stories);
+    for (const { source, target } of payload.edges) {
+      if (stories.has(source) && !target.startsWith("story:")) related.add(target);
+      if (stories.has(target) && !source.startsWith("story:")) related.add(source);
+    }
+    nodes = nodes.filter(node => related.has(node.id));
+  }
+
   const ftsStoryIds = filters.ftsStoryIds ?? new Set();
   const visibleNodes = filterNodes({
-    nodes: payload.nodes,
+    nodes,
     edges: payload.edges,
     query: filters.searchQuery,
     lens: filters.lens,

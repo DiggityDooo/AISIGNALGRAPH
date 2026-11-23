@@ -44,8 +44,7 @@ function buildEffectiveNodeById(
 
 type GraphTransformWorker = Worker;
 type WorkerIndexState = {
-  payload: GraphApiPayload;
-  revision: string | null;
+  layoutRevision: string | null;
   index: GraphIndex;
 };
 
@@ -193,6 +192,7 @@ export function buildCardGraphElements(
     nodes.push({
       id,
       type: "documentCard",
+      focusable: false,
       position: { x: 0, y: 0 },
       data: {
         label: apiNode.label ?? id,
@@ -310,20 +310,16 @@ export function useProgressiveGraph({
           return;
         }
       }
-      if (!cancelled) setWorkerIndex({ payload, revision: dataRevision, index });
+      if (!cancelled) setWorkerIndex({ layoutRevision, index });
     })();
 
     return () => {
       cancelled = true;
       controller.abort();
     };
-  }, [payload, dataRevision]);
+  }, [payload, layoutRevision]);
 
-  const graphIndex =
-    syncIndex ??
-    (workerIndex?.payload === payload && workerIndex.revision === dataRevision
-      ? workerIndex.index
-      : null);
+  const graphIndex = syncIndex ?? (workerIndex?.layoutRevision === layoutRevision ? workerIndex.index : null);
 
   // Always start from the single "AI Signal Graph" hub, matching Lattice
   // mode — initialSeedCount is the per-section fan-out cap (years/labs/
@@ -376,10 +372,8 @@ export function useProgressiveGraph({
     setExpandedIds(defaultExpandedIds);
   }, [graphIndex, defaultExpandedIds, layoutRevision]);
 
-  // customLimits must be part of the key: "load more" only grows a section via
-  // setCustomLimits (expandedIds is untouched), and the canvas remounts on
-  // layoutKey change to pick up new nodes — without it, the extra cards never
-  // render. seedIds/expandedIds order-independence via sort().
+  // Opening a branch or loading more changes layout suggestions. Metadata
+  // updates keep the same key, so manual card positions can survive a poll.
   const layoutKey = useMemo(() => {
     const expanded = [...expandedIds].sort().join(",");
     const limits = Object.entries(customLimits)

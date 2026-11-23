@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useImperativeHandle, useRef, type Ref } from "react";
+import type { GraphEngine } from "@/lib/graphEngine/GraphEngine.js";
 import type { GraphApiEdge, GraphApiNode } from "@/components/graph-flow/fetchGraphApi";
 import { getGraphQualityProfile } from "@/lib/graph/mobileProfile";
 import { getNodeMonthIndex, getStableDepthOffset } from "@/lib/graph/nodeUtils.js";
@@ -11,7 +12,11 @@ const FALLBACK_X_SPREAD = 2.5;
 const FALLBACK_Y_SPREAD = 1.5;
 const TIMELINE_Z_SCALE = 10;
 
+export type Lattice3DHandle = { fit: () => void };
+
 export interface Lattice3DSceneProps {
+  ref?: Ref<Lattice3DHandle>;
+  onError: () => void;
   nodes: GraphApiNode[];
   edges: GraphApiEdge[];
   focusNodeId?: string | null;
@@ -60,116 +65,99 @@ function toNodeSummary(
 }
 
 export default function Lattice3DScene({
+  ref,
   nodes,
   edges,
   focusNodeId,
   onNodeSelect,
+  onError,
 }: Lattice3DSceneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const onNodeSelectRef = useRef(onNodeSelect);
-  useEffect(() => {
-    onNodeSelectRef.current = onNodeSelect;
-  }, [onNodeSelect]);
+  const engineRef = useRef<GraphEngine | null>(null);
+  const readFocus = useEffectEvent(() => focusNodeId);
+  const selectNode = useEffectEvent((node: GraphNodeSummary) => onNodeSelect?.(node));
+  const reportError = useEffectEvent(onError);
+
+  useImperativeHandle(ref, () => ({ fit: () => engineRef.current?.fit() }), []);
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || nodes.length === 0) {
-      return undefined;
-    }
-
-    if (!getGraphQualityProfile().enable3d) {
-      return undefined;
-    }
+    if (!container || nodes.length === 0 || !getGraphQualityProfile().enable3d) return;
 
     let disposed = false;
-    let engine: { dispose: () => void; focusNode: (id: string) => void } | null = null;
+    let engine: GraphEngine | null = null;
+    const recover = () => { if (!disposed) reportError(); };
 
     void (async () => {
-      const positions = buildNodePositions(nodes);
-      const nodeById = new Map(nodes.map((node) => [node.id, node]));
-
       try {
         const { GraphEngine } = await import("@/lib/graphEngine/GraphEngine.js");
-        if (disposed || !containerRef.current) return;
-
+        if (disposed) return;
+        const positions = buildNodePositions(nodes);
+        const nodeById = new Map(nodes.map((node) => [node.id, node]));
         const instance = new GraphEngine({
-          container: containerRef.current,
+          container,
           onNodeClick: (node: GraphApiNode) => {
             const full = nodeById.get(node.id);
             if (!full) return;
-            const neighborSummaries = edges
-              .filter((edge) => edge.source === node.id || edge.target === node.id)
-              .map((edge) => (edge.source === node.id ? edge.target : edge.source))
-              .filter((id, index, list) => list.indexOf(id) === index)
-              .map((id) => {
-                const neighbor = nodeById.get(id);
-                return { id, label: neighbor?.label ?? id };
-              });
-            onNodeSelectRef.current?.(toNodeSummary(full, neighborSummaries));
-            instance.focusNode(node.id);
+            const neighbors = new Set<string>();
+            for (const edge of edges) {
+              if (edge.source === node.id) neighbors.add(edge.target);
+              else if (edge.target === node.id) neighbors.add(edge.source);
+            }
+            selectNode(toNodeSummary(full, [...neighbors].map(id => ({
+              id, label: nodeById.get(id)?.label ?? id,
+            }))));
           },
           onNodeHover: (node: GraphApiNode | null) => {
             const canvas = instance.getDomElement();
-            if (canvas) {
-              canvas.style.cursor = node ? "pointer" : "grab";
-            }
+            if (canvas) canvas.style.cursor = node ? "pointer" : "grab";
           },
         });
-
-        const engineNodes = nodes.map((node) => {
-          const pos = positions.get(node.id)!;
-          return {
+        engine = instance;
+        const initialized = await instance.init({
+          nodes: nodes.map(node => ({
             ...node,
             semanticType: nodeTypeOf(node),
-            x: pos.x,
-            y: pos.y,
-            z: pos.z,
-          };
-        });
-
-        const initialized = await instance.init({
-          nodes: engineNodes,
-          edges: edges.map((edge) => ({
-            ...edge,
-            sourceId: edge.source,
-            targetId: edge.target,
+            ...positions.get(node.id),
           })),
+          edges: edges.map(edge => ({ ...edge, sourceId: edge.source, targetId: edge.target })),
           positions,
         });
-
         if (disposed) {
           instance.dispose();
           return;
         }
-
         if (!initialized) {
-          instance.dispose();
+          recover();
           return;
         }
 
-        engine = instance;
+        engineRef.current = instance;
         const canvas = instance.getDomElement();
         if (canvas) {
           canvas.style.cursor = "grab";
+          canvas.addEventListener("webglcontextlost", recover, { once: true });
         }
-
-        if (focusNodeId) {
-          instance.focusNode(focusNodeId);
-        }
+        instance.fit();
+        const focus = readFocus();
+        if (focus) instance.focusNode(focus);
       } catch (error) {
         console.warn("Lattice3DScene: GraphEngine unavailable.", error);
+        recover();
       }
     })();
 
     return () => {
       disposed = true;
+      engine?.getDomElement()?.removeEventListener("webglcontextlost", recover);
       engine?.dispose();
-      engine = null;
-      if (container) {
-        container.innerHTML = "";
-      }
+      if (engineRef.current === engine) engineRef.current = null;
     };
-  }, [nodes, edges, focusNodeId]);
+  }, [nodes, edges]);
+
+  useEffect(() => {
+    if (focusNodeId) engineRef.current?.focusNode(focusNodeId);
+  }, [focusNodeId]);
 
   return <div ref={containerRef} className="absolute inset-0 bg-[#050202]" />;
 }

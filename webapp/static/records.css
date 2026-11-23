@@ -1,0 +1,54 @@
+:root {
+  color-scheme: dark;
+  --ink: #faf2f1;
+  --muted: #cebfc4;
+  --accent: #ffa0ad;
+  --border: #4b3c43;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 0; color: var(--ink); background: #141114; font: 400 1rem/1.6 system-ui, sans-serif; }
+a { color: inherit; text-underline-offset: .21em; }
+a:hover { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.record-wrap { width: min(calc(100% - clamp(2rem, 10vw, 10rem)), 72rem); margin-inline: auto; }
+.record-masthead { background: #110d11; border-bottom: 1px solid var(--border); }
+.record-masthead > div { min-height: 66px; display: flex; gap: .6rem 1.2rem; justify-content: space-between; align-items: center; flex-wrap: wrap; padding-block: .55rem; }
+.record-wordmark { font-weight: 850; letter-spacing: .045em; text-decoration: none; }
+.record-wordmark span { color: var(--accent); }
+.record-masthead nav { display: flex; flex-wrap: wrap; gap: .15rem; }
+.record-masthead nav a { padding: .36rem .62rem; color: var(--muted); text-decoration: none; font-size: .85rem; }
+.record-masthead nav a:hover { color: var(--ink); background: #33242a; border-radius: .3rem; }
+.record-skip { position: absolute; top: .4rem; left: .4rem; z-index: 4; padding: .55rem .75rem; background: #33242a; transform: translateY(-150%); }
+.record-skip:focus { transform: none; }
+.record-breadcrumb { margin-top: 1.65rem; color: var(--muted); font-size: .85rem; }
+.record-breadcrumb span { margin-inline: .45rem; }
+.record-hero { padding: clamp(1.7rem, 5vw, 4rem) 0 clamp(1.7rem, 5vw, 3rem); border-bottom: 1px solid var(--border); }
+.record-hero h1 { max-width: 48rem; margin: .6rem 0 0; font-size: clamp(2.1rem, 6vw, 4.6rem); letter-spacing: -.055em; line-height: 1.04; text-wrap: balance; overflow-wrap: anywhere; }
+.record-kicker, .record-list small { color: var(--accent); font: 550 .73rem/1.5 ui-monospace, monospace; text-transform: uppercase; letter-spacing: .065em; }
+.record-kicker, .record-deck { margin: 0; }
+.record-deck { color: var(--muted); margin-top: 1rem; max-width: 45rem; font-size: clamp(1.02rem, 2.5vw, 1.18rem); }
+.record-actions { display: flex; gap: .55rem; flex-wrap: wrap; margin-top: 1.35rem; }
+.record-actions a { padding: .62rem .85rem; background: #292126; border: 1px solid #69515d; border-radius: .35rem; font-size: .87rem; text-decoration: none; }
+.record-actions a:first-child { color: #2b1118; background: #ffa0ad; border-color: #ffa0ad; }
+.record-actions a:first-child:hover { background: #ffd0d7; }
+.record-body { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1.5rem clamp(1rem, 6vw, 6rem); padding: 1.65rem 0 4rem; }
+.record-section + .record-section { margin-top: 1.75rem; }
+.record-section h2 { display: flex; gap: .8rem; align-items: baseline; font-size: 1.28rem; letter-spacing: -.025em; margin: 0 0 .65rem; }
+.record-section h2 span { font-size: .86rem; color: var(--muted); }
+.record-list, .record-tags { list-style: none; margin: 0; padding: 0; }
+.record-list li { border-top: 1px solid var(--border); padding: .65rem 0; overflow-wrap: anywhere; }
+.record-list li:last-child { border-bottom: 1px solid var(--border); }
+.record-list small { display: block; color: var(--muted); margin-top: .15rem; }
+.record-story-list li { padding-block: .9rem; }
+.record-story-list h3 { font-size: 1.08rem; margin: .2rem 0; }
+.record-story-list p, .record-empty { color: var(--muted); margin: .25rem 0; }
+.record-tags { display: flex; gap: .4rem; flex-wrap: wrap; }
+.record-tags a { display: block; font-size: .85rem; padding: .2rem .55rem; border: 1px solid var(--border); border-radius: 2rem; text-decoration: none; }
+.record-markdown { color: #e7dce0; overflow-wrap: anywhere; }
+.record-markdown img { max-width: 100%; height: auto; }
+.record-markdown pre, .record-markdown table { display: block; max-width: 100%; overflow: auto; }
+.record-error { padding-top: clamp(3.5rem, 14vh, 9rem); }
+@media (max-width: 650px) {
+  .record-body { grid-template-columns: 1fr; }
+  .record-masthead nav { margin-left: -.62rem; }
+}

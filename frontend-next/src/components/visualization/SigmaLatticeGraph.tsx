@@ -15,7 +15,7 @@ import { LatticeRenderer } from "./latticeRenderer";
 
 export interface SigmaLatticeGraphProps {
   payload: GraphApiPayload | null;
-  focusFromUrl?: string | null;
+  focusedNodeId?: string | null;
   dataRevision?: string | null;
   topologyRevision?: string | null;
   /** Bumps when HUD filters change so the visible subgraph rebuilds. */
@@ -27,7 +27,6 @@ export interface SigmaLatticeGraphProps {
 
 export type SigmaLatticeGraphHandle = {
   fit: () => void;
-  focusNode: (id: string) => void;
 };
 
 const SigmaLatticeGraph = forwardRef<SigmaLatticeGraphHandle, SigmaLatticeGraphProps>(
@@ -35,7 +34,7 @@ function SigmaLatticeGraph(
   {
     payload,
     dataRevision,
-    focusFromUrl,
+    focusedNodeId,
     topologyRevision,
     filterRevision = "",
     onVisibleCountChange,
@@ -72,9 +71,6 @@ function SigmaLatticeGraph(
     fit() {
       rendererRef.current?.fit();
     },
-    focusNode(id: string) {
-      rendererRef.current?.focusNode(id);
-    },
   }), []);
 
   // Metadata-only poll updates: patch labels/colors/sizes without remounting Sigma
@@ -110,6 +106,7 @@ function SigmaLatticeGraph(
 
     void renderer.update(payload, topologyRevision ?? null).catch((error) => {
       console.error("[lattice] failed to mount renderer", error);
+      if (rendererRef.current === renderer) setContextDead(true);
     });
 
     return () => {
@@ -119,15 +116,16 @@ function SigmaLatticeGraph(
   }, [hasNodes, topologyRevision, filterRevision, quality, rebuildNonce]);
 
   useEffect(() => {
-    if (!building && focusFromUrl) rendererRef.current?.focusNode(focusFromUrl);
-  }, [building, focusFromUrl]);
+    if (building) return;
+    if (focusedNodeId) rendererRef.current?.focusNode(focusedNodeId);
+    else rendererRef.current?.clearFocus();
+  }, [building, focusedNodeId, filterRevision, topologyRevision, rebuildNonce]);
 
   if (contextDead) {
     return (
       <div className="flex h-full items-center justify-center bg-[#050202]">
-        <p className="max-w-sm px-6 text-center font-mono text-xs uppercase tracking-widest text-secondary">
-          Graphics context lost twice — this device ran out of GPU memory.
-          Try the Tree or Flow view instead.
+        <p className="max-w-sm px-6 text-center font-mono text-xs uppercase tracking-widest text-muted" role="alert">
+          The lattice could not start on this device. Try the Tree or Flow view.
         </p>
       </div>
     );

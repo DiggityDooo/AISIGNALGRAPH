@@ -45,6 +45,7 @@ export default function SafetyDesk() {
   const [records, setRecords] = useState<SafetyRecord[] | null>(null);
   const [error, setError] = useState(false);
   const [section, setSection] = useState<Section>("all");
+  const [query, setQuery] = useState("");
   const pending = useRef<AbortController | null>(null);
   const refresh = useCallback(async () => {
     if (pending.current) return;
@@ -79,7 +80,12 @@ export default function SafetyDesk() {
   }, [refresh]);
 
   const guide = records?.find(r => r.section === "guidance");
-  const visible = (records ?? []).filter(r => section === "all" || r.section === section);
+  const needle = query.trim().toLowerCase();
+  const visible = (records ?? []).filter(r =>
+    (section === "all" || r.section === section) &&
+    (!needle || [r.title, r.summary, r.source_name, ...r.entities.map(entity => entity.name)]
+      .some(value => value?.toLowerCase().includes(needle))),
+  );
   return (
     <main className="safety-desk"><div className="desk-wrap">
       <header className="safety-intro">
@@ -93,17 +99,23 @@ export default function SafetyDesk() {
       </header>
       <section aria-labelledby="desk-records">
         <div className="desk-heading"><h2 id="desk-records">Safety records</h2>
-          {records && <span>{visible.length} {visible.length === 1 ? "record" : "records"}</span>}</div>
+          {records && <span role="status">{visible.length} {visible.length === 1 ? "record" : "records"}</span>}</div>
         <div role="group" aria-label="Filter safety records" className="desk-filters">
           {(Object.keys(sections) as Section[]).map(key => <button key={key} type="button" aria-pressed={key === section}
             onClick={() => setSection(key)}>{sections[key]}</button>)}
         </div>
+        <label className="directory-search safety-search"><span>Search safety records</span>
+          <input type="search" value={query} placeholder="Topic, organization, or publisher"
+            onChange={event => setQuery(event.target.value)}/>
+        </label>
         {section === "conduct" && <p className="section-note">These records follow dated regulatory actions. Each source identifies the parties and describes the status of its case.</p>}
         {error && <div className="desk-status" role="alert">{records ? "Refresh failed. Showing the last records received." : "The safety feed is unavailable."}
           {" "}<button onClick={() => void refresh()}>Try again</button></div>}
         {!records && !error && <p className="desk-status" role="status">Loading graph records…</p>}
-        {records && (visible.length ? <RecordList key={section} records={visible}/> :
-          <p className="desk-status" role="status">No matching story nodes yet.</p>)}
+        {records && (visible.length ? <RecordList key={JSON.stringify([section, needle])} records={visible}/> :
+          <p className="desk-status" role="status">No matching story nodes yet.
+            {needle && <> <button type="button" onClick={() => setQuery("")}>Clear search</button></>}
+          </p>)}
       </section>
     </div></main>
   );

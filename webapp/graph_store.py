@@ -269,11 +269,11 @@ def render_markdown_safe(text: str) -> str:
 def timeline_month_key(date_text: str | None) -> str | None:
     if not date_text or date_text == "reference":
         return None
-    match = re.match(r"^(20\d{2})(?:-(\d{2}))?(?:-(\d{2}))?$", date_text)
+    match = re.match(r"^((?:19|20)\d{2})(?:-(\d{2}))?(?:-(\d{2}))?$", date_text)
     if match:
         year, month = match.group(1), match.group(2) or "01"
         return f"{year}-{month}"
-    year_match = re.search(r"\b(20\d{2})\b", date_text)
+    year_match = re.search(r"\b((?:19|20)\d{2})\b", date_text)
     if year_match:
         return f"{year_match.group(1)}-01"
     return None
@@ -311,7 +311,7 @@ def month_index_from_key(month_key: str | None) -> int | None:
 def timeline_day_sort_key(date_text: str | None) -> tuple[int, int, int]:
     if not date_text or date_text == "reference":
         return (0, 0, 0)
-    match = re.match(r"^(20\d{2})(?:-(\d{2}))?(?:-(\d{2}))?$", date_text)
+    match = re.match(r"^((?:19|20)\d{2})(?:-(\d{2}))?(?:-(\d{2}))?$", date_text)
     if match:
         year = int(match.group(1))
         month = int(match.group(2) or "1")
@@ -321,7 +321,7 @@ def timeline_day_sort_key(date_text: str | None) -> tuple[int, int, int]:
     if month_key:
         year, month = month_key.split("-", 1)
         return (int(year), int(month), 1)
-    year_match = re.search(r"\b(20\d{2})\b", date_text)
+    year_match = re.search(r"\b((?:19|20)\d{2})\b", date_text)
     if year_match:
         return (int(year_match.group(1)), 1, 1)
     return (0, 0, 0)
@@ -469,6 +469,7 @@ class GraphStore:
             "timeline_month": node["timeline_month"],
             "year": node["year"],
             "category": node.get("category"),
+            "era": node.get("era"),
         }
         return {key: value for key, value in compact.items() if value not in (None, "")}
 
@@ -2490,6 +2491,7 @@ class GraphStore:
                 "heat": min(1.0, len(story.entities) / 10),
                 "importance": story.importance,
                 "event_date": story.event_date,
+                "era": self._story_era(story),
                 "year": story.event_date[:4] if story.event_date else "",
                 "timeline_month": story_month,
                 "month_index": month_index_from_key(story_month),

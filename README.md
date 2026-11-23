@@ -38,6 +38,8 @@ The `/graph` experience supports multiple modes:
 4. **Prototype route**  
    `/graph/prototype` keeps an older prototype runtime behind a feature flag (`GRAPH_PROTOTYPE_ENABLED`).
 
+The graph toolbar includes search by node label, era and publication-year filters, and a node-type selector. Open a matching result to focus it and see its connections. In the lattice, press `/` to focus search, `F` to fit the graph, and `Esc` to dismiss the active panel or clear selection. The story and entity directories support links that retain their search, type, and sort settings.
+
 ## High-level architecture
 
 1. **Ingestion layer (`scraper/`)**

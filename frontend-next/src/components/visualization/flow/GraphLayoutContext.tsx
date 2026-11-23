@@ -3,20 +3,17 @@
 import { createContext, useContext, type ReactNode } from "react";
 import type { LayoutMode } from "@/lib/graphFlow/layoutUtils";
 
-const GraphLayoutContext = createContext<LayoutMode>("flow");
-
-export function GraphLayoutProvider({
-  mode,
-  children,
-}: {
+type GraphLayout = {
   mode: LayoutMode;
-  children: ReactNode;
-}) {
-  return (
-    <GraphLayoutContext.Provider value={mode}>{children}</GraphLayoutContext.Provider>
-  );
+  onToggleExpand?: (nodeId: string) => void;
+};
+
+const GraphLayoutContext = createContext<GraphLayout>({ mode: "flow" });
+
+export function GraphLayoutProvider({ mode, onToggleExpand, children }: GraphLayout & { children: ReactNode }) {
+  return <GraphLayoutContext.Provider value={{ mode, onToggleExpand }}>{children}</GraphLayoutContext.Provider>;
 }
 
-export function useGraphLayoutMode(): LayoutMode {
+export function useGraphLayout(): GraphLayout {
   return useContext(GraphLayoutContext);
 }

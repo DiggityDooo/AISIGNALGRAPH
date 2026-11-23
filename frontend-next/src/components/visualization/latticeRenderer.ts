@@ -316,6 +316,38 @@ function mountSigmaRenderer(
     renderLabels: quality.renderLabels,
     labelSize: VISUALS.labelSize,
     labelColor: { color: VISUALS.labelColor },
+    defaultDrawNodeHover(context, node) {
+      if (!node.label) return;
+      const viewportWidth = container.clientWidth;
+      const viewportHeight = container.clientHeight;
+      if (viewportWidth < 50 || viewportHeight < 30) return;
+      context.save();
+      context.font = "600 12px system-ui";
+      context.textBaseline = "middle";
+      const maxWidth = Math.min(360, viewportWidth - 16);
+      let text = node.label.slice(0, 62);
+      let label = text === node.label ? text : text.trimEnd() + "…";
+      while (text.length && context.measureText(label).width + 16 > maxWidth) {
+        text = text.slice(0, -1);
+        label = text.trimEnd() + "…";
+      }
+      const width = context.measureText(label).width + 16;
+      const right = node.x + node.size + 5;
+      const left = node.x - node.size - width - 5;
+      const fitsBeside = right + width <= viewportWidth - 8 || left >= 8;
+      const x = right + width <= viewportWidth - 8 ? right : left >= 8 ? left :
+        Math.max(8, Math.min(node.x - width / 2, viewportWidth - width - 8));
+      const y = Math.max(12, Math.min(fitsBeside ? node.y : node.y - node.size - 17, viewportHeight - 12));
+      context.beginPath();
+      context.roundRect(x, y - 12, width, 24, 4);
+      context.fillStyle = "#21191f";
+      context.strokeStyle = "#81616e";
+      context.fill();
+      context.stroke();
+      context.fillStyle = "#fff2f5";
+      context.fillText(label, x + 8, y);
+      context.restore();
+    },
     defaultNodeColor: VISUALS.defaultNodeColor,
     defaultEdgeColor: VISUALS.edgeColor,
     labelGridCellSize: VISUALS.labelGridCellSize,
@@ -395,13 +427,13 @@ export class LatticeRenderer {
     saveLatticePositions(this.positions);
   }
 
-  private applyFocus(nodeId: string): void {
+  private applyFocus(nodeId: string, notify = false): void {
     const graph = this.graph;
     const renderer = this.renderer;
     if (!graph || !renderer || !graph.hasNode(nodeId)) return;
     this.focus = { id: nodeId, neighbors: new Set(graph.neighbors(nodeId)) };
     const nodeAttrs = graph.getNodeAttributes(nodeId) as GraphApiNode & { x: number; y: number };
-    this.options.onNodeSelect?.(toNodeSummary(nodeAttrs, graph));
+    if (notify) this.options.onNodeSelect?.(toNodeSummary(nodeAttrs, graph));
     renderer.refresh();
     const ratio = computeFocusRatio(graph, nodeId);
     const duration = this.options.quality.isLowTier || prefersReducedMotion() ? 0 : 500;
@@ -601,13 +633,12 @@ export class LatticeRenderer {
     });
 
     renderer.on("clickNode", ({ node }) => {
-      this.applyFocus(node);
+      this.applyFocus(node, true);
     });
 
     renderer.on("clickStage", () => {
-      this.focus = { id: null, neighbors: new Set() };
+      this.clearFocus();
       this.options.onNodeSelect?.(null);
-      renderer.refresh();
     });
 
     this.options.onVisibleCountChange?.(graph.order);
@@ -630,6 +661,12 @@ export class LatticeRenderer {
 
   focusNode(id: string): void {
     this.applyFocus(id);
+  }
+
+  clearFocus(): void {
+    if (this.focus.id === null) return;
+    this.focus = { id: null, neighbors: new Set() };
+    this.renderer?.refresh();
   }
 
   fit(): void {

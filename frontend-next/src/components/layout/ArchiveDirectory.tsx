@@ -19,23 +19,19 @@ type Entry = {
 };
 type Directory = "stories" | "entities";
 
-const copy = {
-  stories: { title: "Intelligence library", intro: "Find reports on model releases, research, policy, and the impact of AI.", label: "Search stories" },
-  entities: { title: "Entity directory", intro: "Explore the labs, people, models, and topics connected to stories in the graph.", label: "Search entities" },
-};
-
 function Results({ items, section }: { items: Entry[]; section: Directory }) {
   const { visibleItems, hasMore, loadMore, visibleCount } = usePagedList(items);
   return <>
     <p className="directory-count" role="status">Showing {visibleCount.toLocaleString()} of {items.length.toLocaleString()} {section}</p>
-    <div className="directory-grid">
+    <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3 mb-8">
       {visibleItems.map(item => <BentoCard key={item.id} title={item.kind || item.type || "Record"}
         value={item.title || item.name || item.id} description={item.excerpt}
+        className={section === "stories" ? "aspect-video" : "aspect-square"}
         metadata={section === "stories" ? item.event_date : item.story_count === undefined ? undefined :
           `${item.story_count.toLocaleString()} ${item.story_count === 1 ? "linked story" : "linked stories"}`}
         href={`/${section}/${encodeURIComponent(item.id)}`}/>)}
     </div>
-    {hasMore && <button className="desk-button" type="button" onClick={loadMore}>Load more {section}</button>}
+    {hasMore && <button className="glass-pill px-6 py-3 font-mono text-xs uppercase tracking-widest" type="button" onClick={loadMore}>Load more {section}</button>}
   </>;
 }
 
@@ -96,7 +92,7 @@ function ArchiveResults({ section }: { section: Directory }) {
 
   return <>
     <div className="directory-toolbar">
-      <label className="directory-search"><span>{copy[section].label}</span>
+      <label className="directory-search"><span>Search {section}</span>
         <input type="search" value={query} placeholder={section === "stories" ? "Title, topic, or keyword" : "Name, type, or keyword"}
           onChange={e => setQuery(e.target.value)}/></label>
       <label className="directory-search"><span>{section === "stories" ? "Story type" : "Entity type"}</span>
@@ -121,11 +117,11 @@ function ArchiveResults({ section }: { section: Directory }) {
 }
 
 export default function ArchiveDirectory({ section }: { section: Directory }) {
-  return <main className="atlas-directory"><div className="desk-wrap">
-    <header className="directory-intro"><h1>{copy[section].title}</h1>
-      <p className="atlas-deck">{copy[section].intro}</p></header>
-    <Suspense fallback={<p className="desk-status" role="status">Loading {section}…</p>}>
-      <ArchiveResults section={section}/>
-    </Suspense>
-  </div></main>;
+  return (
+    <section aria-label={`Browse ${section}`} className="max-w-6xl mx-auto w-full px-6 md:px-8 pb-32">
+      <Suspense fallback={<p className="desk-status" role="status">Loading {section}…</p>}>
+        <ArchiveResults section={section}/>
+      </Suspense>
+    </section>
+  );
 }

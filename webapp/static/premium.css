@@ -1188,3 +1188,20 @@ code,
     justify-content: start;
   }
 }
+
+
+.detail-record-breadcrumb {
+  margin-bottom: 0.85rem;
+}
+
+.detail-record-breadcrumb a {
+  text-decoration: underline;
+  text-underline-offset: 0.22em;
+}
+
+.detail-record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-block: 1rem 1.4rem;
+}

@@ -12,3 +12,7 @@ export const SIDE_RAIL_NAV = [
   { href: "/entities", label: "Entities", short: "E" },
   { href: "/#archives", label: "Archives", short: "A" },
 ] as const;
+
+export const HEADER_CTA = { href: "/graph", label: "Enter Signal" } as const;
+
+export const HERO_ROUTES = new Set(["/", "/stories", "/entities"]);

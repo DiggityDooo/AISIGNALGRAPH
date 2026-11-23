@@ -74,6 +74,8 @@ export default function GraphHud({
         <div className="flex items-center gap-4 md:gap-8">
           <button
             type="button"
+            aria-label="Graph controls"
+            aria-expanded={isMobileMenuOpen}
             onClick={onToggleMobileMenu}
             className="md:hidden glass-panel p-2 hover:bg-primary/10 transition-colors"
           >

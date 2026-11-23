@@ -1,6 +1,8 @@
 """RSS source registry and era classification."""
 
 RSS_SOURCES: list[dict] = [
+    {"name": "FTC Consumer Protection", "rss": "https://www.ftc.gov/feeds/press-release-consumer-protection.xml", "rate": "rss"},
+    {"name": "FTC Consumer Advice", "rss": "https://consumer.ftc.gov/blog/gd-rss.xml", "rate": "rss"},
     {"name": "OpenAI Blog",          "rss": "https://openai.com/blog/rss.xml",                          "rate": "rss"},
     {"name": "Anthropic News",       "rss": "https://www.anthropic.com/rss.xml",                        "rate": "rss"},
     {"name": "HuggingFace Blog",     "rss": "https://huggingface.co/blog/feed.xml",                     "rate": "rss"},

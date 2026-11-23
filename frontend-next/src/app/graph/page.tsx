@@ -241,7 +241,6 @@ export default function GraphPage() {
     const summary = buildNodeSummary(filteredPayload, focus);
     if (!summary) return;
 
-    latticeRef.current?.focusNode(focus);
     setSelectedNode(summary);
     pendingFocusRef.current = null;
   }, [filteredPayload, is3DMode, setSelectedNode]);
@@ -447,6 +446,7 @@ export default function GraphPage() {
             <SigmaLatticeGraph
               ref={latticeRef}
               payload={filteredPayload}
+              focusFromUrl={urlFocus}
               dataRevision={revision}
               topologyRevision={topologyRevision}
               filterRevision={filterRevision}

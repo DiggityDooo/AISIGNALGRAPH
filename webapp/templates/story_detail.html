@@ -23,6 +23,12 @@
             <h2>Summary</h2>
             <p>{{ story.summary }}</p>
           </div>
+          {% if story.source_url %}
+            <div class="sidebar-block">
+              <h2>Original source</h2>
+              <a href="{{ story.source_url }}" rel="external">{{ story.source_name or "Read the source" }}</a>
+            </div>
+          {% endif %}
           <div class="sidebar-block">
             <h2>Tags</h2>
             <div class="archive-chip-row">

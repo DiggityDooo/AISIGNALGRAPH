@@ -124,6 +124,8 @@ Rules:
 - skip: set to true if the article is not substantively about AI.
 - entities: only genuinely named proper nouns. Minimum 2, maximum 15.
   Never include vague entities like "researchers" or "the company".
+- For safety advisories, summarize the protective steps the publisher actually gives.
+  For enforcement stories, attribute claims and distinguish complaints from orders.
 - relationships: must only pair entities that appear in the entities array.
 - Return {{"skip": true}} for non-AI content."""
 

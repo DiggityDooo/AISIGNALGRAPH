@@ -9,11 +9,13 @@
   --color-secondary: #800015; /* Deep Blood Red */
   --color-muted: #C4AEB2; /* Desaturated red-grey, brightened for WCAG AA on near-black */
 
-  --font-display: var(--font-display), sans-serif;
-  --font-mono: var(--font-mono), monospace;
+  --font-display: "Syne Variable", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", monospace;
 }
 
 :root {
+  --font-display: "Syne Variable", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", monospace;
   /* Lenis smooth scrolling requires this */
   scrollbar-width: none;
   --pointer-x: 72%;

@@ -215,6 +215,19 @@ def create_app() -> Flask:
             abort(404)
         return app.send_static_file("hub/graph/prototype.html")
 
+    @app.get("/safety")
+    def safety():
+        return app.send_static_file("hub/safety.html")
+
+    @app.get("/api/safety")
+    def api_safety():
+        from .safety import safety_feed
+
+        store, _jobs = require_services()
+        response = jsonify({"records": safety_feed(store.list_stories())})
+        response.cache_control.no_cache = True
+        return response
+
     @app.get("/stories")
     def stories():
         return app.send_static_file("hub/stories.html")

@@ -19,10 +19,6 @@
       </div>
     {% endif %}
 
-    <div id="terminal-loader" style="position: fixed; inset: 0; background: var(--color-bg, #050505); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; color: var(--color-cyan, #8ce8ff); pointer-events: none; transition: opacity 0.5s ease; font-size: 0.78rem; letter-spacing: 0.14em;">
-        <div id="loader-text">INITIALIZING AISIGNALGRAPH PROTOCOL...</div>
-    </div>
-
     <div class="app-shell{% if fullscreen_shell %} app-shell--fullscreen{% endif %}">
       {% if not fullscreen_shell %}
         <header class="topbar glass-panel" style="border: none; border-bottom: var(--border-subtle); border-radius: 0;" data-pointer-reactive id="site-topbar">
@@ -35,6 +31,7 @@
               <a href="{{ url_for('dashboard') }}">Graph</a>
               <a href="{{ url_for('stories') }}">Stories</a>
               <a href="{{ url_for('entities') }}">Entities</a>
+              <a href="{{ url_for('safety') }}">AI safety</a>
             </nav>
           </div>
         </header>
@@ -61,28 +58,6 @@
     {% block extra_scripts %}{% endblock %}
 
     <script>
-        // Terminal Loader Animation
-        window.addEventListener('load', () => {
-            const loader = document.getElementById('terminal-loader');
-            const text = document.getElementById('loader-text');
-            const phrases = [
-                "ESTABLISHING SECURE CONNECTION...",
-                "DECRYPTING NEURAL VECTORS...",
-                "LOADING GRAPH TOPOLOGY...",
-                "PROTOCOL READY."
-            ];
-            let p = 0;
-            const interval = setInterval(() => {
-                if (p < phrases.length) {
-                    text.textContent = phrases[p++];
-                } else {
-                    clearInterval(interval);
-                    loader.style.opacity = '0';
-                    setTimeout(() => loader.remove(), 500);
-                }
-            }, 300);
-        });
-
         // Scroll-aware nav
         const topbar = document.getElementById('site-topbar');
         if (topbar) {

@@ -91,6 +91,11 @@ def scrape_rss_source(
         logger.warning("feedparser failed for {}: {}", source["name"], exc)
         return []
 
+    status = feed.get("status")
+    if isinstance(status, int) and status >= 400:
+        logger.warning("RSS source {} returned HTTP {}", source["name"], status)
+        return []
+
     results: list[dict] = []
     for entry in feed.entries[:MAX_ARTICLES_PER_SOURCE]:
         url = (getattr(entry, "link", "") or "").strip()

@@ -59,7 +59,7 @@ export default function ClientShellEffects() {
           )}
         </>
       )}
-      {!isGraphRoute && (
+      {!isGraphRoute && pathname !== "/safety" && (
         <div className="constellation-layer" aria-hidden>
           <GlobalCanvas />
         </div>

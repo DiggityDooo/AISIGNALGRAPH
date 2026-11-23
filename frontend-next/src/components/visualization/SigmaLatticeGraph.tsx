@@ -3,6 +3,7 @@
 import {
   forwardRef,
   useEffect,
+  useEffectEvent,
   useImperativeHandle,
   useRef,
   useState,
@@ -14,6 +15,7 @@ import { LatticeRenderer } from "./latticeRenderer";
 
 export interface SigmaLatticeGraphProps {
   payload: GraphApiPayload | null;
+  focusFromUrl?: string | null;
   dataRevision?: string | null;
   topologyRevision?: string | null;
   /** Bumps when HUD filters change so the visible subgraph rebuilds. */
@@ -33,6 +35,7 @@ function SigmaLatticeGraph(
   {
     payload,
     dataRevision,
+    focusFromUrl,
     topologyRevision,
     filterRevision = "",
     onVisibleCountChange,
@@ -81,7 +84,10 @@ function SigmaLatticeGraph(
     rendererRef.current?.applyMetadata(payload, topologyRevision ?? null);
   }, [payload, dataRevision, topologyRevision]);
 
+  const getCurrentPayload = useEffectEvent(() => payload);
+  const hasNodes = Boolean(payload?.nodes.length);
   useEffect(() => {
+    const payload = getCurrentPayload();
     const container = containerRef.current;
     if (!container || !payload || payload.nodes.length === 0) return;
 
@@ -110,7 +116,11 @@ function SigmaLatticeGraph(
       rendererRef.current?.dispose();
       rendererRef.current = null;
     };
-  }, [topologyRevision, filterRevision, quality, rebuildNonce]);
+  }, [hasNodes, topologyRevision, filterRevision, quality, rebuildNonce]);
+
+  useEffect(() => {
+    if (!building && focusFromUrl) rendererRef.current?.focusNode(focusFromUrl);
+  }, [building, focusFromUrl]);
 
   if (contextDead) {
     return (

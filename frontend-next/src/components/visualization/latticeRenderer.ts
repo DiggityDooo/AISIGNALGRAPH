@@ -406,12 +406,10 @@ export class LatticeRenderer {
     const ratio = computeFocusRatio(graph, nodeId);
     const duration = this.options.quality.isLowTier || prefersReducedMotion() ? 0 : 500;
     if (!this.building) {
-      // Guard the animate call itself: a NaN position here zooms the camera
-      // into empty space with no way back.
-      const x = Number(nodeAttrs.x);
-      const y = Number(nodeAttrs.y);
-      if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(ratio)) {
-        renderer.getCamera().animate({ x, y, ratio }, { duration });
+      // Sigma's camera and display data share normalized graph coordinates.
+      const display = renderer.getNodeDisplayData(nodeId);
+      if (display && Number.isFinite(display.x) && Number.isFinite(display.y) && Number.isFinite(ratio)) {
+        renderer.getCamera().animate({ x: display.x, y: display.y, ratio }, { duration });
       }
     }
   }

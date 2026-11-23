@@ -67,7 +67,9 @@ export default function Lattice3DScene({
 }: Lattice3DSceneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onNodeSelectRef = useRef(onNodeSelect);
-  onNodeSelectRef.current = onNodeSelect;
+  useEffect(() => {
+    onNodeSelectRef.current = onNodeSelect;
+  }, [onNodeSelect]);
 
   useEffect(() => {
     const container = containerRef.current;

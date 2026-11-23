@@ -18,6 +18,7 @@ import numpy as np
 from loguru import logger
 from sklearn.cluster import KMeans
 
+from .safety import source_link
 from .types import GraphData, HealthReport
 
 
@@ -415,6 +416,8 @@ class StoryRecord:
     related_stories: list[dict[str, Any]]
     era: str | None = None
     year: int | None = None
+    source_url: str | None = None
+    source_name: str | None = None
 
     @property
     def excerpt(self) -> str:
@@ -1115,16 +1118,8 @@ class GraphStore:
             with self._connect() as conn:
                 conn.execute("BEGIN IMMEDIATE")
                 if reset:
-                    conn.executescript(
-                        """
-                        DELETE FROM meta;
-                        DELETE FROM entity_links;
-                        DELETE FROM story_tags;
-                        DELETE FROM story_entities;
-                        DELETE FROM stories;
-                        DELETE FROM entities;
-                        """
-                    )
+                    for table in ("meta", "entity_links", "story_tags", "story_entities", "stories", "entities"):
+                        conn.execute(f"DELETE FROM {table}")
 
                 self._check_cancelled(cancel_event)
                 conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("dataset_name", payload.get("name", "AI Signal Graph")))
@@ -1204,6 +1199,12 @@ class GraphStore:
 
         self._signature = None
         self._graph_data_cache = None
+        history_seed = self.data_dir / "ai_history_seed.json"
+        if history_seed.exists():
+            from .loader import DataLoader
+            with self._connect() as conn:
+                DataLoader(seed_path=history_seed).load_seed(conn)
+        self._last_ingest_check = 0.0
         self._refresh()
 
     def _build_payload_from_master_document(self, cancel_event: Any | None = None) -> dict[str, Any]:
@@ -2115,6 +2116,8 @@ class GraphStore:
             links_by_entity[row["source_id"]].append({"target_id": row["target_id"], "relation": row["relation"], "weight": row["weight"]})
             links_by_entity[row["target_id"]].append({"target_id": row["source_id"], "relation": row["relation"], "weight": row["weight"]})
 
+        story_index = {row["id"]: row for row in story_rows}
+        story_order = {story_id: i for i, story_id in enumerate(story_index)}
         story_records: dict[str, StoryRecord] = {}
         for row in story_rows:
             entity_refs = []
@@ -2125,17 +2128,13 @@ class GraphStore:
                 entity_refs.append({"id": entity_row["id"], "name": entity_row["name"], "type": entity_row["entity_type"]})
 
             related_counter: Counter[str] = Counter()
-            current_set = set(story_to_entities[row["id"]])
-            for other in story_rows:
-                if other["id"] == row["id"]:
-                    continue
-                overlap = current_set.intersection(story_to_entities[other["id"]])
-                if overlap:
-                    related_counter[other["id"]] = len(overlap)
-
+            for entity_id in story_to_entities[row["id"]]:
+                related_counter.update(entity_to_stories[entity_id])
+            related_counter.pop(row["id"], None)
             related_stories = []
-            for other_id, weight in related_counter.most_common(6):
-                other_row = next(item for item in story_rows if item["id"] == other_id)
+            for other_id in sorted(related_counter, key=lambda key: (-related_counter[key], story_order[key]))[:6]:
+                other_row = story_index[other_id]
+                weight = related_counter[other_id]
                 related_stories.append({"id": other_row["id"], "title": other_row["title"], "kind": other_row["kind"], "weight": weight})
 
             details_markdown = row["details"]
@@ -2154,6 +2153,8 @@ class GraphStore:
                 tags=sorted(set(story_to_tags[row["id"]])),
                 entities=entity_refs,
                 related_stories=related_stories,
+                source_url=source_link(row["source_url"]) if "source_url" in row.keys() else None,
+                source_name=row["source_name"] if "source_name" in row.keys() else None,
                 era=row["era"] if "era" in row.keys() else None,
                 year=int(row["year"]) if "year" in row.keys() and row["year"] is not None else None,
             )

@@ -14,6 +14,10 @@ type SplineGraphBackgroundProps = {
 };
 
 export default function SplineGraphBackground({ mode }: SplineGraphBackgroundProps) {
+  return <GraphBackground key={mode} mode={mode} />;
+}
+
+function GraphBackground({ mode }: SplineGraphBackgroundProps) {
   const viewerRef = useRef<HTMLElement | null>(null);
   const [embed, setEmbed] = useState<SplineGraphEmbed | null>(null);
   const [configReady, setConfigReady] = useState(false);
@@ -21,9 +25,6 @@ export default function SplineGraphBackground({ mode }: SplineGraphBackgroundPro
 
   useEffect(() => {
     let cancelled = false;
-    setConfigReady(false);
-    setEmbed(null);
-    setViewerState("idle");
 
     resolveSplineGraphEmbed(mode)
       .then((resolved) => {
